@@ -15,7 +15,7 @@ graphics API, or asset formats.
 - AI Agent: OpenAI Codex
 - Version Control: Git
 - Target Platform: PlayStation Vita
-- Porting Skill: vita-port (pending installation)
+- Porting Skill: vita-port (.agents/skills/vita-port/SKILL.md)
 
 ## Communication
 - Explain decisions in Brazilian Portuguese.

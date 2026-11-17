@@ -50,6 +50,20 @@ calculado coincidiu com o início do seguinte. O fim calculado de
 Os 30 blocos cobrem integralmente os três arquivos, sem sobreposições,
 lacunas ou bytes restantes.
 
+## Validação do conjunto de arquivos
+
+O conjunto em `original-data/` contém 108 arquivos `.HDK`. Os 99 arquivos
+com conteúdo passaram na validação estrutural externa com
+`tools/inspect_hdk.py`.
+
+Os nove arquivos de `original-data/USER/USER02.HDK` até
+`original-data/USER/USER10.HDK` têm zero bytes e foram corretamente
+rejeitados pelo leitor com a mensagem `arquivo vazio`.
+
+A validação cobre os limites dos blocos e os nomes das seções. A
+integridade dos registros internos e a função dos arquivos `USER`
+continuam sem confirmação.
+
 ## Hipóteses sobre a serialização interna
 
 - **Contagem e marcadores de registros.** Em `OUT_0`, os dois bytes
@@ -73,5 +87,5 @@ lacunas ou bytes restantes.
   zero nos três arquivos. O significado de nomes como `skey80a`,
   `w40a`, `skey160a` e `def` segue em aberto.
 
-A validação cobre a estrutura externa das três amostras. A identificação
-da engine e a viabilidade do port para PS Vita seguem em aberto.
+A identificação da engine e a viabilidade do port para PS Vita seguem
+em aberto.

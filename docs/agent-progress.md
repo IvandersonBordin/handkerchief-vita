@@ -13,6 +13,21 @@ O protótipo independente e o roteiro de console já estão em
 LiveArea passaram em `python3 vita-prototype/check_livearea.py`.
 
 ## Último ciclo
+Em 18/11/2026, para preparar C02, os dois caminhos de VPK registrados
+anteriormente foram verificados e estavam indisponíveis. Um novo pacote
+Release foi compilado com o VitaSDK em `/home/ivanderson/vitasdk` e
+`arm-vita-eabi-gcc` 15.2.0.
+
+- Pacote local ignorado pelo Git: `build/vita-smoke/handkerchief_smoke.vpk`.
+- SHA-256: `62daa4021a17e95fbda1747e7101e1dc50aaa37e403f4e2c02ada3917528a6d0`.
+- `check_livearea.py` conferiu as seis entradas e os recursos sintéticos.
+- `check_vpk.py` retornou zero erros e zero avisos, com ID `HKSM00001`
+  e versão `01.00`.
+
+A consulta às issues pelo `gh` ficou bloqueada por falta de autenticação.
+C02 segue pendente de execução no console e confirmação humana.
+
+## Conclusão de C01
 Em 18/11/2026, a configuração Release e a compilação com CMake 4.4.4
 usaram o VitaSDK em `/home/ivanderson/vitasdk` e o compilador
 `arm-vita-eabi-gcc` 15.2.0. O comando `file` identificou o executável

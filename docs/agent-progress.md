@@ -13,6 +13,22 @@ em Círculo, X voltou a alternar verde e amarelo. O encerramento do
 processo com START segue sem confirmação física. Saída em tty0:
 não observada no console.
 
+## Ciclo de revisão C03 e C04
+
+- A [revisão de `71ed7a2` na issue #4](https://github.com/IvandersonBordin/handkerchief-vita/issues/4#issuecomment-6994613694)
+  aprovou a integração local para teste físico. O líder reproduziu os
+  testes Linux com UBSan e a compilação ARM com VitaSDK e `-Werror`.
+  O VPK reservado e o recompilado passaram nos dois verificadores.
+- O pacote reservado é `build/vita-smoke-c04-sprite/handkerchief_smoke.vpk`,
+  SHA-256 `ba5c1ae9ca28b46a979002b5732871db2979d1a7dde0140dd25ad8bd58a0a0ec`.
+  O roteiro físico deve confirmar a animação branco/magenta, o movimento
+  nas quatro direções e os limites da tela, a pausa e a retomada, e o
+  fim efetivo do processo após START.
+- Este ciclo registrou a revisão e conferiu o diff da documentação.
+  C03 aguarda evidência física de START. C04 está aprovada localmente
+  e aguarda o roteiro no console. C05 aguarda o aceite das etapas
+  anteriores e os insumos de B02 e B03.
+
 ## Ciclo C04 — sprite integrado ao protótipo
 
 - O comentário da issue #4 autorizou a integração local a partir de

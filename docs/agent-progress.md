@@ -11,6 +11,18 @@ C03 — EM ANDAMENTO. O loop tem entrada, pausa e contagem de tempo ativo
 validadas localmente. Falta verificar o comportamento do novo pacote no
 console e confirmar o encerramento completo com START.
 
+## Ciclo C03 — registro das observações no console
+
+- O roteiro ganhou um modelo para registrar a pausa, a retomada pelo
+  botão PS, a reabertura após START, o estado do processo e os tempos
+  das sessões com e sem pausa. O SHA-256 esperado está junto ao roteiro.
+- `sha256sum` confirmou que o VPK local coincide com o valor do roteiro.
+  `git check-ignore` confirmou que o pacote é ignorado. Foram reaproveitados
+  o executável e a validação de estrutura do ciclo do relógio.
+- A consulta à issue #4 e a busca de issues abertas retornaram o roteiro
+  geral e nenhuma tarefa específica de C03. O teste físico do pacote do
+  relógio continua pendente.
+
 ## Ciclo C03 — falhas durante a saída com START
 
 - Uma simulação temporária no Linux compilou `vita-prototype/main.c` com

@@ -58,7 +58,8 @@ Se faltar um deles, a mensagem informa a variável do VitaSDK e o caminho verifi
 
 Use `build/vita-smoke-c03-clock/handkerchief_smoke.vpk` para este roteiro.
 Confira o SHA-256 com `sha256sum` e registre-o junto com o resultado para
-identificar a versão testada.
+identificar a versão testada. SHA-256 esperado para este pacote:
+`a400b9671e9fbda265dc6a2e0209d8fae11e6335299b72d43559f29255aefa43`.
 
 1. Com a barra central verde, pressione Círculo para pausar. Mantenha Círculo
    pressionado e segure X. A barra deve continuar verde.
@@ -89,6 +90,19 @@ pertence ao estado anterior ao toque. Para conferir o relógio no console,
 capture a saída padrão e compare duas sessões de duração total semelhante,
 uma com uma pausa prolongada. A sessão com pausa deve registrar menos
 tempo ativo. A captura dessa saída no Vita ainda precisa ser verificada.
+
+Registre uma linha por observação. Use `não observado` quando o teste ou a
+captura não puder ser feito.
+
+| Observação | Resultado no PS Vita |
+| --- | --- |
+| SHA-256 do VPK instalado | |
+| Círculo mantido com X pressionado, depois novo toque em Círculo | Cor durante a pausa e após a retomada |
+| Retomada pelo botão PS com o aplicativo pausado | Cor ao segurar X |
+| START em pausa | Tela exibida após o toque e cor ao segurar X depois da reabertura |
+| Processo entre START e a reabertura | Ferramenta usada e processo presente ou ausente |
+| Sessão sem pausa | Duração total aproximada e tempo ativo em µs |
+| Sessão com pausa | Duração total aproximada, duração da pausa e tempo ativo em µs |
 
 ## Validação local
 

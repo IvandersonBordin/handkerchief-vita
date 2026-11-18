@@ -113,6 +113,8 @@ segue pendente. Na consulta, a issue #6 estava aberta e a #8 seguia sem
 A suíte local passou com 31 testes (`PYTHONPATH=tools python3 -B -m unittest
 discover -s tests -v`). `git diff --check` passou.
 
+- A [última atualização da issue #6](https://github.com/IvandersonBordin/handkerchief-vita/issues/6#issuecomment-6975282807) registra a entrega de `bd1a8bc` com revisão técnica pendente. A [issue #8](https://github.com/IvandersonBordin/handkerchief-vita/issues/8) segue aberta, sem comentários e sem `codex-ready`, e condiciona a B02 à aprovação da Etapa 82. A cópia original estava acessível para leitura e os 31 testes passaram com `PYTHONPATH=tools python3 -B -m unittest discover -s tests`. A publicação do resumo na issue #8 exigiu aprovação, indisponível nesta sessão.
+
 ## Último ciclo — B01
 
 A cópia indicada em [agent-plan.md](agent-plan.md) estava acessível.

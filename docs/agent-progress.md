@@ -10,6 +10,14 @@ O protótipo independente e o roteiro de console já estão em
 LiveArea passaram em `python3 vita-prototype/check_livearea.py`.
 
 ## Último ciclo
+Na nova checagem, `VITASDK` continuou ausente, e `arm-vita-eabi-gcc`
+não apareceu no PATH. A busca em `/opt`, `/usr/local`, `/home/ivanderson`
+e `/tmp` não localizou o compilador nem `vita.toolchain.cmake`.
+A consulta às issues abertas do GitHub não encontrou uma issue específica
+para C01. O ciclo ficou restrito a verificar os pré-requisitos e registrar
+o resultado. Compilação ARM e validação do VPK seguem pendentes.
+
+## Ciclo anterior
 Em 2026-11-18, o CMake passou a exigir o indicador `VITA`, definido pela
 [toolchain oficial](https://github.com/vitasdk/vita-toolchain/blob/master/cmake_toolchain/vita.toolchain.cmake),
 antes de carregar as macros de empacotamento. Em diretórios temporários,

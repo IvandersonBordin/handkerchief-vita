@@ -100,7 +100,7 @@ def sandbox_command():
     return [
         "bwrap", "--ro-bind", "/", "/",
         "--dev-bind", "/dev", "/dev",
-        "--proc", "/proc", "/proc",
+        "--proc", "/proc",
         "--tmpfs", "/tmp",
         "--bind", str(ROOT), str(ROOT),
         "--ro-bind", str(originals), str(originals),

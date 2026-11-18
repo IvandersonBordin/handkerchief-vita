@@ -13,6 +13,26 @@ em Círculo, X voltou a alternar verde e amarelo. O encerramento do
 processo com START segue sem confirmação física. Saída em tty0:
 não observada no console.
 
+## Preparação C04 — desenho de sprite sintético
+
+- `vita-prototype/sprite.c` e `sprite.h` copiam pixels A8B8G8R8 com
+  alfa diferente de zero para um buffer fornecido pelo chamador. A função
+  respeita o passo de cada imagem, recorta nas bordas e usa os buffers
+  existentes. O módulo ainda aguarda integração ao smoke test.
+- `vita-prototype/test_sprite.c` passou em sete casos de pixels no Linux,
+  incluindo transparência, recorte, preenchimento de linha e coordenadas
+  extremas. GCC 16.2.1 tratou avisos como erros e executou ASan e UBSan.
+  O rastreamento da sessão impediu o LeakSanitizer, então a segunda
+  execução usou `ASAN_OPTIONS=detect_leaks=0`.
+- VitaSDK com GCC 15.2.0 compilou o módulo com avisos como erros. O
+  comando `file` identificou um objeto ELF ARM de 32 bits, EABI5. O
+  pacote de C03 foi reaproveitado. Este ciclo não executou o console.
+- A issue #4 foi consultada. O envio do resumo foi bloqueado porque
+  o conector exige aprovação indisponível na sessão.
+- Para fechar C03, falta confirmar no PS Vita que START encerra o
+  processo antes da reabertura. O próximo passo independente de C04 é
+  testar a seleção de quadros de uma animação sintética no Linux.
+
 ## Ciclo C03 — falha ao desvincular o quadro após START
 
 - O teste permanente em `vita-prototype/test_loop.c` simula a recusa da

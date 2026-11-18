@@ -7,11 +7,36 @@ passaram sobre o VPK gerado neste ciclo.
 C02 — CONCLUIDA conforme a issue #4, que registra a confirmação manual
 da abertura do app e da resposta visual ao botão X no PS Vita.
 
-C03 — EM ANDAMENTO. A issue #4 registra que, no PS Vita, Círculo
+C03 — CONCLUIDA pelo aceite funcional da issue #4. No PS Vita, Círculo
 pausou o loop, X manteve o quadro durante a pausa e, após outro toque
-em Círculo, X voltou a alternar verde e amarelo. O encerramento do
-processo com START segue sem confirmação física. Saída em tty0:
-não observada no console.
+em Círculo, X voltou a alternar verde e amarelo. Na demo com sprite,
+START retornou à LiveArea com “Iniciar” e a reabertura restaurou o
+estado inicial. A listagem de processos e a saída em `tty0:`
+não foram observadas.
+
+C04 — EM ANDAMENTO. A demo `71ed7a2` tem revisão local aprovada e
+confirmação física da animação branco/magenta, do deslocamento para
+a direita e da pausa e retomada da animação. Faltam esquerda, cima,
+baixo e os limites da tela no console.
+
+## Ciclo de aceite funcional de C03 e validação parcial de C04
+
+- A issue #4 registra instalação e abertura da demo e a coincidência dos
+  seis arquivos instalados com o pacote revisado. Ivan confirmou
+  visualmente o quadrado à direita do centro, alternando entre branco e
+  magenta, e depois confirmou a pausa e a retomada com Círculo.
+  [Animação e direita](https://github.com/IvandersonBordin/handkerchief-vita/issues/4#issuecomment-6994712053)
+  [Pausa e retomada](https://github.com/IvandersonBordin/handkerchief-vita/issues/4#issuecomment-6994730047)
+- Após START, Ivan viu “Iniciar” na LiveArea antes da reabertura. Ao
+  reabrir sem tocar no direcional, viu o quadrado no centro e animado.
+  O líder aceitou esse ciclo funcional. O término do processo segue
+  sem observação direta.
+  [Aceite funcional de START](https://github.com/IvandersonBordin/handkerchief-vita/issues/4#issuecomment-6994757728)
+- `sha256sum` confirmou que o VPK reservado coincide com o hash da
+  revisão anterior. O ciclo atual reaproveitou o pacote e as
+  validações aprovadas. O próximo teste físico de C04 deve cobrir os
+  três sentidos restantes e os limites da tela. C05 aguarda o aceite
+  de C04 e os insumos de B02 e B03.
 
 ## Ciclo de revisão C03 e C04
 

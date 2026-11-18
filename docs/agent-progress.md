@@ -13,6 +13,17 @@ console e confirmar o encerramento completo com START.
 
 ## Ciclo C03 — registro das observações no console
 
+### Canal de saída do relógio
+
+- No ELF local do pacote do relógio, `arm-vita-eabi-objdump` mostrou que
+  `_init_vita_io` tenta abrir `tty0:` e só registra o descritor de saída
+  padrão se a abertura for bem-sucedida. O roteiro agora indica esse
+  canal para a captura da mensagem de tempo ativo.
+- A consulta à issue #4 trouxe o roteiro geral. A busca por issues abertas
+  com C03 não retornou resultados. O executável já validado foi
+  reaproveitado. A captura, a pausa e a saída completa com START ainda
+  aguardam verificação no console.
+
 - O roteiro ganhou um modelo para registrar a pausa, a retomada pelo
   botão PS, a reabertura após START, o estado do processo e os tempos
   das sessões com e sem pausa. O SHA-256 esperado está junto ao roteiro.

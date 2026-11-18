@@ -90,6 +90,10 @@ pertence ao estado anterior ao toque. Para conferir o relógio no console,
 capture a saída padrão e compare duas sessões de duração total semelhante,
 uma com uma pausa prolongada. A sessão com pausa deve registrar menos
 tempo ativo. A captura dessa saída no Vita ainda precisa ser verificada.
+No executável ARM deste pacote, a inicialização do VitaSDK tenta abrir
+`tty0:` para a saída padrão. Se o ambiente de teste não tiver captura
+desse canal, registre o tempo ativo como `não observado`. O aplicativo
+não grava essa medição em arquivo.
 
 Registre uma linha por observação. Use `não observado` quando o teste ou a
 captura não puder ser feito.

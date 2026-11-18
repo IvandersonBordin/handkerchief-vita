@@ -64,6 +64,12 @@ após o último registro coincide com o fim da seção em `0x0921`.
 ajuste gráfico zero e a paleta original do BMP. A prévia mede 4464 × 384
 e tem origem de cenário em `(52, 232)`.
 
+Os limites usados pela prévia são a união dos retângulos de destino.
+Para esta amostra, vão de `(52, 232)` a `(4516, 616)`, com fim
+exclusivo. O leitor valida se a contagem cabe na seção e reserva espaço
+para a contagem de filhos e os cabeçalhos restantes antes de aceitar
+cada lista. A leitura termina no limite declarado de `VISTA_0`.
+
 ### Interpretações e lacunas
 
 O uso na aritmética de retângulos confirma o papel geométrico dos pares
@@ -148,10 +154,10 @@ uma partida.
 
 ## Próximos marcos técnicos
 
-1. Reconstruir parte do cenário de `A0.HDK` em uma imagem de teste no
-   computador. Usar as regiões do banco 2 e os deslocamentos de
-   `CEarth` para conferir composição, posições, limites e transparência
-   antes de integrar a renderização ao PS Vita.
+1. Conferir a composição de `VISTA_0` de `A0.HDK` em desktop. As
+   prévias já cobrem os 32 elementos. Resta comparar posições, limites,
+   paleta e transparência com o desenho original antes da integração
+   ao PS Vita.
 2. Validar de ponta a ponta a leitura de registros `CEarth` em mais de um
    HDK, cobrindo o grupo opcional `0x04`, listas de elementos e objetos
    aninhados. Usar os limites das seções como verificação independente.

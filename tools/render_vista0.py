@@ -23,6 +23,14 @@ def read_vista_objects(data):
         raise ValueError("VISTA_0: cabeçalho CGameRoot truncado ou sem suporte")
     count, = struct.unpack_from("<H", section, len(header))
     cursor = len(header) + 2
+    fields_size = struct.calcsize("<IiiIH")
+    element_size = struct.calcsize("<Iii")
+    # Marcador, nome com terminador, dois bytes de controle, campos fixos
+    # e contagem de filhos. As listas podem acrescentar bytes a esse mínimo.
+    minimum_size = len(b"\xff\xffCEarth\0\x0b\x0b") + fields_size + 2
+    if count == 0 or count > (len(section) - cursor) // minimum_size:
+        raise ValueError("VISTA_0: contagem de objetos incompatível com o tamanho da seção")
+
     objects = []
     for number in range(1, count + 1):
         record = f"VISTA_0: objeto {number} em 0x{offset + 4 + cursor:04X}"
@@ -40,13 +48,16 @@ def read_vista_objects(data):
             raise ValueError(f"{record}: variante de CEarth truncada ou sem suporte")
 
         fields = flags + 2
-        start = fields + struct.calcsize("<IiiIH")
+        start = fields + fields_size
         if start > len(section):
             raise ValueError(f"{record}: campos de CEarth truncados")
         _, x, y, reference_base, elements = struct.unpack_from("<IiiIH", section, fields)
-        end = start + elements * 12
-        if end + 2 > len(section):
-            raise ValueError(f"{record}: lista de elementos truncada")
+        end = start + elements * element_size
+        # Reserva a contagem de filhos e o tamanho mínimo dos objetos
+        # restantes para que a lista não avance sobre seus cabeçalhos.
+        remaining = count - number
+        if end + 2 + remaining * minimum_size > len(section):
+            raise ValueError(f"{record}: lista de elementos excede o espaço disponível")
         children, = struct.unpack_from("<H", section, end)
         if children:
             raise ValueError(f"{record}: {children} objetos aninhados sem suporte")

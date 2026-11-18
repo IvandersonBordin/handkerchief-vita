@@ -51,6 +51,31 @@ graphics API, or asset formats.
 ## Project Documentation
 Record important findings and decisions in docs/.
 
+## Validação e publicação automática
+
+Após cada tarefa de implementação ou documentação neste projeto:
+
+1. Execute as verificações aplicáveis. Para Python, verifique a sintaxe,
+   execute os testes existentes e compare com as saídas de referência
+   quando disponíveis.
+2. Execute `git diff --check`, revise o diff e confira os arquivos
+   criados, modificados e excluídos. Confira também o conteúdo staged
+   com `git diff --cached` e `git diff --cached --check` antes do commit.
+3. Adicione explicitamente apenas os arquivos da tarefa. Evite
+   `git add .`. Exclua da publicação `original-data/`, `build/`,
+   executáveis comerciais, temporários, credenciais e segredos.
+4. Se houver erros, alterações inesperadas ou dúvidas de segurança,
+   interrompa a publicação e informe o usuário.
+5. Com as verificações aprovadas, crie um commit com mensagem descritiva
+   e execute `git push origin main`. A autorização cobre commits e
+   pushes normais das tarefas solicitadas neste projeto.
+6. Preserve as alterações do usuário e o histórico. A autorização
+   exclui ações destrutivas, `push --force`, `reset --hard` e
+   reescrita de histórico. Se o push for rejeitado, pare e informe o
+   conflito.
+7. Ao finalizar, informe o SHA do commit, as verificações executadas,
+   o resultado do push e o estado do Git.
+
 ## Scope Control
 Do not start unrelated tasks.
 Do not create multiple agents unless explicitly requested.

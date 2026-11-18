@@ -114,8 +114,8 @@ laço e o endereço do objeto que mantém o vetor. O método de
 via `0x40241E → 0x412CE5`. A chamada indireta em `0x412D06`
 alcança `0x402BD5 → 0x445DF3` quando a entrada usa a tabela
 `0x471EB0`, cujo slot fica em `0x471EC8` (offset de arquivo
-`0x70EC8`). Falta identificar um ponto de preenchimento do vetor
-com um `CCastMK` para confirmar essa passagem.
+`0x70EC8`). A seção seguinte identifica um caminho de preenchimento
+durante a leitura do fluxo.
 
 No ramo que passa pelos testes em `0x445E70`, `0x445E78` e
 `0x445E88`, quando a chamada em `0x445EA1` retorna um ponteiro
@@ -136,6 +136,47 @@ A cadeia confirma que outro objeto recebe o par de origem de
 produziu os valores do ator nesse ramo, a frequência do despacho
 e a relação com movimento, gravidade e salto seguem em aberto.
 
+## Inserção de CCastMK no vetor durante a leitura
+
+1. Em `0x446084`, o código registra o descritor de `CCastMK` em
+   `0x4AD020` via `0x4035C1 → 0x409F75`. O registro encadeia o
+   descritor na lista em `0x4AC00C`, e `0x446093` instala a
+   tabela `0x471EF8` nesse registro. Os dois primeiros slots
+   apontam para `0x401965 → 0x4460A4` e
+   `0x403FAD → 0x4460E7`.
+2. No caminho de leitura em `0x412888`, com o bit `0x01` ativo
+   em `fluxo+0x34` e na máscara, o laço chama
+   `0x4028C4 → 0x40A48D` em `0x4128B0`. Se o índice de
+   16 bits lido do fluxo é negativo, `0x40A507` chama
+   `0x402734 → 0x40A2DA`. Essa rotina lê o nome e procura
+   o registro pela lista em `0x4AC00C`, via
+   `0x402BFD → 0x409F9D`. Quando a busca retorna o registro de
+   `CCastMK`, as chamadas indiretas em `0x40A322` e
+   `0x40A32B` usam os dois slots acima.
+3. O primeiro slot chama o inicializador
+   `0x403CD3 → 0x445B32` em `0x4460CE` após obter memória
+   para o objeto. O inicializador instala a tabela `0x471EB0`.
+   O segundo slot recebe o ponteiro retornado e chama, em
+   `0x4460F7`, seu slot `+0x0C`. Esse é o caminho que pode
+   escrever X e Y do fluxo, nas condições descritas acima.
+4. Se a leitura retorna sucesso, `0x40A33E` guarda o ponteiro
+   no vetor de referências do fluxo. O ponteiro volta ao laço
+   em `0x4128B5`. Quando é não nulo e o bit `0x80` em
+   `ator+0x17` está limpo, `0x4128CF` chama
+   `0x402275 → 0x459F54` com o objeto pai em `ECX`,
+   o índice atual `[pai+0x08]` e o ator. A gravação em
+   `0x459F74` (offset de arquivo `0x59374`) usa a base em
+   `pai+0x04`, a mesma que o despacho em `0x412CF5` lê.
+
+Em A0.HDK, a seção `ENEMY_0` contém 14 ocorrências do nome
+`CCastMK` precedidas por `FF FF`, de `0x3636` a `0x3B30`
+(offsets do nome). O caminho estático demonstra como um registro
+com esse nome pode chegar ao vetor sob as condições acima.
+Ainda falta reproduzir a leitura de um registro específico até
+a inserção e identificar o chamador que despacha o mesmo pai em jogo.
+A cadeia explica uma escrita da origem na leitura do objeto.
+Escritas durante o movimento continuam em investigação.
+
 ## Reprodução local
 
 Execute na raiz do worktree. `objdump` lê as seções em disco e
@@ -148,6 +189,8 @@ objdump -s --start-address=0x4718c8 --stop-address=0x4718d0 "$exe"
 objdump -s --start-address=0x488c98 --stop-address=0x488ca0 "$exe"
 objdump -s --start-address=0x471ecc --stop-address=0x471ed0 "$exe"
 objdump -s --start-address=0x471ebc --stop-address=0x471ecc "$exe"
+objdump -s --start-address=0x471ef8 --stop-address=0x471f00 "$exe"
+rg -aob -o 'CCastMK' "${exe%/*}/SYSTEM/A0.HDK"
 for intervalo in 445b82:445bbc 401bdb:401be0 445cd2:445d67 \
                  40321f:403224 410e16:410e3e 401d7f:401d84 \
                  410e48:410e6e 43dd53:43dd74 401320:401325 \
@@ -160,7 +203,12 @@ for intervalo in 445b82:445bbc 401bdb:401be0 445cd2:445d67 \
                  402bd5:402bda 445df3:445f86 40241e:402423 \
                  412ce5:412d1c 40259f:4025a4 415da2:415e12 \
                  401276:40127b 410cb0:410cf6 40475a:40475f \
-                 4122ba:41231c; do
+                 4122ba:41231c 446084:44609e 4035c1:4035c6 \
+                 409f75:409fc9 412888:4128dd 4028c4:4028c9 \
+                 40a4f4:40a525 402734:402739 40a2da:40a34b \
+                 402bfd:402c02 401965:40196a 4460a4:4460da \
+                 403cd3:403cd8 445b32:445b9c 403fad:403fb2 \
+                 4460e7:44610a 402275:40227a 459f54:459f7b; do
     objdump -d -Mintel --start-address="0x${intervalo%:*}" \
         --stop-address="0x${intervalo#*:}" "$exe"
 done

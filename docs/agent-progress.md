@@ -7,6 +7,22 @@
 - B02 — em andamento. A Etapa 82 foi aprovada e a issue #8 recebeu
   `codex-ready`. A integração de posição e velocidade segue em aberto.
 
+## Ciclo de inserção no vetor — B02 (18/11/2026)
+
+A issue #8 segue aberta com `codex-ready`, com a aprovação restrita
+da Etapa 82 registrada na issue #6. A análise estática identificou
+um caminho que cria `CCastMK` pelo nome, lê sua origem do fluxo
+sob as condições já documentadas e insere o ponteiro no vetor
+usado pelo despacho. A cadeia condicional e os comandos estão em
+[physics-collision.md](physics-collision.md#inserção-de-ccastmk-no-vetor-durante-a-leitura).
+
+A conferência independente do PE32 confirmou o SHA-256, três slots,
+15 transferências relativas e sete trechos de instruções. A leitura
+de A0.HDK encontrou 14 ocorrências de `CCastMK` precedidas por
+`FF FF` em `ENEMY_0`. Os 31 testes locais e `git diff --check`
+passaram. O conector do GitHub exigiu aprovação para comentar na
+issue #8, indisponível pela política da sessão.
+
 ## Ciclo de despacho e uso da origem — B02 (18/11/2026)
 
 A issue #8 segue aberta com `codex-ready` e a aprovação restrita da
@@ -210,10 +226,11 @@ A suíte local passou com 31 testes
 
 ## Próxima ação
 
-Para B02, rastrear uma inserção de `CCastMK` no vetor percorrido em
-`0x412CE5`. Isso permite investigar quem prepara o ator antes do
-despacho e buscar a escrita que fornece o X e o Y lidos nesse caminho.
-A integração por quadro, a gravidade e o salto seguem em aberto.
+Para B02, rastrear um chamador de `0x412CE5` que receba o mesmo
+objeto pai usado na inserção, a partir da leitura de `ENEMY_0`.
+Isso ajuda a localizar a preparação do ator entre a leitura e o
+despacho. A integração por quadro, a gravidade e o salto seguem em
+aberto.
 
 O conector do GitHub listou as issues abertas. Nenhuma correspondia à
 validação B01 do plano local.

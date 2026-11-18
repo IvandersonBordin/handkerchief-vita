@@ -4,7 +4,24 @@
 
 - B01 — CONCLUIDA em 18/11/2026. Inventário e validação estrutural
   reproduzidos na cópia original autorizada.
-- B02 — bloqueada até a aprovação técnica da Etapa 82 (issue #6).
+- B02 — em andamento. A Etapa 82 foi aprovada e a issue #8 recebeu
+  `codex-ready`. A integração de posição e velocidade segue em aberto.
+
+## Ciclo de análise estática — B02 (18/11/2026)
+
+O corpo atualizado da [issue #6](https://github.com/IvandersonBordin/handkerchief-vita/issues/6)
+registra a aprovação restrita da Etapa 82 e libera a
+[issue #8](https://github.com/IvandersonBordin/handkerchief-vita/issues/8).
+A desmontagem local confirmou o par de origem de `CCastMK`, o cálculo
+dos limites a partir dele e um caminho de leitura com Y alternativo.
+Os endereços, limites da evidência e comandos de reprodução estão em
+[physics-collision.md](physics-collision.md). A próxima análise deve
+rastrear um escritor da origem fora da inicialização.
+
+A reprodução com `objdump` e a conferência independente do descritor,
+do SHA-256 e de oito destinos de chamadas e saltos passaram. Os 31
+testes locais e `git diff --check` passaram. O conector do GitHub exigiu
+aprovação para comentar na issue #8, indisponível pela política da sessão.
 
 ## Ciclo de verificação — B02 (18/11/2026)
 
@@ -145,11 +162,9 @@ A suíte local passou com 31 testes
 
 ## Próxima ação
 
-Para B02, confirmar a liberação da
-[issue de movimento e física](https://github.com/IvandersonBordin/handkerchief-vita/issues/8),
-que exige a aprovação técnica da Etapa 82 (issue #6). Quando liberada,
-rastrear estaticamente uma rotina que escreva a posição de um ator e
-registrar chamadas e campos antes de inferir velocidade, gravidade ou salto.
+Para B02, rastrear estaticamente uma escrita na origem de `CCastMK`
+fora da inicialização e verificar se o valor resulta de integração de
+movimento, reposicionamento ou outro caminho.
 
 O conector do GitHub listou as issues abertas. Nenhuma correspondia à
 validação B01 do plano local.

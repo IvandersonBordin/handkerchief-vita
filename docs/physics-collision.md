@@ -214,6 +214,34 @@ seu próprio vetor. Permanece em aberto qual rotina chama o slot
 de leitura para a instância despachada e qual escreve X/Y de
 `CCastMK` durante movimento.
 
+## Uso da origem no despacho do slot +0x14
+
+Em `0x423157`, o chamador carrega de `[ebx+0x38]` o receptor
+e em `0x42315E` chama seu slot `+0x14`. Para a tabela de
+`CMarkRoot` (`0x46EBC8`), esse slot contém
+`0x402BF3 → 0x412C38`. Em `0x412C5A`, o método chama
+`0x401C6C → 0x412C6D` com o mesmo receptor. O laço usa
+o vetor em `+0x04` e a contagem em `+0x08`, e chama o slot
+`+0x14` das entradas não nulas em `0x412C8E`
+(offset de arquivo `0x1208E`).
+
+Para uma entrada `CCastMK`, o slot em `0x471EC4` aponta para
+o mesmo método `0x412C38`. Se `[ator+0x44]` é diferente de
+zero, a chamada em `0x412C4C` passa o próprio ator como
+primeiro argumento a `0x402095 → 0x40953C`. No ramo que
+alcança `0x409595`, o código recupera esse ponteiro, lê X/Y
+em `0x40959B` e `0x40959E` e soma os valores a
+`[ebp+0x14]` e `[ebp+0x18]` em `0x4095A4` e
+`0x4095A7` (offsets `0x89A4` e `0x89A7`). Essas
+gravações atingem argumentos na pilha da chamada. O método
+`0x412C38` também percorre o vetor de filhos do próprio ator.
+
+Esse caminho identifica outro consumidor da origem. A escrita
+de X/Y no próprio `CCastMK` durante atualização segue em aberto.
+O próximo recorte é seguir o ramo de `0x445EDE` no slot
+`+0x18`, que passa o ator a `0x403D37 → 0x43DD53`,
+e conferir os destinos das gravações após a leitura da origem.
+
 ## Reprodução local
 
 Execute na raiz do worktree. `objdump` lê as seções em disco e
@@ -258,6 +286,16 @@ for intervalo in 429d2b:429d45 429d4b:429d7e 422ab0:422ac2 \
                  429dc2:429dec 41233a:412346 42236f:422395 \
                  42330c:423322 403e59:403e5e 4020ea:4020ef \
                  402252:402257 402108:40210d; do
+    objdump -d -Mintel --start-address="0x${intervalo%:*}" \
+        --stop-address="0x${intervalo#*:}" "$exe"
+done
+
+objdump -s --start-address=0x46ebdc --stop-address=0x46ebe0 "$exe"
+objdump -s --start-address=0x471ec4 --stop-address=0x471ec8 "$exe"
+for intervalo in 423157:423161 402bf3:402bf8 412c38:412c63 \
+                 401c6c:401c71 412c6d:412ca0 402095:40209a \
+                 40953c:40955d 409595:4095aa 445ed7:445ee3 \
+                 403d37:403d3c 43dd53:43dd74; do
     objdump -d -Mintel --start-address="0x${intervalo%:*}" \
         --stop-address="0x${intervalo#*:}" "$exe"
 done

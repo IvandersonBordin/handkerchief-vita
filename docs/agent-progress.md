@@ -7,6 +7,21 @@
 - B02 — em andamento. A Etapa 82 foi aprovada e a issue #8 recebeu
   `codex-ready`. A integração de posição e velocidade segue em aberto.
 
+## Ciclo de despacho do slot +0x14 — B02 (18/11/2026)
+
+A issue #8 segue aberta com `codex-ready`. A revisão do coordenador
+considera atendido o elo de inserção no vetor. A análise confirmou
+que o slot `+0x14` também percorre esse vetor. No ramo opcional
+de `CCastMK`, as somas com X/Y são gravadas em argumentos na
+pilha. A cadeia e a reprodução estão em
+[physics-collision.md](physics-collision.md#uso-da-origem-no-despacho-do-slot-0x14).
+
+A conferência direta do PE32 validou o SHA-256, dois slots, sete
+transferências relativas, quatro trechos de instruções e três offsets
+de arquivo. Os 31 testes locais e `git diff --check` passaram.
+O conector exigiu aprovação para comentar na issue #8, indisponível
+pela política da sessão.
+
 ## Ciclo de leitura e despacho de CMarkRoot — B02 (18/11/2026)
 
 A issue #8 segue aberta com `codex-ready` e a aprovação restrita
@@ -241,10 +256,10 @@ A suíte local passou com 31 testes
 
 ## Próxima ação
 
-Para B02, rastrear a chamada ao slot de leitura `+0x0C` de
-`CMarkRoot` e verificar se o receptor guardado em `+0x38` recebe
-o bloco `ENEMY_0` ou contém outra instância que o recebe.
-A integração por quadro, a gravidade e o salto seguem em aberto.
+Para B02, seguir a chamada em `0x445EDE` do slot `+0x18` de
+`CCastMK` e verificar os destinos das gravações após a leitura da
+origem em `0x43DD53`. A integração por quadro, a gravidade e o
+salto seguem em aberto.
 
 O conector do GitHub listou as issues abertas. Nenhuma correspondia à
 validação B01 do plano local.

@@ -8,6 +8,9 @@
 
 ## Ciclo de verificação — B02 (18/11/2026)
 
+- A consulta atual confirmou que a [revisão técnica da Etapa 82](https://github.com/IvandersonBordin/handkerchief-vita/issues/6#issuecomment-6975282807) segue pendente. A [issue #8](https://github.com/IvandersonBordin/handkerchief-vita/issues/8) permanece aberta, sem comentários e sem `codex-ready`. A B02 aguarda essa aprovação para iniciar a análise estática.
+- O diretório original estava acessível para leitura e os 31 testes passaram com `PYTHONPATH=tools python3 -B -m unittest discover -s tests`. O conector do GitHub exigiu aprovação para publicar o comentário na issue #8, indisponível nesta sessão. O registro ficou neste arquivo.
+
 Na consulta deste ciclo, a issue #6 seguia aberta com `codex-done` e seu
 comentário mais recente mantinha a revisão técnica da Etapa 82 pendente.
 A issue #8 seguia aberta, sem comentários e sem `codex-ready`.

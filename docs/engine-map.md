@@ -31,6 +31,9 @@ na desmontagem. São identificações funcionais de rotinas sem símbolos.
 | `0x40963E` | Consulta as dimensões e calcula a união dos retângulos dos elementos. |
 | `0x451629` | Inicializa os bancos globais com endereços de tabelas embutidas no executável. |
 | `0x4120F9` | Grava o ponteiro da tabela em `descritor+0x04`. |
+| `0x42B4B2` | Método de desenho de `CEarth`. Encaminha a lista em `objeto+0x44` para o desenho. |
+| `0x40953C` | Prepara os elementos da lista, ajustando a posição e a referência antes de chamar a rotina de desenho. |
+| `0x408C75` | Seleciona a superfície e recorta a região de origem antes de uma chamada compatível com DirectDraw `BltFast`. |
 
 ## Estrutura parcial de CEarth
 
@@ -73,8 +76,10 @@ Cada elemento tem três valores de 32 bits em little-endian.
 
 `0x40963E` soma a base de `CEarth+0x40` à referência antes de extrair
 o **banco nos bits 26–29** e o **índice nos bits 0–14**. A consulta usa
-o ponteiro em `0x4ABD74 + banco × 0x14`. Cada entrada ocupa 8 bytes,
-com largura e altura de 16 bits com sinal em `+0x04` e `+0x06`.
+o ponteiro em `0x4ABD74 + banco × 0x14`. Cada entrada gráfica ocupa
+8 bytes e contém quatro inteiros de 16 bits com sinal em little-endian.
+O desenho usa X e Y de origem em `+0x00` e `+0x02`, e largura e altura
+em `+0x04` e `+0x06`.
 
 | Banco | Endereço da tabela em `.data` | Endereço do ponteiro global |
 |---:|---|---|
@@ -85,6 +90,9 @@ com largura e altura de 16 bits com sinal em `+0x04` e `+0x06`.
 As dimensões abaixo foram lidas diretamente do banco 2 no executável.
 O índice 556 é usado duas vezes em posições diferentes no primeiro
 `CEarth` de `A0.HDK`.
+O índice 564 tem origem `(272, 800)` e dimensões `184 × 40`, compondo
+o retângulo de origem até `(456, 840)`, com limites finais exclusivos,
+antes do recorte.
 
 | Índice | Largura | Altura |
 |---:|---:|---:|
@@ -95,23 +103,52 @@ O índice 556 é usado duas vezes em posições diferentes no primeiro
 
 ### Associação com recursos gráficos
 
-As dimensões dos bancos verificados já estão presentes no executável.
-Uma hipótese é que as entradas descrevam regiões de imagens BMP. Para
-confirmá-la, falta seguir a referência do banco e do índice até uma
-operação de desenho que identifique o bitmap e a região de origem.
-Também falta determinar o significado dos primeiros quatro bytes da
-entrada e dos bits que o cálculo dos limites ignora, incluindo o bit 15.
+O método `0x42B4B2` chama `0x40953C` via `0x402095`. A preparação
+percorre a lista até a referência zero, soma os X/Y locais à posição de
+desenho e chama `0x408C75` via `0x401230`. A rotina final seleciona a
+superfície de origem pelo ponteiro em `0x4AA3E4 + banco × 4` e a região
+pelo índice na tabela de entradas. A chamada indireta em `0x408D59`
+usa a entrada virtual `+0x1C` da superfície de destino com argumentos
+compatíveis com `BltFast`.
+
+| Bits | Uso observado no desenho |
+|---|---|
+| 30–31 | Antes de somar a base, `0x40953C` aceita a referência bruta se esses bits forem zero ou coincidirem com os da base em `objeto+0x40`. A finalidade do filtro segue em aberto. |
+| 16–21 | Após somar a base, `0x40953C` usa esses bits para selecionar um valor de ajuste na tabela em `0x4ABED4` e soma esse valor à referência. O significado dos ajustes ainda precisa ser determinado. |
+| 15 | Após o ajuste, `0x408C75` passa o bit como opção da cópia. O valor 1 seleciona a chave de cor da origem. |
+
+### Carregamento da superfície do banco 2
+
+O caminho configurado para o banco 2 é `./bitmap/HdkMAPa0.BMP`. Na cópia
+local, corresponde a `original-data/BITMAP/HDKMAPA0.BMP`, um BMP indexado
+de 8 bits com 640 × 1128 pixels. As entradas de regiões e dimensões
+permanecem na tabela embutida em `0x48B7A8`.
+
+| Endereço | Evidência |
+|---|---|
+| `0x4517DE` | Carrega o endereço da string em `0x48A0F8`. A chamada em `0x4517E8` configura o caminho no slot `0x4ABC78`. |
+| `0x40E859` | Percorre os bancos e chama o carregador, inclusive para o índice 2. |
+| `0x40DEF1` | Lê o caminho do banco. Tenta `LoadImageA` com o módulo e recorre a `LR_LOADFROMFILE` se a primeira tentativa falhar. Usa `GetObjectA` para obter as dimensões do bitmap. As chamadas em `0x40E044` e `0x40E06C` passam o slot `0x4AA3EC` como saída da criação da superfície do banco 2. |
+| `0x40E25F` e `0x40E294` | Encaminham e copiam o bitmap para a superfície. O código tem um ramo de cópia por linhas em modo indexado de 8 bits e outro com `StretchBlt` e `SRCCOPY`. |
+| `0x40FAC9` | Chamado em `0x40E100` após o preenchimento. Configura a chave de cor da origem com valor zero. |
+
+A tabela de recursos examinada não mostrou um bitmap embutido
+correspondente ao caminho. Ainda falta reproduzir a paleta efetiva,
+explicar os ajustes gráficos, mapear os outros bancos a seus recursos e
+verificar quais modos de desenho e caminhos de cópia são usados durante
+uma partida.
 
 ## Próximos marcos técnicos
 
-1. Rastrear o banco 2 até uma chamada de desenho e verificar, com uma
-   entrada conhecida, qual imagem e qual região são usadas.
+1. Reconstruir parte do cenário de `A0.HDK` em uma imagem de teste no
+   computador. Usar as regiões do banco 2 e os deslocamentos de
+   `CEarth` para conferir composição, posições, limites e transparência
+   antes de integrar a renderização ao PS Vita.
 2. Validar de ponta a ponta a leitura de registros `CEarth` em mais de um
    HDK, cobrindo o grupo opcional `0x04`, listas de elementos e objetos
    aninhados. Usar os limites das seções como verificação independente.
-3. Demonstrar em desktop a composição de um trecho de fase a partir dos
-   dados do usuário e conferir as posições e os retângulos calculados.
-   Usar o resultado e a dependência das rotinas x86 de Win32 para decidir
+3. Usar o resultado da prova de conceito e a dependência das rotinas
+   x86 de Win32 para decidir
    entre reaproveitar código autorizado, traduzir rotinas ou
    reimplementar o motor.
 4. Com a rota técnica definida, validar uma cena mínima no PS Vita

@@ -28,3 +28,8 @@ Thumbs.db
 .env
 .env.*
 !.env.example
+
+# Cache gerado automaticamente pelo Python
+__pycache__/
+*.py[cod]
+.pytest_cache/

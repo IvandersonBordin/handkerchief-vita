@@ -13,6 +13,32 @@ em Círculo, X voltou a alternar verde e amarelo. O encerramento do
 processo com START segue sem confirmação física. Saída em tty0:
 não observada no console.
 
+## Preparação C04 — seleção de quadro por tempo ativo
+
+- `vita-prototype/sprite.c` e `sprite.h` agora selecionam o quadro de
+  uma animação circular com duração uniforme por quadro. A seleção usa
+  microssegundos de tempo ativo e retorna zero se a duração ou a
+  quantidade de quadros for zero.
+- `vita-prototype/test_sprite_animation.c` passou em dez verificações
+  no Linux com GCC 16.2.1, avisos como erros e UBSan. O teste cobre as
+  transições, a volta ao primeiro quadro e o limite de 64 bits.
+  Para reproduzir a partir da raiz:
+
+  ```sh
+  dest=$(mktemp -d /tmp/hksm-animation-linux.XXXXXX) &&
+    gcc -std=c11 -Wall -Wextra -Werror -pedantic -fsanitize=undefined \
+      -fno-sanitize-recover=all vita-prototype/sprite.c \
+      vita-prototype/test_sprite_animation.c -o "$dest/test" &&
+    "$dest/test"
+  ```
+
+- VitaSDK com GCC 15.2.0 compilou o módulo com avisos como erros.
+  `file` identificou um objeto ELF ARM de 32 bits, EABI5.
+- A issue #4 continua sem confirmação física do encerramento por START.
+  A integração da animação ao VPK fica para depois do aceite de C03.
+- O conector do GitHub exigiu aprovação para publicar o resumo na
+  issue #4. A política desta sessão não permite essa aprovação.
+
 ## Preparação C04 — desenho de sprite sintético
 
 - `vita-prototype/sprite.c` e `sprite.h` copiam pixels A8B8G8R8 com

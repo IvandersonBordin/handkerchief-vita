@@ -1,35 +1,46 @@
 # Continuidade — bruno
 
-## Tarefa atual
-B01 — inventário de formatos, recursos e evidências. Validação com a
-cópia original pendente neste worktree.
+## Estado das tarefas
 
-## Evidências já verificadas
-- [Formato HDK](hdk-format.md#validação-do-conjunto-de-arquivos) registra
-  a análise anterior de 108 arquivos. Dos 99 com conteúdo, 98 passaram
-  na leitura de classes. `USER01.HDK` passou na validação dos limites,
-  mas apresentou campos incompatíveis com a leitura de classes.
-- [Mapa técnico](engine-map.md) reúne a análise estática anterior do
-  executável PE32 x86, dos bancos de dimensões e da associação do banco 2
-  com o BMP indexado `HDKMAPA0.BMP`.
-- [Identificação de personagens](character-identification.md#material-local)
-  registra o AVI usado como referência visual e as lacunas na identificação.
+- B01 — CONCLUIDA em 18/11/2026. Inventário e validação estrutural
+  reproduzidos na cópia original autorizada.
+- B02 — próxima tarefa do plano local. Investigação pendente.
 
-## Último ciclo
-18/11/2026 — revisados o inventário histórico e a cobertura atual da
-branch `agent/reverse-engineering`. A suíte local passou com 31 testes
-(`PYTHONPATH=tools python3 -B -m unittest discover -s tests -v`), cobrindo
-leitura de seções HDK, limites de bancos, leitura de BMP, retângulos e
-composição de câmera com dados sintéticos. A análise histórica dos
-arquivos comerciais permanece como evidência documental.
+## Último ciclo — B01
+
+A cópia indicada em [agent-plan.md](agent-plan.md) estava acessível.
+A contagem recursiva por extensão, sem distinguir maiúsculas de minúsculas,
+encontrou 108 HDK, 100 WAV, 19 BMP, 2 DB, 1 EXE e 1 AVI. Para extensões
+diferentes de HDK, a contagem identifica os sufixos dos nomes dos arquivos.
+
+Com `PYTHONPATH=tools python3 -B`, a validação percorreu os HDK dessa
+cópia com `Path.rglob("*")` e consumiu integralmente os iteradores
+`iter_sections` e `iter_section_classes` de `tools/inspect_hdk.py` para
+cada arquivo com conteúdo.
+
+- Os 99 HDK com conteúdo passaram na leitura dos limites externos.
+- Os 98 aceitos pela leitura de classes repetiram a sequência documentada
+  de dez pares seção/classe, totalizando 980 blocos.
+- `USER01.HDK` apresentou 17 blocos válidos no modo de limites e retornou
+  `bloco em 0x0000: nome da classe inválido` na leitura de classes. O
+  significado dos campos internos desse arquivo segue em aberto.
+- `USER02.HDK` a `USER10.HDK` tinham zero bytes.
+
+As contagens coincidiram com o [relatório de formato HDK](hdk-format.md#validação-do-conjunto-de-arquivos).
+As evidências anteriores de outros recursos continuam no
+[mapa técnico](engine-map.md) e na
+[identificação de personagens](character-identification.md#material-local).
+
+A suíte local passou com 31 testes
+(`PYTHONPATH=tools python3 -B -m unittest discover -s tests -v`).
 
 ## Próxima ação
-Com a cópia original disponível em modo somente leitura, conferir a
-cobertura do inventário B01 e reproduzir as contagens de limites e classes
-com `tools/inspect_hdk.py`. Registrar divergências antes de iniciar B02.
 
-## Bloqueios
-- `original-data/` está ausente deste worktree, o que impede conferir o
-  inventário diretamente sobre a cópia original neste ciclo.
-- A consulta de issues abertas pelo GitHub CLI retornou falta de
-  autenticação. O plano local não indica um número de issue para B01.
+Para B02, confirmar a liberação da
+[issue de movimento e física](https://github.com/IvandersonBordin/handkerchief-vita/issues/8),
+que exige a aprovação técnica da Etapa 82 (issue #6). Quando liberada,
+rastrear estaticamente uma rotina que escreva a posição de um ator e
+registrar chamadas e campos antes de inferir velocidade, gravidade ou salto.
+
+O conector do GitHub listou as issues abertas. Nenhuma correspondia à
+validação B01 do plano local.

@@ -26,3 +26,18 @@ sem executar o EXE Windows e sem publicar arquivos comerciais.
 10. Só marque CONCLUIDA quando houver evidências e testes.
 11. Nunca avance por mera passagem de tempo.
 12. Não altere arquivos fora da sua área autorizada.
+
+## Localização dos arquivos originais
+
+A cópia original autorizada está disponível em:
+
+/home/ivanderson/Projetos/handkerchief-vita/original-data
+
+Esse diretório pertence ao projeto principal, não ao worktree
+do Bruno. Consulte-o somente para leitura e análise estática.
+
+Nunca copie os arquivos comerciais para a branch, nunca
+adicione esses arquivos ao Git e nunca execute o EXE Windows.
+
+Antes de registrar que os dados estão ausentes, verifique
+explicitamente esse caminho.

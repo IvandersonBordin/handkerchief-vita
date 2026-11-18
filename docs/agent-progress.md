@@ -11,6 +11,19 @@ C03 — EM ANDAMENTO. O loop tem entrada, pausa e contagem de tempo ativo
 validadas localmente. Falta verificar o comportamento do novo pacote no
 console e confirmar o encerramento completo com START.
 
+## Ciclo C03 — falhas durante a saída com START
+
+- Uma simulação temporária no Linux compilou `vita-prototype/main.c` com
+  avisos tratados como erros e UBSan. A saída normal retornou 0. Falhas
+  simuladas ao desvincular a tela, aguardar a sincronização ou liberar a
+  memória retornaram 1.
+- A simulação verificou a ordem das chamadas e confirmou que o aplicativo
+  só tenta liberar o bloco após desvincular a tela e sincronizar com sucesso.
+  A recuperação do bloco pelo sistema e a saída completa com START ainda
+  dependem de observação no PS Vita.
+- A busca por issues abertas não identificou uma tarefa específica para
+  C03. O código e o VPK do relógio foram reaproveitados neste ciclo.
+
 ## Ciclo C03 — caminho de encerramento no executável ARM
 
 - A inspeção com `arm-vita-eabi-objdump -d` do ELF local

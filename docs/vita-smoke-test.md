@@ -56,10 +56,16 @@ Se faltar um deles, a mensagem informa a variável do VitaSDK e o caminho verifi
 
 ## Roteiro adicional para a pausa (C03)
 
-Use `build/vita-smoke-c03-clock/handkerchief_smoke.vpk` para este roteiro.
-Confira o SHA-256 com `sha256sum` e registre-o junto com o resultado para
-identificar a versão testada. SHA-256 esperado para este pacote:
+O pacote do relógio já validado fica em
+`build/vita-smoke-c03-clock/handkerchief_smoke.vpk`. Confira sua identidade
+com `sha256sum build/vita-smoke-c03-clock/handkerchief_smoke.vpk`. O SHA-256
+esperado para esse arquivo é
 `a400b9671e9fbda265dc6a2e0209d8fae11e6335299b72d43559f29255aefa43`.
+
+Se precisar recompilar, os comandos da seção de compilação geram e verificam
+`build/vita-smoke/handkerchief_smoke.vpk`. Calcule o SHA-256 desse arquivo
+depois que os dois verificadores passarem. Em ambos os casos, registre no
+resultado o caminho e o SHA-256 do VPK que efetivamente instalou.
 
 1. Com a barra central verde, pressione Círculo para pausar. Mantenha Círculo
    pressionado e segure X. A barra deve continuar verde.

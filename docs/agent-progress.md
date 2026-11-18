@@ -11,6 +11,20 @@ C03 — EM ANDAMENTO. O loop tem entrada, pausa e contagem de tempo ativo
 validadas localmente. Falta verificar o comportamento do novo pacote no
 console e confirmar o encerramento completo com START.
 
+## Ciclo C03 — identificação do VPK usado no teste
+
+- O roteiro agora identifica o caminho do VPK do relógio já validado
+  e o caminho que os comandos de recompilação geram. O resultado em
+  console deve incluir o caminho e o SHA-256 do pacote instalado.
+- O SHA-256 do pacote local do relógio coincide com o registrado no
+  roteiro. O Git ignora os dois caminhos e o CMake confirma o nome
+  do VPK. Este ciclo reaproveitou a compilação e os verificadores
+  anteriores.
+- A issue #4 contém o roteiro geral, sem comentários com novas
+  evidências. A busca por issues abertas específicas de C03 não
+  retornou resultados. Pausa, relógio e encerramento com START
+  seguem pendentes de confirmação no Vita. C04 aguarda C03.
+
 ## Ciclo C03 — registro das observações no console
 
 ### Canal de saída do relógio

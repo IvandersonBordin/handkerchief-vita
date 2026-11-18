@@ -33,7 +33,7 @@ int sceKernelGetMemBlockBase(SceUID uid, void **base)
 
 int sceKernelFreeMemBlock(SceUID uid)
 {
-    assert(uid == 1 && display_calls == 2 && vblanks == 7 && !freed);
+    assert(uid == 1 && display_calls == 3 && vblanks == 11 && !freed);
     freed = 1;
     return 0;
 }
@@ -43,8 +43,11 @@ int sceDisplaySetFrameBuf(const SceDisplayFrameBuf *frame, SceDisplaySetBufSync 
     assert(sync == SCE_DISPLAY_SETBUF_NEXTFRAME);
     if (display_calls == 0) {
         assert(frame && frame->base == frames);
+    } else if (display_calls == 1) {
+        assert(frame && frame->base == frames + sizeof(frames) / sizeof(frames[0]) / 2);
+        assert(vblanks == 7);
     } else {
-        assert(display_calls == 1 && !frame && vblanks == 6);
+        assert(display_calls == 2 && !frame && vblanks == 10);
     }
     ++display_calls;
     return 0;
@@ -52,15 +55,17 @@ int sceDisplaySetFrameBuf(const SceDisplayFrameBuf *frame, SceDisplaySetBufSync 
 
 int sceDisplayWaitVblankStart(void)
 {
-    assert(vblanks < 7);
+    assert(vblanks < 11);
     ++vblanks;
     return 0;
 }
 
 SceInt64 sceKernelGetSystemTimeWide(void)
 {
-    /* Count 20, skip the backward step, count 30, then pause. */
-    static const SceInt64 readings[] = {100, 120, 110, 140, 1000, 2000, 3000};
+    /* Count 20 and 30 before the pause, then 70 after resuming. */
+    static const SceInt64 readings[] = {
+        100, 120, 110, 140, 1000, 2000, 3000, 4000, 4040, 4070, 5000,
+    };
     assert(time_reads < sizeof(readings) / sizeof(readings[0]));
     return readings[time_reads++];
 }
@@ -69,6 +74,7 @@ int sceCtrlPeekBufferPositive(int port, SceCtrlData *pad, int count)
 {
     static const uint32_t buttons[] = {
         0, 0, SCE_CTRL_CIRCLE, 0, SCE_CTRL_CIRCLE | SCE_CTRL_CROSS,
+        0, SCE_CTRL_CIRCLE | SCE_CTRL_CROSS, SCE_CTRL_CROSS, SCE_CTRL_CIRCLE,
         SCE_CTRL_START | SCE_CTRL_CIRCLE | SCE_CTRL_CROSS,
     };
     assert(port == 0 && count == 1);
@@ -84,6 +90,6 @@ int sceCtrlPeekBufferPositive(int port, SceCtrlData *pad, int count)
 int main(void)
 {
     assert(smoke_main() == 0);
-    assert(time_reads == 7 && pad_reads == 6 && freed);
+    assert(time_reads == 11 && pad_reads == 10 && freed);
     return 0;
 }

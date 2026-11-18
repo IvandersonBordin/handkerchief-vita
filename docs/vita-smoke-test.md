@@ -120,7 +120,9 @@ Para repetir a simulação do loop no Linux, ajuste `sdk_include` para a
 pasta de cabeçalhos da sua instalação do VitaSDK. Os dois comandos `cc`
 compilam o código real com o ponto de entrada renomeado para `smoke_main`
 e ligam as funções simuladas em um executável temporário. O último comando
-confere o tempo ativo registrado.
+confere o tempo ativo registrado: 50 µs antes da pausa e 70 µs após
+a retomada. O teste também confere a troca para o quadro amarelo
+ao retomar com Círculo e X pressionados.
 
 ```sh
 sdk_include=/home/ivanderson/vitasdk/arm-vita-eabi/include
@@ -132,7 +134,7 @@ cc -std=c11 -Wall -Wextra -Werror -fsanitize=undefined \
   -fno-sanitize-recover=undefined -idirafter "$sdk_include" \
   vita-prototype/test_loop.c "$loop_test_dir/main.o" -o "$loop_test_dir/test_loop" &&
 loop_result=$("$loop_test_dir/test_loop") &&
-test "$loop_result" = 'Active loop time: 50 us'
+test "$loop_result" = 'Active loop time: 120 us'
 ```
 
 Um ZIP sintético com as seis entradas esperadas e os recursos atuais passou.

@@ -11,6 +11,20 @@ C03 — EM ANDAMENTO. O loop tem entrada, pausa e contagem de tempo ativo
 validadas localmente. Falta verificar o comportamento do novo pacote no
 console e confirmar o encerramento completo com START.
 
+## Ciclo C03 — retomada da pausa
+
+- O teste em `vita-prototype/test_loop.c` confere que Círculo com X
+  apresenta o quadro amarelo ao retomar, que uma segunda pausa mantém
+  esse quadro mesmo após soltar X e que START encerra o loop em pausa.
+- No Linux, GCC 16.2.1 com cabeçalhos do VitaSDK, avisos tratados como
+  erros e UBSan confirmou 120 µs de tempo ativo. Foram 50 µs antes da
+  pausa e 70 µs após a retomada. Uma cópia temporária do código com a
+  retomada desativada falhou na asserção de apresentação do quadro.
+- A consulta encontrou o roteiro geral na issue #4 e nenhuma issue
+  aberta específica para C03. O roteiro de validação local foi atualizado.
+  O VPK foi reaproveitado. C03 aguarda a validação em console da pausa,
+  da retomada, do relógio e da saída completa com START. C04 aguarda C03.
+
 ## Ciclo C03 — pausa com uma amostra do controle ausente
 
 - O teste permanente em `vita-prototype/test_loop.c` simula uma leitura

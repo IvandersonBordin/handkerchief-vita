@@ -90,19 +90,52 @@ def original_snapshot():
             for p in folder.rglob("*") if p.is_file()}
 
 
-def process():
-    # Falha fechada: o Codex ainda seria executado dentro da mesma raiz
-    # gravável que contém os arquivos comerciais. Exigir isolamento real
-    # antes de permitir uma execução desassistida.
+def sandbox_command():
+    """Isola o Codex: projeto gravável, originais e metadados Git somente leitura."""
     originals = ROOT / "original-data"
-    if originals.exists():
-        print("BLOQUEADO: original-data/ está dentro da área de trabalho do Codex. "
-              "Configure um worktree isolado antes de executar --run.", file=sys.stderr)
-        return 2
-    for binary in ("gh", "git", "codex"):
+    git_dir = ROOT / ".git"
+    if (not originals.is_dir() or not git_dir.is_dir() or
+            originals.is_symlink() or git_dir.is_symlink()):
+        raise ValueError("original-data/ e .git/ reais são obrigatórios")
+    return [
+        "bwrap", "--ro-bind", "/", "/",
+        "--dev-bind", "/dev", "/dev",
+        "--proc", "/proc", "/proc",
+        "--tmpfs", "/tmp",
+        "--bind", str(ROOT), str(ROOT),
+        "--ro-bind", str(originals), str(originals),
+        "--ro-bind", str(git_dir), str(git_dir),
+        "--chdir", str(ROOT),
+    ]
+
+
+def verify_sandbox(prefix):
+    """Falha fechada se o arquivo original puder ser aberto para escrita."""
+    probe = (
+        "import errno, os; p='original-data/HDKWIN.EXE'; "
+        "f=open(p,'rb'); assert f.read(2)==b'MZ'; f.close(); "
+        "exec('try:\\n fd=os.open(p,os.O_WRONLY)\\n"
+        "except OSError as e:\\n assert e.errno in "
+        "(errno.EROFS,errno.EACCES,errno.EPERM)\\n"
+        "else:\\n os.close(fd); raise RuntimeError(\\'original gravável\\')')"
+    )
+    result = cmd(prefix + [sys.executable, "-c", probe], check=False, timeout=20)
+    if result.returncode:
+        raise ValueError("Isolamento não passou no teste de leitura/escrita: " +
+                         (result.stderr or result.stdout)[-350:])
+
+
+def process():
+    for binary in ("gh", "git", "codex", "bwrap"):
         if not shutil.which(binary):
             print("Falta ferramenta:", binary, file=sys.stderr)
             return 2
+    try:
+        isolated = sandbox_command()
+        verify_sandbox(isolated)
+    except (ValueError, subprocess.TimeoutExpired, OSError) as exc:
+        print("Isolamento não está seguro:", exc, file=sys.stderr)
+        return 2
     if not (ROOT / "AGENTS.md").is_file():
         print("Execute a partir do projeto com AGENTS.md", file=sys.stderr)
         return 2
@@ -157,7 +190,8 @@ def process():
         f"ISSUE #{issue}: {info['title']}\n\n{body}"
     )
     try:
-        result = cmd(["codex", "exec", "--sandbox", "workspace-write", "-"],
+        result = cmd(isolated + ["codex", "exec", "--ephemeral",
+                                 "--sandbox", "workspace-write", "-"],
                      input_text=prompt, check=False, timeout=2700)
         logfile.write_text(result.stdout + "\n\nSTDERR:\n" + result.stderr,
                            encoding="utf-8")

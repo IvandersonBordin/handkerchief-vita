@@ -67,6 +67,14 @@ O teste básico em console está registrado em `docs/agent-progress.md`.
 A pausa, o encerramento completo com START e as medições de memória e FPS
 ainda precisam de verificação no console.
 
+Ao pressionar START, o loop escreve `Active loop time: <valor> us` na
+saída padrão. O valor soma os intervalos entre atualizações da tela
+enquanto o loop está ativo. O intervalo que termina no toque em Círculo
+pertence ao estado anterior ao toque. Para conferir o relógio no console,
+capture a saída padrão e compare duas sessões de duração total semelhante,
+uma com uma pausa prolongada. A sessão com pausa deve registrar menos
+tempo ativo. A captura dessa saída no Vita ainda precisa ser verificada.
+
 ## Validação local
 
 Um ZIP sintético com as seis entradas esperadas e os recursos atuais passou.

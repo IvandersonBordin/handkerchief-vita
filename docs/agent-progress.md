@@ -7,10 +7,28 @@ passaram sobre o VPK gerado neste ciclo.
 C02 — teste básico confirmado no console pelo usuário, conforme o registro
 abaixo. O encerramento completo com START segue sem confirmação.
 
-C03 — EM ANDAMENTO. O loop do protótipo agora alterna entre execução e
-pausa a cada novo toque em Círculo. A pausa conserva a última cor exibida,
-e START continua aceito nos dois estados. O relógio do loop fica para o
-próximo ciclo.
+C03 — EM ANDAMENTO. O loop tem entrada, pausa e contagem de tempo ativo
+validadas localmente. Falta verificar o comportamento do novo pacote no
+console e confirmar o encerramento completo com START.
+
+## Ciclo C03 — relógio do loop (18/11/2026)
+
+- O loop mede o intervalo entre atualizações da tela com o relógio de
+  64 bits do VitaSDK. Cada intervalo pertence ao estado anterior à leitura
+  dos botões. START registra o tempo ativo acumulado na saída padrão.
+- A compilação Release ARM com GCC 15.2.0 e avisos tratados como erros
+  gerou `build/vita-smoke-c03-clock/handkerchief_smoke.vpk`. Os dois
+  verificadores do pacote passaram com seis entradas, zero erros e zero
+  avisos para o ID `HKSM00001`, versão `01.00`. O Git ignora o pacote.
+- SHA-256 do VPK:
+  `a400b9671e9fbda265dc6a2e0209d8fae11e6335299b72d43559f29255aefa43`.
+- A simulação no Linux com UBSan confirmou 105 µs ativos usando intervalos
+  irregulares, leitura sem amostra, pausa e retomada. A saída com START em
+  pausa registrou 10 µs ativos. Nos dois casos, a liberação dos quadros
+  ocorreu após desvincular a tela e esperar a sincronização.
+- A consulta às issues abertas não encontrou uma issue específica para
+  C03. O ciclo seguiu o plano local. A saída de diagnóstico e o novo VPK
+  ainda aguardam teste no console.
 
 ## Ciclo C03 — pausa do protótipo (18/11/2026)
 

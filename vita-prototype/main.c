@@ -1,9 +1,12 @@
+#include <inttypes.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
 
 #include <psp2/ctrl.h>
 #include <psp2/display.h>
 #include <psp2/kernel/sysmem.h>
+#include <psp2/kernel/threadmgr.h>
 
 enum {
     SCREEN_WIDTH = 960,
@@ -62,7 +65,15 @@ int main(void)
 
     uint32_t previous_buttons = 0;
     int paused = 0;
+    uint64_t active_time_us = 0;
+    uint64_t previous_time_us = sceKernelGetSystemTimeWide();
     while (sceDisplayWaitVblankStart() >= 0) {
+        const uint64_t now_us = sceKernelGetSystemTimeWide();
+        /* Charge the interval to the state before reading this frame's input. */
+        if (!paused && now_us >= previous_time_us)
+            active_time_us += now_us - previous_time_us;
+        previous_time_us = now_us;
+
         SceCtrlData pad = {0};
         const int samples = sceCtrlPeekBufferPositive(0, &pad, 1);
         if (samples < 0)
@@ -70,6 +81,7 @@ int main(void)
         if (samples == 0)
             continue;
         if (pad.buttons & SCE_CTRL_START) {
+            printf("Active loop time: %" PRIu64 " us\n", active_time_us);
             result = 0;
             break;
         }

@@ -51,7 +51,8 @@ endforeach()
 add_executable(handkerchief_smoke main.c)
 target_compile_features(handkerchief_smoke PRIVATE c_std_11)
 target_compile_options(handkerchief_smoke PRIVATE -Wall -Wextra)
-target_link_libraries(handkerchief_smoke PRIVATE SceDisplay_stub SceCtrl_stub SceSysmem_stub)
+target_link_libraries(handkerchief_smoke PRIVATE
+    SceDisplay_stub SceCtrl_stub SceSysmem_stub SceKernelThreadMgr_stub)
 
 vita_create_self(handkerchief_smoke.self handkerchief_smoke)
 vita_create_vpk(handkerchief_smoke.vpk HKSM00001 handkerchief_smoke.self

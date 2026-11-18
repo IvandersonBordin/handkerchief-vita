@@ -30,7 +30,7 @@ python3 -m py_compile tools/issue_worker.py
 Se o Codex CLI não existir, **não ative o timer**. A instalação e autenticação
 exigem uma etapa separada e consentimento.
 
-O executor usa Bubblewrap para montar `original-data/` e `.git/` em modo somente leitura dentro de uma área de projeto gravável. Antes de executar o Codex, verifica se `HDKWIN.EXE` pode ser lido e não pode ser aberto para escrita. O Codex usa `--ephemeral` para reduzir gravações fora do projeto. Esse isolamento ainda precisa ser testado localmente com o Codex CLI nesta configuração.\n\nO executor só escolhe issues abertas do proprietário com o rótulo
+O executor usa Bubblewrap para montar `original-data/` e `.git/` em modo somente leitura dentro de uma área de projeto gravável. A pasta `~/.codex/` recebe permissão de escrita restrita para o estado de execução do cliente; quando existe, `~/.codex/auth.json` recebe uma montagem adicional somente leitura. As demais pastas fora do projeto continuam somente leitura. Antes de executar o Codex, verifica se `HDKWIN.EXE` pode ser lido e não pode ser aberto para escrita. O Codex usa `--ephemeral` para reduzir gravações fora do projeto. Esse isolamento ainda precisa ser testado localmente com o Codex CLI nesta configuração.\n\nO executor só escolhe issues abertas do proprietário com o rótulo
 `codex-ready`. Para criar os rótulos uma única vez:
 
 ```bash
@@ -94,7 +94,7 @@ journalctl --user -u handkerchief-worker.service -n 100 --no-pager
   protege `AGENTS.md` e o próprio executor de alterações automáticas.
 - Valida `git diff --check`, AST dos Python modificados, testes unittest
   quando disponíveis e revisa a lista de arquivos staged antes de publicar.
-- O sistema **não é uma barreira de segurança absoluta**. O Bubblewrap protege\n  os originais de escrita durante a sessão isolada, mas o processo externo\n  controla os commits e a publicação. Metadados não detectam todas as possíveis\n  alterações; mantenha backup dos arquivos originais.
+- O sistema **não é uma barreira de segurança absoluta**. O Codex pode escrever em `~/.codex/` (exceto `auth.json`, quando presente) para manter seu estado; por isso, o isolamento não é uma garantia de proteção contra todos os efeitos do processo. O Bubblewrap protege\n  os originais de escrita durante a sessão isolada, mas o processo externo\n  controla os commits e a publicação. Metadados não detectam todas as possíveis\n  alterações; mantenha backup dos arquivos originais.
 - A verificação automática é limitada: testes específicos de imagens e
   fidelidade visual ainda podem exigir revisão humana. Um commit publicado
   não significa aprovação técnica do ChatGPT.

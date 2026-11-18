@@ -69,8 +69,39 @@ A evidência confirma uma consulta geométrica com os limites do ator.
 A finalidade da consulta no jogo, os chamadores indiretos que passam
 um `CCastMK`, a ligação com `STAGE_0` ou `CRock` e a resposta física
 seguem em aberto. Também faltam as unidades das coordenadas e a
-origem do Y alternativo. O próximo recorte da B02 é rastrear uma
-escrita em `+0x18` ou `+0x1C` fora da inicialização.
+origem do Y alternativo.
+
+## Escrita da origem durante leitura de dados
+
+O slot `+0x0C` da tabela de `CCastMK` (endereço `0x471EBC`)
+contém `0x403198 → 0x44611F`. Esse método recebe o ator em
+`ECX` e preserva seu endereço em `ESI`. Em `0x4462B6`, ele
+passa o mesmo ator, o objeto de fluxo e a máscara `0x04` a
+`0x40374C → 0x429BA0`. A rotina aplica XOR com `0x0A`
+em `0x429BA8` e, após a verificação em `0x429BC1`, limita
+a máscara a quatro bits. Em `0x429BF6`, passa `0x0E` e o mesmo ator a
+`0x402C4D → 0x4125E2`.
+
+Após a verificação em `0x4125FC`, se `[fluxo+0x30]` é zero e
+o bit `0x02` de `[fluxo+0x34]` está ativo, o bit `0x02` da
+máscara `0x0E` seleciona o caminho em `0x412733`. As chamadas
+em `0x41273D` e `0x412744` leem quatro bytes para
+`ator+0x18` (X) e depois quatro para `ator+0x1C` (Y).
+Ambas passam por `0x404142 → 0x40B34C`, que encaminha o
+endereço de destino e o tamanho a `0x40356C → 0x40A6D8`.
+Em `0x40A71B`, a chamada de leitura recebe o destino, tamanho
+de elemento 1, quantidade 4 e o ponteiro do fluxo. Na sequência,
+`0x41274B` chama o recálculo dos limites com base em `ator+0x18`.
+
+O caminho observado pode preencher a origem de um objeto já criado
+com valores do fluxo. Continua em aberto se o chamador usa esse
+caminho no carregamento inicial, na restauração de estado ou em
+ambas as situações. O trecho também deixa em aberto a integração
+por quadro, o salto e a gravidade. Para investigar uma atualização
+em jogo, o próximo ponto é o slot `+0x18`, que contém
+`0x402BD5 → 0x445DF3`. Esse método lê X e Y em `0x445EB6`
+e `0x445EB9`. Vale rastrear o código que o chama e a origem
+dos valores que ele lê.
 
 ## Reprodução local
 
@@ -83,11 +114,17 @@ sha256sum "$exe"
 objdump -s --start-address=0x4718c8 --stop-address=0x4718d0 "$exe"
 objdump -s --start-address=0x488c98 --stop-address=0x488ca0 "$exe"
 objdump -s --start-address=0x471ecc --stop-address=0x471ed0 "$exe"
+objdump -s --start-address=0x471ebc --stop-address=0x471ecc "$exe"
 for intervalo in 445b82:445bbc 401bdb:401be0 445cd2:445d67 \
                  40321f:403224 410e16:410e3e 401d7f:401d84 \
                  410e48:410e6e 43dd53:43dd74 401320:401325 \
                  445fea:446027 401843:401848 412d29:412d81 \
-                 40119f:4011a4 4096e8:409717; do
+                 40119f:4011a4 4096e8:409717 \
+                 403198:40319d 44611f:44614a 4462b1:4462ca \
+                 40374c:403751 429ba0:429c01 402c4d:402c52 \
+                 4125e2:412614 41271c:41276a 404142:404147 \
+                 40b34c:40b360 40356c:403571 40a6d8:40a72a \
+                 402bd5:402bda 445ea8:445ec1; do
     objdump -d -Mintel --start-address="0x${intervalo%:*}" \
         --stop-address="0x${intervalo#*:}" "$exe"
 done

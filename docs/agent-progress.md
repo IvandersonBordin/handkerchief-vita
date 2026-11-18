@@ -7,6 +7,19 @@
 - B02 — em andamento. A Etapa 82 foi aprovada e a issue #8 recebeu
   `codex-ready`. A integração de posição e velocidade segue em aberto.
 
+## Ciclo de escrita da origem — B02 (18/11/2026)
+
+A issue #8 seguia com `codex-ready`, e a aprovação restrita da Etapa 82
+estava registrada na issue #6. A análise do slot `+0x0C` de `CCastMK`
+identificou um caminho que lê X e Y do fluxo para um objeto já criado e
+recalcula seus limites. A cadeia, as condições e os comandos de reprodução
+estão em [physics-collision.md](physics-collision.md#escrita-da-origem-durante-leitura-de-dados).
+
+A conferência independente do PE32 confirmou dois slots, 14 transferências
+relativas e seis sequências de instruções. Os 31 testes locais e
+`git diff --check` passaram. O conector do GitHub exigiu aprovação para
+comentar na issue #8, indisponível pela política da sessão.
+
 ## Ciclo de consulta de sobreposição — B02 (18/11/2026)
 
 A [issue #6](https://github.com/IvandersonBordin/handkerchief-vita/issues/6)
@@ -181,9 +194,9 @@ A suíte local passou com 31 testes
 
 ## Próxima ação
 
-Para B02, rastrear estaticamente uma escrita na origem de `CCastMK`
-fora da inicialização e verificar se o valor resulta de integração de
-movimento, reposicionamento ou outro caminho.
+Para B02, rastrear o chamador do slot `+0x18` de `CCastMK`
+e buscar a escrita que fornece os valores de X e Y lidos nesse caminho.
+A integração por quadro, a gravidade e o salto seguem em aberto.
 
 O conector do GitHub listou as issues abertas. Nenhuma correspondia à
 validação B01 do plano local.

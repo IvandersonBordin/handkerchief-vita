@@ -11,6 +11,19 @@ C03 — EM ANDAMENTO. O loop tem entrada, pausa e contagem de tempo ativo
 validadas localmente. Falta verificar o comportamento do novo pacote no
 console e confirmar o encerramento completo com START.
 
+## Ciclo C03 — soltar e pressionar X com o loop ativo
+
+- O teste Linux em `vita-prototype/test_loop.c` agora verifica a volta
+  ao quadro verde ao soltar X e ao amarelo ao pressioná-lo novamente,
+  em atualizações consecutivas após retomar. O roteiro descreve o caso.
+- GCC 16.2.1 com cabeçalhos do VitaSDK, avisos como erros e UBSan
+  confirmou 120 µs de tempo ativo. Uma cópia temporária do loop que
+  mantinha o quadro ao soltar X falhou na verificação do quadro esperado.
+- A consulta ao GitHub encontrou o roteiro geral na issue #4 e nenhuma
+  issue aberta específica de C03. O código do aplicativo e o VPK foram
+  reaproveitados. Pausa, retomada, relógio e encerramento por START
+  seguem pendentes no console com o VPK do relógio. C04 aguarda C03.
+
 ## Ciclo C03 — pixels dos quadros sintéticos
 
 - O teste no Linux agora confere o formato A8B8G8R8, as dimensões

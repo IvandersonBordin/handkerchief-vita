@@ -121,8 +121,9 @@ pasta de cabeçalhos da sua instalação do VitaSDK. Os dois comandos `cc`
 compilam o código real com o ponto de entrada renomeado para `smoke_main`
 e ligam as funções simuladas em um executável temporário. O último comando
 confere o tempo ativo registrado: 50 µs antes da pausa e 70 µs após
-a retomada. O teste também confere a troca para o quadro amarelo
-ao retomar com Círculo e X pressionados.
+a retomada. O teste confere a troca para o quadro amarelo ao retomar
+com Círculo e X pressionados. Com o loop ativo, soltar X volta ao
+quadro verde e pressionar X novamente volta ao amarelo.
 Para os quadros verde e amarelo, a simulação verifica o formato,
 as dimensões, o passo e as cores nas extremidades de cada faixa e
 do preenchimento em todas as linhas.

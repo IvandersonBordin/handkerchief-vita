@@ -11,6 +11,21 @@ C03 — EM ANDAMENTO. O loop tem entrada, pausa e contagem de tempo ativo
 validadas localmente. Falta verificar o comportamento do novo pacote no
 console e confirmar o encerramento completo com START.
 
+## Ciclo C03 — pausa com uma amostra do controle ausente
+
+- O teste permanente em `vita-prototype/test_loop.c` simula uma leitura
+  sem amostra enquanto Círculo está pressionado. Na amostra seguinte,
+  Círculo continua pressionado junto com X. O teste exige que a pausa
+  continue e que o quadro verde permaneça na tela até START.
+- A simulação com cabeçalhos do VitaSDK, GCC 16.2.1, avisos como erros
+  e UBSan passou com 50 µs de tempo ativo. Uma cópia temporária do loop
+  que zerava o histórico dos botões na leitura sem amostra falhou na
+  checagem de troca de quadro, conforme esperado.
+- A consulta ao GitHub encontrou o roteiro geral na issue #4 e nenhuma
+  issue aberta específica de C03. O VPK do relógio foi reaproveitado.
+  A pausa, o relógio e o encerramento completo com START ainda precisam
+  de verificação em console com esse pacote. C04 aguarda C03.
+
 ## Ciclo C03 — recuo do relógio e START com outros botões
 
 - `vita-prototype/test_loop.c` executa o loop real no Linux com cabeçalhos

@@ -56,6 +56,14 @@ Em `A0.HDK`, o primeiro `CEarth` de `VISTA_0` tem posição `(524, 556)`,
 base de referência zero e cinco elementos entre `0x0704` e `0x0740`
 (fim exclusivo). Esses offsets são posições no arquivo HDK.
 
+Em `VISTA_0` de `A0.HDK`, a contagem de `CGameRoot` é 6. Os seis
+registros usam os bytes de controle `0B 0B` e têm contagem zero de
+objetos aninhados. Suas listas somam 32 elementos do banco 2. O cursor
+após o último registro coincide com o fim da seção em `0x0921`.
+`tools/render_vista0.py` compõe esses elementos em ordem de arquivo com
+ajuste gráfico zero e a paleta original do BMP. A prévia mede 4464 × 384
+e tem origem de cenário em `(52, 232)`.
+
 ### Interpretações e lacunas
 
 O uso na aritmética de retângulos confirma o papel geométrico dos pares

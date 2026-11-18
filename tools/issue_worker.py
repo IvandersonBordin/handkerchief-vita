@@ -91,6 +91,14 @@ def original_snapshot():
 
 
 def process():
+    # Falha fechada: o Codex ainda seria executado dentro da mesma raiz
+    # gravável que contém os arquivos comerciais. Exigir isolamento real
+    # antes de permitir uma execução desassistida.
+    originals = ROOT / "original-data"
+    if originals.exists():
+        print("BLOQUEADO: original-data/ está dentro da área de trabalho do Codex. "
+              "Configure um worktree isolado antes de executar --run.", file=sys.stderr)
+        return 2
     for binary in ("gh", "git", "codex"):
         if not shutil.which(binary):
             print("Falta ferramenta:", binary, file=sys.stderr)

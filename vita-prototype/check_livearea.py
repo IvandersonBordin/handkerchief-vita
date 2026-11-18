@@ -1,9 +1,11 @@
-"""Confere os recursos sintéticos da LiveArea antes de gerar o VPK."""
+"""Confere os recursos sintéticos da LiveArea e, opcionalmente, o conteúdo do VPK."""
 
+import argparse
 from pathlib import Path
 import struct
 import sys
 import xml.etree.ElementTree as ET
+import zipfile
 import zlib
 
 
@@ -100,7 +102,29 @@ def check_image_data(path, compressed, width, height, interlaced):
         offset += row_size
 
 
-def main(root):
+def check_package(path, root, assets):
+    expected = {"eboot.bin", "sce_sys/param.sfo"}
+    expected.update(asset.relative_to(root).as_posix() for asset in assets)
+    with zipfile.ZipFile(path) as package:
+        names = package.namelist()
+        if len(names) != len(set(names)):
+            raise ValueError("VPK: entradas duplicadas")
+        missing = expected.difference(names)
+        extra = set(names).difference(expected)
+        if missing:
+            raise ValueError(f"VPK: entradas ausentes {sorted(missing)!r}")
+        if extra:
+            raise ValueError(f"VPK: entradas inesperadas {sorted(extra)!r}")
+
+        for asset in assets:
+            name = asset.relative_to(root).as_posix()
+            original = asset.read_bytes()
+            with package.open(name) as bundled:
+                if bundled.read(len(original) + 1) != original:
+                    raise ValueError(f"VPK: {name} difere do recurso local")
+
+
+def main(root, package=None):
     livearea = root / "sce_sys/livearea/contents"
     images = {
         root / "sce_sys/icon0.png": (128, 128),
@@ -122,13 +146,20 @@ def main(root):
             references = sections[0].findall(element) if len(sections) == 1 else []
             if len(references) != 1 or references[0].text != filename or len(references[0]):
                 raise ValueError(f"template.xml: esperado um único {section}/{element} com {filename}")
-    except (OSError, ValueError, ET.ParseError) as error:
+        if package is not None:
+            check_package(package, root, [*images, livearea / "template.xml"])
+    except (OSError, ValueError, ET.ParseError, zipfile.BadZipFile, RuntimeError,
+            zlib.error) as error:
         print(error, file=sys.stderr)
         return 1
 
     print("PNGs, opacidade do ícone e referências do XML conferidos.")
+    if package is not None:
+        print("VPK com as seis entradas esperadas e os recursos sintéticos conferidos.")
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main(Path(__file__).resolve().parent))
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("vpk", nargs="?", type=Path, help="caminho do VPK do smoke test")
+    sys.exit(main(Path(__file__).resolve().parent, parser.parse_args().vpk))

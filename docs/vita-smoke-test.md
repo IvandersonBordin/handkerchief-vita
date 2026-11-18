@@ -27,11 +27,15 @@ a pasta `bin` do SDK ao `PATH`. Na raiz do worktree, execute:
 ```sh
 cmake -S vita-prototype -B build/vita-smoke -DCMAKE_BUILD_TYPE=Release
 cmake --build build/vita-smoke
+python3 vita-prototype/check_livearea.py build/vita-smoke/handkerchief_smoke.vpk
 python3 .agents/skills/vita-port/scripts/check_vpk.py build/vita-smoke/handkerchief_smoke.vpk
 ```
 
 O primeiro comando configura a compilação para o Vita. O segundo gera
-`handkerchief_smoke.vpk` com o ID `HKSM00001`. O terceiro verifica a estrutura do pacote.
+`handkerchief_smoke.vpk` com o ID `HKSM00001`. O terceiro exige exatamente
+`eboot.bin`, `sce_sys/param.sfo` e os quatro recursos da LiveArea, sem
+duplicatas, e compara os recursos com os arquivos locais. O quarto verifica
+a estrutura do pacote, incluindo o cabeçalho do executável e os metadados.
 Antes de selecionar o compilador, o CMake confere se os quatro recursos
 sintéticos da LiveArea estão presentes. A lista usada nessa checagem também
 define os caminhos de origem e destino desses recursos no VPK.
@@ -51,6 +55,11 @@ Se faltar um deles, a mensagem informa a variável do VitaSDK e o caminho verifi
 A validação em console e as medições de memória e FPS continuam pendentes.
 
 ## Validação local
+
+O modo de inspeção do pacote aceitou um ZIP temporário com as seis entradas
+esperadas e rejeitou entrada ausente, extra, duplicada, recurso alterado e
+arquivo que não era um ZIP. Os recursos locais também passaram na checagem
+sem argumento. O CMake parou na configuração porque `VITASDK` estava ausente.
 
 Uma simulação no Linux com GCC, avisos tratados como erros e UBSan conferiu
 os pixels visíveis e o preenchimento de todas as linhas dos dois quadros.

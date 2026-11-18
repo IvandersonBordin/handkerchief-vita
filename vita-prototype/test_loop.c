@@ -15,6 +15,7 @@ static unsigned display_calls;
 static int freed;
 static int fail_pad_read;
 static int fail_get_base;
+static int fail_detach;
 enum { LOOP_VBLANKS = 12, TOTAL_VBLANKS = LOOP_VBLANKS + 1 };
 
 int smoke_main(void);
@@ -38,7 +39,7 @@ int sceKernelGetMemBlockBase(SceUID uid, void **base)
 
 int sceKernelFreeMemBlock(SceUID uid)
 {
-    assert(uid == 1 && !freed);
+    assert(uid == 1 && !freed && !fail_detach);
     if (fail_get_base)
         assert(display_calls == 0 && vblanks == 0);
     else if (fail_pad_read)
@@ -80,6 +81,8 @@ int sceDisplaySetFrameBuf(const SceDisplayFrameBuf *frame, SceDisplaySetBufSync 
         }
     }
     ++display_calls;
+    if (!frame && fail_detach)
+        return -1;
     return 0;
 }
 
@@ -122,25 +125,33 @@ int sceCtrlPeekBufferPositive(int port, SceCtrlData *pad, int count)
     return 1;
 }
 
+static void reset_observations(void)
+{
+    time_reads = 0;
+    pad_reads = 0;
+    vblanks = 0;
+    display_calls = 0;
+    freed = 0;
+}
+
 int main(void)
 {
     assert(smoke_main() == 0);
     assert(time_reads == LOOP_VBLANKS + 1 && pad_reads == LOOP_VBLANKS && freed);
 
-    time_reads = 0;
-    pad_reads = 0;
-    vblanks = 0;
-    display_calls = 0;
-    freed = 0;
+    reset_observations();
+    fail_detach = 1;
+    assert(smoke_main() == 1);
+    assert(time_reads == LOOP_VBLANKS + 1 && pad_reads == LOOP_VBLANKS);
+    assert(display_calls == 5 && vblanks == LOOP_VBLANKS && !freed);
+    fail_detach = 0;
+
+    reset_observations();
     fail_pad_read = 1;
     assert(smoke_main() == 1);
     assert(time_reads == 2 && pad_reads == 1 && freed);
 
-    time_reads = 0;
-    pad_reads = 0;
-    vblanks = 0;
-    display_calls = 0;
-    freed = 0;
+    reset_observations();
     fail_pad_read = 0;
     fail_get_base = 1;
     assert(smoke_main() == 1);

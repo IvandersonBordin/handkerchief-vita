@@ -4,12 +4,31 @@
 C01 — CONCLUIDA. A compilação ARM com VitaSDK e os dois verificadores
 passaram sobre o VPK gerado neste ciclo.
 
-C02 — teste básico confirmado no console pelo usuário, conforme o registro
-abaixo. O encerramento completo com START segue sem confirmação.
+C02 — CONCLUIDA conforme a issue #4, que registra a confirmação manual
+da abertura do app e da resposta visual ao botão X no PS Vita.
 
-C03 — EM ANDAMENTO. O loop tem entrada, pausa e contagem de tempo ativo
-validadas localmente. Falta verificar o comportamento do novo pacote no
-console e confirmar o encerramento completo com START.
+C03 — EM ANDAMENTO. A issue #4 registra que, no PS Vita, Círculo
+pausou o loop, X manteve o quadro durante a pausa e, após outro toque
+em Círculo, X voltou a alternar verde e amarelo. O encerramento do
+processo com START segue sem confirmação física. Saída em tty0:
+não observada no console.
+
+## Ciclo C03 — falha ao desvincular o quadro após START
+
+- O teste permanente em `vita-prototype/test_loop.c` simula a recusa da
+  tela em desvincular o quadro após START. Exige retorno 1, ausência
+  de nova espera por sincronização e preservação do bloco de vídeo.
+  O roteiro em `docs/vita-smoke-test.md` inclui o resultado esperado.
+- GCC 16.2.1 no Linux, com cabeçalhos do VitaSDK, avisos como erros e
+  UBSan, aprovou os quatro cenários. Uma cópia temporária que ignorava
+  a falha foi rejeitada ao tentar liberar o bloco. As duas execuções
+  que chegaram a START registraram 120 µs simulados.
+- O executável e o VPK anteriores foram reaproveitados. O próximo
+  ciclo pode preparar o código de sprites sintéticos da C04 sem
+  antecipar sua entrega, conforme a issue #4. O aceite de C03
+  aguarda a confirmação de término do processo com START no console.
+- A issue #4 foi consultada. A publicação do resumo foi bloqueada
+  porque a ferramenta do GitHub exige aprovação indisponível na sessão.
 
 ## Ciclo C03 — falha ao obter o endereço da memória de vídeo
 

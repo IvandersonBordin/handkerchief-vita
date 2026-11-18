@@ -127,13 +127,17 @@ quadro verde e pressionar X novamente volta ao amarelo.
 Para os quadros verde e amarelo, a simulação verifica o formato,
 as dimensões, o passo e as cores nas extremidades de cada faixa e
 do preenchimento em todas as linhas.
-Em uma segunda execução do loop, a simulação força um erro na primeira
+Em outra execução, após START, a chamada que desvincula o quadro falha.
+O teste exige código de retorno 1, sem aguardar outra sincronização nem
+liberar o bloco que a tela ainda pode estar usando. As duas execuções que
+chegam a START registram 120 µs antes da tentativa de desvinculação.
+A simulação também força um erro na primeira
 leitura do controle. O teste exige código de retorno 1, uma única leitura
 do controle e liberação da memória após desvincular o quadro e aguardar
-a sincronização da tela. Em uma terceira execução, a consulta do endereço
+a sincronização da tela. Na última execução, a consulta do endereço
 do bloco de vídeo falha após a alocação. O teste exige código 1 e a
 liberação do bloco sem apresentar quadros, aguardar a tela ou consultar o
-relógio e o controle. A saída de tempo ativo vem apenas do cenário normal.
+relógio e o controle.
 
 ```sh
 sdk_include=/home/ivanderson/vitasdk/arm-vita-eabi/include
@@ -145,7 +149,7 @@ cc -std=c11 -Wall -Wextra -Werror -fsanitize=undefined \
   -fno-sanitize-recover=undefined -idirafter "$sdk_include" \
   vita-prototype/test_loop.c "$loop_test_dir/main.o" -o "$loop_test_dir/test_loop" &&
 loop_result=$("$loop_test_dir/test_loop") &&
-test "$loop_result" = 'Active loop time: 120 us'
+test "$loop_result" = "$(printf 'Active loop time: 120 us\nActive loop time: 120 us')"
 ```
 
 Um ZIP sintético com as seis entradas esperadas e os recursos atuais passou.

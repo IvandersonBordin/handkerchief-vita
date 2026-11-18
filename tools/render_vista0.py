@@ -69,19 +69,25 @@ def read_vista_objects(data):
     return objects
 
 
-def main():
+def load_vista_scene():
+    """Carrega os objetos e recortes da amostra."""
     original = ROOT / "original-data"
+    objects = read_vista_objects((original / "SYSTEM" / "A0.HDK").read_bytes())
+    bank = read_bank((original / "HDKWIN.EXE").read_bytes())
+    palette, rows = read_bitmap((original / "BITMAP" / "HDKMAPA0.BMP").read_bytes())
+    pieces = []
+    for number, (origin, elements) in enumerate(objects, 1):
+        try:
+            pieces.extend(resolve_pieces(origin, elements, bank, rows))
+        except ValueError as error:
+            raise ValueError(f"VISTA_0: objeto {number}: {error}") from error
+    return len(objects), pieces, palette, rows
+
+
+def main():
     output = ROOT / "build"
     try:
-        objects = read_vista_objects((original / "SYSTEM" / "A0.HDK").read_bytes())
-        bank = read_bank((original / "HDKWIN.EXE").read_bytes())
-        palette, rows = read_bitmap((original / "BITMAP" / "HDKMAPA0.BMP").read_bytes())
-        pieces = []
-        for number, (origin, elements) in enumerate(objects, 1):
-            try:
-                pieces.extend(resolve_pieces(origin, elements, bank, rows))
-            except ValueError as error:
-                raise ValueError(f"VISTA_0: objeto {number}: {error}") from error
+        object_count, pieces, palette, rows = load_vista_scene()
         (left, top), width, height, pixels = render_pieces(pieces, palette, rows)
         preview = encode_png(width, height, pixels)
         # Substitui só o fundo transparente para preservar os pixels desenhados.
@@ -97,7 +103,7 @@ def main():
         return 1
 
     print("Prévia em ordem de arquivo, com ajuste gráfico zero e paleta original do BMP.")
-    print(f"{len(objects)} objetos CEarth, 0 sem suporte e {len(pieces)} elementos.")
+    print(f"{object_count} objetos CEarth, 0 sem suporte e {len(pieces)} elementos.")
     print(f"Imagens RGBA de {width} × {height}, origem ({left}, {top}), em {output}")
     return 0
 

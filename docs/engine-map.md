@@ -152,6 +152,35 @@ explicar os ajustes gráficos, mapear os outros bancos a seus recursos e
 verificar quais modos de desenho e caminhos de cópia são usados durante
 uma partida.
 
+## Câmera e parallax horizontal
+
+| Endereço | Comportamento observado |
+|---|---|
+| `0x4119A2` | Inicializa X em `contexto+0x00` e L em `+0x10` com a borda esquerda do retângulo recebido. O contexto global inicia com o retângulo `(0, 0, 640, 480)`. |
+| `0x411C60` | Translada o retângulo da entidade-alvo por X e Y, corrige a posição quando ela ultrapassa a janela de acompanhamento e limita X a `[R − W, L]` para limites consistentes. R vem de `+0x18`, e W de `+0x40`. |
+| `0x411D9D` | Caminho alternativo que acompanha um ponto, limita a correção a ±8 pixels por eixo por chamada e aplica os limites do contexto. |
+
+X é somado à coordenada de mundo no desenho de `STAGE_0` e `FRONT_0`.
+No passe condicional de `VISTA_0`, `0x42309E` usa
+`X_vista = X − trunc((X − L) / 3)`, com truncamento em direção a zero.
+A posição horizontal na tela é `x_mundo + X_vista`. Para `CEarth`,
+`x_mundo` inclui a posição do objeto e o deslocamento local do elemento.
+Com L fixo, X mais negativo desloca a cena para a esquerda. O passe
+reaproveita a origem vertical do contexto principal.
+
+`python3 -B tools/preview_camera.py` gera três PNGs RGBA transparentes
+de 640 × 480 em `build/`, usando os seis objetos e 32 elementos de
+`VISTA_0`. Para L igual a zero, X de 0, −300 e −600 resulta em
+`X_vista` de 0, −200 e −400, respectivamente. O recorte preserva a
+origem de mundo `(52, 232)`. Os valores de X são amostras experimentais.
+A prévia mantém a translação vertical em zero, usa ajuste gráfico zero
+e a paleta original do BMP. A aparência durante uma partida segue
+sem verificação.
+
+A análise ainda não determina qual entidade é selecionada em todos os
+modos, quando o caminho de passo limitado é escolhido nem como os limites
+do contexto se relacionam com os de cada fase HDK.
+
 ## Próximos marcos técnicos
 
 1. Conferir a composição de `VISTA_0` de `A0.HDK` em desktop. As

@@ -24,12 +24,13 @@ git pull --ff-only origin main
 command -v codex
 codex --version
 python3 tools/issue_worker.py
+python3 -m py_compile tools/issue_worker.py
 ```
 
 Se o Codex CLI não existir, **não ative o timer**. A instalação e autenticação
 exigem uma etapa separada e consentimento.
 
-O executor só escolhe issues abertas do proprietário com o rótulo
+O executor usa Bubblewrap para montar `original-data/` e `.git/` em modo somente leitura dentro de uma área de projeto gravável. Antes de executar o Codex, verifica se `HDKWIN.EXE` pode ser lido e não pode ser aberto para escrita. O Codex usa `--ephemeral` para reduzir gravações fora do projeto. Esse isolamento ainda precisa ser testado localmente com o Codex CLI nesta configuração.\n\nO executor só escolhe issues abertas do proprietário com o rótulo
 `codex-ready`. Para criar os rótulos uma única vez:
 
 ```bash
@@ -44,7 +45,7 @@ Para autorizar a issue #1, após verificar seu conteúdo:
 gh issue edit 1 --repo IvandersonBordin/handkerchief-vita --add-label codex-ready
 ```
 
-Para **testar manualmente apenas uma execução**, sem agendar:
+Antes da execução, faça o teste de isolamento read-only com o Bubblewrap conforme a etapa de configuração. O modo seguro acima não valida credenciais do GitHub nem toda a integração com Codex.\n\nPara **testar manualmente apenas uma execução**, sem agendar:
 
 ```bash
 python3 tools/issue_worker.py --run
@@ -87,16 +88,13 @@ journalctl --user -u handkerchief-worker.service -n 100 --no-pager
 - Seleciona somente issues do proprietário marcadas `codex-ready`;
   reserva como `codex-running`, remove `codex-ready` e exige reautorização
   manual para tentativas bloqueadas.
-- Executa `codex exec` com `workspace-write` e aprovação `never`, limitado
-  a 45 minutos; não usa `danger-full-access`.
+- Executa `codex exec --ephemeral` com `workspace-write` dentro do Bubblewrap, limitado\n  a 45 minutos; não usa `danger-full-access`.
 - Impede publicações com arquivos proibidos, executáveis, exclusões,
   arquivos grandes ou mudanças nos metadados dos originais detectadas;
   protege `AGENTS.md` e o próprio executor de alterações automáticas.
 - Valida `git diff --check`, AST dos Python modificados, testes unittest
   quando disponíveis e revisa a lista de arquivos staged antes de publicar.
-- O sistema **não é uma barreira de segurança absoluta**. O sandbox pode
-  permitir escrita em `original-data/`; metadados não detectam toda possível
-  alteração. Nunca deixe material insubstituível sem backup.
+- O sistema **não é uma barreira de segurança absoluta**. O Bubblewrap protege\n  os originais de escrita durante a sessão isolada, mas o processo externo\n  controla os commits e a publicação. Metadados não detectam todas as possíveis\n  alterações; mantenha backup dos arquivos originais.
 - A verificação automática é limitada: testes específicos de imagens e
   fidelidade visual ainda podem exigir revisão humana. Um commit publicado
   não significa aprovação técnica do ChatGPT.

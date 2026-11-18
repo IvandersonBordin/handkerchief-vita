@@ -15,6 +15,7 @@ OWNER = "IvandersonBordin"
 REPO = "IvandersonBordin/handkerchief-vita"
 ALLOWED_SUFFIXES = {".py", ".md", ".txt", ".json", ".toml", ".yml", ".yaml", ".sh", ".service", ".timer"}
 FORBIDDEN = {"original-data", "build", ".git", ".env", "__pycache__", "dist"}
+PROTECTED = {"AGENTS.md", "tools/issue_worker.py"}
 MAX_FILES = 20
 MAX_BYTES = 300_000
 
@@ -59,8 +60,9 @@ def validate_path(raw):
             any(part in FORBIDDEN or part.startswith(".env") for part in path.parts) or
             path.suffix.lower() not in ALLOWED_SUFFIXES):
         raise ValueError("Caminho não permitido: " + raw)
-    resolved = (ROOT / path).resolve()
-    if not resolved.is_relative_to(ROOT) or resolved.is_symlink():
+    candidate = ROOT / path
+    resolved = candidate.resolve()
+    if raw in PROTECTED or candidate.is_symlink() or not resolved.is_relative_to(ROOT):
         raise ValueError("Caminho fora da raiz: " + raw)
     if resolved.exists() and (not resolved.is_file() or resolved.stat().st_size > MAX_BYTES):
         raise ValueError("Arquivo grande ou especial: " + raw)
@@ -78,6 +80,14 @@ def collect_changes():
     for path in paths:
         validate_path(path)
     return paths
+
+
+def original_snapshot():
+    folder = ROOT / "original-data"
+    if not folder.exists():
+        return {}
+    return {str(p.relative_to(folder)): (p.stat().st_size, p.stat().st_mtime_ns)
+            for p in folder.rglob("*") if p.is_file()}
 
 
 def process():
@@ -127,6 +137,7 @@ def process():
     logdir.mkdir(exist_ok=True)
     logfile = logdir / f"codex-issue-{issue}.log"
     head = git("rev-parse", "HEAD")
+    originals_before = original_snapshot()
     prompt = (
         "Você é o executor local. Leia AGENTS.md e cumpra SOMENTE a issue abaixo. "
         "Trabalhe com Python stdlib e dados originais em modo somente leitura. "
@@ -147,6 +158,8 @@ def process():
             return fail(issue, f"Codex retornou código {result.returncode}")
         if git("rev-parse", "HEAD") != head:
             return fail(issue, "O agente alterou o histórico do Git")
+        if original_snapshot() != originals_before:
+            return fail(issue, "Arquivos em original-data/ foram alterados")
         paths = collect_changes()
         if not paths:
             label(issue, "codex-done")

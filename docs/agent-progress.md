@@ -11,6 +11,21 @@ C03 — EM ANDAMENTO. O loop tem entrada, pausa e contagem de tempo ativo
 validadas localmente. Falta verificar o comportamento do novo pacote no
 console e confirmar o encerramento completo com START.
 
+## Ciclo C03 — erro de leitura do controle
+
+- O teste Linux em `vita-prototype/test_loop.c` força um retorno negativo
+  na primeira leitura do controle. Confere que o loop retorna 1 sem ler
+  novamente e que desvincula o quadro e aguarda a sincronização antes
+  de liberar a memória. O roteiro local descreve o cenário.
+- GCC 16.2.1 com cabeçalhos do VitaSDK, avisos como erros e UBSan
+  aprovou os dois cenários. A saída do cenário normal continuou em
+  120 µs. Uma cópia temporária que ignorava o erro falhou na asserção
+  assim que tentou ler o controle novamente.
+- A issue #4 contém o roteiro geral e não tinha comentários. A busca
+  não encontrou issue aberta específica de C03. O ciclo reaproveitou
+  o VPK existente. Pausa, retomada, relógio e saída completa com START
+  seguem pendentes no console. C04 aguarda C03.
+
 ## Ciclo C03 — soltar e pressionar X com o loop ativo
 
 - O teste Linux em `vita-prototype/test_loop.c` agora verifica a volta

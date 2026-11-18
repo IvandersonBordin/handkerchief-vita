@@ -127,6 +127,10 @@ quadro verde e pressionar X novamente volta ao amarelo.
 Para os quadros verde e amarelo, a simulação verifica o formato,
 as dimensões, o passo e as cores nas extremidades de cada faixa e
 do preenchimento em todas as linhas.
+Em uma segunda execução do loop, a simulação força um erro na primeira
+leitura do controle. O teste exige código de retorno 1, uma única leitura
+do controle e liberação da memória após desvincular o quadro e aguardar
+a sincronização da tela. A saída de tempo ativo vem apenas do cenário normal.
 
 ```sh
 sdk_include=/home/ivanderson/vitasdk/arm-vita-eabi/include

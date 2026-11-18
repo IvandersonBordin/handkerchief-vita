@@ -13,6 +13,7 @@ static unsigned pad_reads;
 static unsigned vblanks;
 static unsigned display_calls;
 static int freed;
+static int fail_pad_read;
 enum { LOOP_VBLANKS = 12, TOTAL_VBLANKS = LOOP_VBLANKS + 1 };
 
 int smoke_main(void);
@@ -34,7 +35,11 @@ int sceKernelGetMemBlockBase(SceUID uid, void **base)
 
 int sceKernelFreeMemBlock(SceUID uid)
 {
-    assert(uid == 1 && display_calls == 5 && vblanks == TOTAL_VBLANKS && !freed);
+    assert(uid == 1 && !freed);
+    if (fail_pad_read)
+        assert(display_calls == 2 && vblanks == 2);
+    else
+        assert(display_calls == 5 && vblanks == TOTAL_VBLANKS);
     freed = 1;
     return 0;
 }
@@ -44,6 +49,8 @@ int sceDisplaySetFrameBuf(const SceDisplayFrameBuf *frame, SceDisplaySetBufSync 
     assert(sync == SCE_DISPLAY_SETBUF_NEXTFRAME);
     if (display_calls == 0) {
         assert(frame && frame->base == frames);
+    } else if (fail_pad_read) {
+        assert(display_calls == 1 && !frame && vblanks == 1);
     } else if (display_calls < 4) {
         const uint32_t *expected = display_calls == 2
             ? frames : frames + sizeof(frames) / sizeof(frames[0]) / 2;
@@ -99,6 +106,10 @@ int sceCtrlPeekBufferPositive(int port, SceCtrlData *pad, int count)
     assert(port == 0 && count == 1);
     assert(pad_reads < sizeof(buttons) / sizeof(buttons[0]));
     const unsigned sample = pad_reads++;
+    if (fail_pad_read) {
+        assert(sample == 0);
+        return -1;
+    }
     /* A missing sample while CIRCLE is held must preserve the pause. */
     if (sample == 3)
         return 0;
@@ -110,5 +121,14 @@ int main(void)
 {
     assert(smoke_main() == 0);
     assert(time_reads == LOOP_VBLANKS + 1 && pad_reads == LOOP_VBLANKS && freed);
+
+    time_reads = 0;
+    pad_reads = 0;
+    vblanks = 0;
+    display_calls = 0;
+    freed = 0;
+    fail_pad_read = 1;
+    assert(smoke_main() == 1);
+    assert(time_reads == 2 && pad_reads == 1 && freed);
     return 0;
 }

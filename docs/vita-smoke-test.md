@@ -116,6 +116,25 @@ captura não puder ser feito.
 
 ## Validação local
 
+Para repetir a simulação do loop no Linux, ajuste `sdk_include` para a
+pasta de cabeçalhos da sua instalação do VitaSDK. Os dois comandos `cc`
+compilam o código real com o ponto de entrada renomeado para `smoke_main`
+e ligam as funções simuladas em um executável temporário. O último comando
+confere o tempo ativo registrado.
+
+```sh
+sdk_include=/home/ivanderson/vitasdk/arm-vita-eabi/include
+loop_test_dir=$(mktemp -d)
+cc -std=c11 -Wall -Wextra -Werror -fsanitize=undefined \
+  -fno-sanitize-recover=undefined -idirafter "$sdk_include" \
+  -Dmain=smoke_main -c vita-prototype/main.c -o "$loop_test_dir/main.o" &&
+cc -std=c11 -Wall -Wextra -Werror -fsanitize=undefined \
+  -fno-sanitize-recover=undefined -idirafter "$sdk_include" \
+  vita-prototype/test_loop.c "$loop_test_dir/main.o" -o "$loop_test_dir/test_loop" &&
+loop_result=$("$loop_test_dir/test_loop") &&
+test "$loop_result" = 'Active loop time: 50 us'
+```
+
 Um ZIP sintético com as seis entradas esperadas e os recursos atuais passou.
 O verificador rejeitou cada uma das duas entradas principais quando vazia
 ou com CRC incorreto, além de rejeitar um ícone diferente do arquivo local.

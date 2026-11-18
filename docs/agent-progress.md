@@ -11,6 +11,20 @@ C03 — EM ANDAMENTO. O loop tem entrada, pausa e contagem de tempo ativo
 validadas localmente. Falta verificar o comportamento do novo pacote no
 console e confirmar o encerramento completo com START.
 
+## Ciclo C03 — recuo do relógio e START com outros botões
+
+- `vita-prototype/test_loop.c` executa o loop real no Linux com cabeçalhos
+  do VitaSDK e chamadas simuladas. Com avisos tratados como erros e UBSan,
+  confirmou a saída `Active loop time: 50 us`. O total soma 20 e 30 µs,
+  ignora o recuo de 120 para 110 µs e exclui os dois intervalos em pausa.
+- Em pausa, START junto com Círculo e X retornou código 0. O teste
+  confirmou que o loop pulou a troca de quadro e liberou o bloco após
+  desvincular a tela e aguardar a sincronização.
+- O CMake continua compilando apenas `main.c` para o VPK. A issue #4
+  contém o roteiro geral e a busca por issues abertas de C03 não encontrou
+  uma atribuição específica. A confirmação física de START em C02 e do
+  pacote do relógio em C03 continua pendente. C04 aguarda C03.
+
 ## Ciclo C03 — identificação do VPK usado no teste
 
 - O roteiro agora identifica o caminho do VPK do relógio já validado
@@ -227,3 +241,33 @@ controles, seguindo docs/agent-plan.md.
 
 Não confundir o protótipo com um port jogável do
 Handkerchief. Não incluir arquivos comerciais no Git.
+
+## Estação de testes remotos — 18/11/2026
+
+O usuário confirmou a instalação e execução remotas do
+Handkerchief Smoke Test no PS Vita físico.
+
+Infraestrutura comprovada:
+- VitaSDK: compilação ARM e VPK.
+- VitaCompanion 1.10: conexão pelo IP 192.168.2.4.
+- FTP: transferência e verificação SHA-256.
+- Promote: instalação remota de HKSM00001.
+- Launch e quit: comandos remotos aceitos.
+- Press/release cross: comandos remotos aceitos.
+- Teste visual anterior: botão X alterou a cor central.
+
+Relatório automatizado:
+smoke-20261118_180900.json
+
+Resultados: conexão, inicialização e comandos X aprovados.
+A renderização NÃO foi verificada automaticamente.
+
+Próximas tarefas de C03:
+1. Instrumentar estados e entradas do motor para testes.
+2. Criar testes determinísticos de atualização e controles.
+3. Registrar resultados verificáveis, não apenas respostas de rede.
+4. Preservar o aplicativo HKSM00001 e os backups.
+5. Não instalar builds no console sem autorização humana.
+
+Os timers não devem instalar nem interromper aplicativos
+automaticamente.

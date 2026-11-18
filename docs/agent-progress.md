@@ -8,6 +8,12 @@
 
 ## Ciclo de verificação — B02 (18/11/2026)
 
+Na nova consulta, a issue #6 continuava aberta com `codex-done` e o
+comentário de entrega ainda indicava revisão técnica pendente. A issue
+#8 seguia aberta e sem `codex-ready`. A cópia original estava acessível
+para leitura. B02 continua bloqueada pela aprovação técnica, e a suíte
+local voltou a passar com 31 testes.
+
 A [issue #8](https://github.com/IvandersonBordin/handkerchief-vita/issues/8)
 condiciona a análise de movimento à aprovação técnica da Etapa 82. O
 [último comentário da issue #6](https://github.com/IvandersonBordin/handkerchief-vita/issues/6#issuecomment-6975282807)

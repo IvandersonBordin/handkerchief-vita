@@ -4,7 +4,19 @@
 
 - B01 — CONCLUIDA em 18/11/2026. Inventário e validação estrutural
   reproduzidos na cópia original autorizada.
-- B02 — próxima tarefa do plano local. Investigação pendente.
+- B02 — bloqueada até a aprovação técnica da Etapa 82 (issue #6).
+
+## Ciclo de verificação — B02 (18/11/2026)
+
+A [issue #8](https://github.com/IvandersonBordin/handkerchief-vita/issues/8)
+condiciona a análise de movimento à aprovação técnica da Etapa 82. O
+[último comentário da issue #6](https://github.com/IvandersonBordin/handkerchief-vita/issues/6#issuecomment-6975282807)
+registra a entrega no commit `bd1a8bc` e informa que a revisão técnica
+segue pendente. Na consulta, a issue #6 estava aberta e a #8 seguia sem
+`codex-ready`. A análise de movimento permanece pendente.
+
+A suíte local passou com 31 testes (`PYTHONPATH=tools python3 -B -m unittest
+discover -s tests -v`). `git diff --check` passou.
 
 ## Último ciclo — B01
 

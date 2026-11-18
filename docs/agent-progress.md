@@ -7,6 +7,25 @@
 - B02 — em andamento. A Etapa 82 foi aprovada e a issue #8 recebeu
   `codex-ready`. A integração de posição e velocidade segue em aberto.
 
+## Ciclo de consulta de sobreposição — B02 (18/11/2026)
+
+A [issue #6](https://github.com/IvandersonBordin/handkerchief-vita/issues/6)
+registra a aprovação restrita da Etapa 82. A
+[issue #8](https://github.com/IvandersonBordin/handkerchief-vita/issues/8)
+está aberta com `codex-ready`.
+
+O slot `+0x1C` de `CCastMK` leva a uma consulta de sobreposição
+entre os limites do ator e um retângulo recebido. A cadeia de chamadas
+e os limites da evidência estão em
+[physics-collision.md](physics-collision.md#consulta-de-sobreposição).
+A reprodução com `objdump` e a leitura independente do PE32
+confirmaram o slot, três destinos relativos e seis trechos de
+instruções. Os 31 testes locais e `git diff --check` passaram.
+
+B02 segue em andamento. O próximo recorte é rastrear uma escrita na
+origem do ator fora da inicialização. O conector exigiu aprovação
+para comentar na issue #8, indisponível pela política da sessão.
+
 ## Ciclo de análise estática — B02 (18/11/2026)
 
 O corpo atualizado da [issue #6](https://github.com/IvandersonBordin/handkerchief-vita/issues/6)

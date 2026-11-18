@@ -173,9 +173,46 @@ Em A0.HDK, a seção `ENEMY_0` contém 14 ocorrências do nome
 (offsets do nome). O caminho estático demonstra como um registro
 com esse nome pode chegar ao vetor sob as condições acima.
 Ainda falta reproduzir a leitura de um registro específico até
-a inserção e identificar o chamador que despacha o mesmo pai em jogo.
+a inserção. A seção seguinte liga a leitura e o despacho no nível
+da classe do pai.
 A cadeia explica uma escrita da origem na leitura do objeto.
 Escritas durante o movimento continuam em investigação.
+
+## Leitura e despacho de CMarkRoot
+
+O cabeçalho de `ENEMY_0` em A0.HDK identifica `CMarkRoot`.
+No PE, o descritor em `0x46EEF0` aponta para esse nome em
+`0x47DD4C`. A fábrica do descritor (`0x403E59 → 0x429D4B`)
+chama o inicializador via `0x4020EA → 0x422A6B`. A instrução
+em `0x422AB0` instala a tabela `0x46EBC8` no objeto.
+
+- O slot `+0x0C` (`0x46EBD4`) aponta para
+  `0x402252 → 0x429DC2`. Se a abertura do bloco retorna sucesso,
+  `0x429DE3` passa o próprio objeto e a máscara `0x1B` para
+  `0x40374C → 0x429BA0`. Esse método aplica XOR com `0x0A`
+  e mantém os quatro bits baixos em `0x429BEF`, deixando
+  a máscara `0x01` para a serialização compartilhada chamada em
+  `0x429BF6`. No ramo de leitura, com o bit `0x01` ativo também
+  no fluxo, o caminho pode inserir entradas no vetor do próprio
+  `CMarkRoot` em `0x4128CF`.
+- O slot `+0x18` (`0x46EBE0`) aponta para
+  `0x402108 → 0x41233A`. A chamada em `0x41233E` preserva
+  o receptor em `ECX` e encaminha o primeiro argumento a
+  `0x40241E → 0x412CE5`. O laço lê o vetor do receptor e
+  pode chamar o método de `CCastMK` em `0x412D06`.
+- Um chamador externo desse slot aparece em `0x42331F`.
+  Em `0x422389`, a chamada ao mesmo inicializador produz o
+  ponteiro guardado em `[esi+0x38]` em `0x422392`, quando a
+  alocação tem sucesso. Em `0x423318`, o chamador carrega esse
+  campo para `ECX` e passa dois argumentos zero. A correspondência
+  entre campo e tabela identifica o caminho de despacho para o
+  objeto criado ali. Ainda falta vincular essa instância à leitura
+  de `ENEMY_0` e determinar quando esse chamador roda.
+
+O encadeamento comprova que a classe pode preencher e despachar
+seu próprio vetor. Permanece em aberto qual rotina chama o slot
+de leitura para a instância despachada e qual escreve X/Y de
+`CCastMK` durante movimento.
 
 ## Reprodução local
 
@@ -209,6 +246,18 @@ for intervalo in 445b82:445bbc 401bdb:401be0 445cd2:445d67 \
                  402bfd:402c02 401965:40196a 4460a4:4460da \
                  403cd3:403cd8 445b32:445b9c 403fad:403fb2 \
                  4460e7:44610a 402275:40227a 459f54:459f7b; do
+    objdump -d -Mintel --start-address="0x${intervalo%:*}" \
+        --stop-address="0x${intervalo#*:}" "$exe"
+done
+
+python3 -B tools/inspect_hdk.py --classes --bounds "${exe%/*}/SYSTEM/A0.HDK"
+objdump -s --start-address=0x46eef0 --stop-address=0x46eef8 "$exe"
+objdump -s --start-address=0x46f138 --stop-address=0x46f140 "$exe"
+objdump -s --start-address=0x46ebc8 --stop-address=0x46ebe4 "$exe"
+for intervalo in 429d2b:429d45 429d4b:429d7e 422ab0:422ac2 \
+                 429dc2:429dec 41233a:412346 42236f:422395 \
+                 42330c:423322 403e59:403e5e 4020ea:4020ef \
+                 402252:402257 402108:40210d; do
     objdump -d -Mintel --start-address="0x${intervalo%:*}" \
         --stop-address="0x${intervalo#*:}" "$exe"
 done

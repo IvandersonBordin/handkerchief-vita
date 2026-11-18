@@ -96,3 +96,11 @@ selecionado e procurar, no handler correspondente, uma escrita no
 estado ou na referência gráfica do ator que recebeu a interação.
 A classe do ator controlado, a pose inicial e a ligação com as poses
 do banco 6 seguem em aberto.
+
+## Etapa 81 — prévia local pendente de revisão
+
+A execução local da Issue #3 consta no commit `7594383`. O relatório do
+executor registra que a revisão técnica do líder ainda está pendente.
+A Issue #5 exige essa revisão e a conclusão da #3 antes de iniciar a
+prévia. A geração das folhas e os testes de recorte e PNG da Etapa 81
+ficam pendentes até a confirmação do coordenador.

@@ -1,0 +1,12 @@
+[Unit]
+Description=Verificar periodicamente tarefas Codex aprovadas - Handkerchief Vita
+
+[Timer]
+OnBootSec=5min
+OnUnitInactiveSec=15min
+AccuracySec=1min
+Unit=handkerchief-worker.service
+Persistent=false
+
+[Install]
+WantedBy=timers.target

@@ -130,7 +130,10 @@ do preenchimento em todas as linhas.
 Em uma segunda execução do loop, a simulação força um erro na primeira
 leitura do controle. O teste exige código de retorno 1, uma única leitura
 do controle e liberação da memória após desvincular o quadro e aguardar
-a sincronização da tela. A saída de tempo ativo vem apenas do cenário normal.
+a sincronização da tela. Em uma terceira execução, a consulta do endereço
+do bloco de vídeo falha após a alocação. O teste exige código 1 e a
+liberação do bloco sem apresentar quadros, aguardar a tela ou consultar o
+relógio e o controle. A saída de tempo ativo vem apenas do cenário normal.
 
 ```sh
 sdk_include=/home/ivanderson/vitasdk/arm-vita-eabi/include

@@ -11,6 +11,20 @@ C03 — EM ANDAMENTO. O loop tem entrada, pausa e contagem de tempo ativo
 validadas localmente. Falta verificar o comportamento do novo pacote no
 console e confirmar o encerramento completo com START.
 
+## Ciclo C03 — falha ao obter o endereço da memória de vídeo
+
+- O teste Linux força uma falha na consulta do endereço do bloco já
+  alocado. Confere retorno 1, liberação do bloco e ausência de chamadas
+  à tela, ao relógio e ao controle. O roteiro local descreve o cenário.
+- GCC 16.2.1 com cabeçalhos do VitaSDK, avisos como erros e UBSan
+  aprovou os três cenários. O cenário normal registrou 120 µs.
+  Uma cópia temporária que retornava sem liberar o bloco falhou na
+  asserção esperada.
+- A issue #4 traz o roteiro geral e não tinha comentários na consulta.
+  A busca não encontrou issue aberta específica de C03. O VPK já
+  validado foi reaproveitado. A pausa, a retomada, o relógio e a saída
+  completa com START aguardam verificação no console. C04 aguarda C03.
+
 ## Ciclo C03 — erro de leitura do controle
 
 - O teste Linux em `vita-prototype/test_loop.c` força um retorno negativo

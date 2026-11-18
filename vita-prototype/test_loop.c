@@ -14,6 +14,7 @@ static unsigned vblanks;
 static unsigned display_calls;
 static int freed;
 static int fail_pad_read;
+static int fail_get_base;
 enum { LOOP_VBLANKS = 12, TOTAL_VBLANKS = LOOP_VBLANKS + 1 };
 
 int smoke_main(void);
@@ -29,6 +30,8 @@ SceUID sceKernelAllocMemBlock(const char *name, SceKernelMemBlockType type,
 int sceKernelGetMemBlockBase(SceUID uid, void **base)
 {
     assert(uid == 1);
+    if (fail_get_base)
+        return -1;
     *base = frames;
     return 0;
 }
@@ -36,7 +39,9 @@ int sceKernelGetMemBlockBase(SceUID uid, void **base)
 int sceKernelFreeMemBlock(SceUID uid)
 {
     assert(uid == 1 && !freed);
-    if (fail_pad_read)
+    if (fail_get_base)
+        assert(display_calls == 0 && vblanks == 0);
+    else if (fail_pad_read)
         assert(display_calls == 2 && vblanks == 2);
     else
         assert(display_calls == 5 && vblanks == TOTAL_VBLANKS);
@@ -130,5 +135,15 @@ int main(void)
     fail_pad_read = 1;
     assert(smoke_main() == 1);
     assert(time_reads == 2 && pad_reads == 1 && freed);
+
+    time_reads = 0;
+    pad_reads = 0;
+    vblanks = 0;
+    display_calls = 0;
+    freed = 0;
+    fail_pad_read = 0;
+    fail_get_base = 1;
+    assert(smoke_main() == 1);
+    assert(time_reads == 0 && pad_reads == 0 && freed);
     return 0;
 }

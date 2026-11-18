@@ -97,10 +97,38 @@ estado ou na referência gráfica do ator que recebeu a interação.
 A classe do ator controlado, a pose inicial e a ligação com as poses
 do banco 6 seguem em aberto.
 
-## Etapa 81 — prévia local pendente de revisão
+## Etapa 81 — folhas locais dos candidatos visuais
 
-A execução local da Issue #3 consta no commit `7594383`. O relatório do
-executor registra que a revisão técnica do líder ainda está pendente.
-A Issue #5 exige essa revisão e a conclusão da #3 antes de iniciar a
-prévia. A geração das folhas e os testes de recorte e PNG da Etapa 81
-ficam pendentes até a confirmação do coordenador.
+A investigação da Issue #3, registrada no commit `7594383`, localizou
+referências brutas do banco 4 para os objetos de fase `PowerUp0` e
+`Master0`. A ligação entre o evento de coleta, o ator controlado e as
+poses dos bancos 5 e 6 segue em aberto. Por isso, as folhas abaixo
+priorizam o uniforme roxo do banco 6 e usam dois grupos azuis do
+banco 5 para comparação visual.
+
+As folhas foram geradas com `python3 -B tools/preview_actor_candidates.py`.
+Os rótulos mostram o banco seguido do índice original, contado desde
+zero. Os intervalos são inclusivos. Cada recorte está em escala 1:1 e usa
+a paleta do BMP de origem.
+
+| Banco | Índices | Recortes por folha | Dimensões | PNGs locais |
+|---:|---|---:|---|---|
+| 5 | 129–140 e 157–168 | 24 | 1024 × 49 | `build/actors-bank-5-opaco-01.png` e `build/actors-bank-5-chave-zero-01.png` |
+| 6 | 1–20 e 32–44 | 33 | 1024 × 110 | `build/actors-bank-6-opaco-01.png` e `build/actors-bank-6-chave-zero-01.png` |
+
+A variante opaca preserva todos os pixels do recorte. A variante
+`chave-zero` torna transparentes apenas os pixels cujo índice de
+paleta é zero. Essa simulação afeta 16.542 pixels no banco 5 e 37.909
+no banco 6. No motor, a escolha da chave depende do bit 15 da
+referência efetiva, que as coordenadas do recorte por si só não informam.
+
+A validação local conferiu a sintaxe dos scripts, a rejeição de
+índice ausente e de retângulos fora do BMP ou com largura zero, além
+dos rótulos, dimensões, CRCs e pixels dos quatro PNGs. As 14 páginas
+do catálogo completo foram regeneradas em diretório temporário dentro
+de `build/` e coincidiram byte a byte com as referências locais.
+As contagens do catálogo também coincidiram, incluindo o descarte
+do índice 0 do banco 8. As folhas estabelecem quais recortes podem
+ser comparados com gameplay ou com uma referência gráfica rastreada
+no motor. A identidade do protagonista e a ordem das poses seguem
+indeterminadas.

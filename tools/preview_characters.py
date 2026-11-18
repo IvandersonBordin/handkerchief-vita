@@ -64,6 +64,8 @@ def draw_page(page, palette, rows, transparent_zero):
         colors[0] = bytes(4)
     for index, (sx, sy, width, crop_height), x, y in page:
         for col, digit in enumerate(str(index)):
+            if digit == " ":
+                continue
             for dy, mask in enumerate(DIGITS[int(digit)]):
                 for dx, bit in enumerate((4, 2, 1)):
                     if int(mask) & bit:

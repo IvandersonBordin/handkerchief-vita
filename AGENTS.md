@@ -80,3 +80,20 @@ Após cada tarefa de implementação ou documentação neste projeto:
 Do not start unrelated tasks.
 Do not create multiple agents unless explicitly requested.
 Do not perform large refactors without approval.
+
+## Coordenação entre ChatGPT e Codex local
+
+- O ChatGPT no navegador atua como líder do projeto: define objetivos,
+  prioridades, critérios de aceite e revisa entregas usando GitHub Issues.
+- O Codex no VS Code atua como executor local: lê a issue atribuída à tarefa,
+  inspeciona os arquivos do computador, implementa, executa testes e relata evidências.
+- Antes de iniciar trabalho novo, verifique a issue indicada no GitHub e siga
+  os critérios de aceite. Não invente requisitos além dos descritos.
+- Mantenha um resumo da execução na própria issue: evidências, testes,
+  limitações, commit e resultado do push. Não publique binários, screenshots
+  proprietárias ou dados de `original-data/` na issue.
+- Para cada tarefa com mudanças, respeite a rotina de validação e publicação
+  automática acima. Se houver bloqueio ou ambiguidade material, registre na
+  issue e peça decisão ao usuário; não substitua prova por suposições.
+- O ChatGPT não controla nem inicia automaticamente esta sessão local do Codex.
+  A execução requer uma sessão ativa no VS Code e autorização apropriada.

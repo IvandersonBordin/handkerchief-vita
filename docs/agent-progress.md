@@ -11,6 +11,20 @@ C03 — EM ANDAMENTO. O loop tem entrada, pausa e contagem de tempo ativo
 validadas localmente. Falta verificar o comportamento do novo pacote no
 console e confirmar o encerramento completo com START.
 
+## Ciclo C03 — pixels dos quadros sintéticos
+
+- O teste no Linux agora confere o formato A8B8G8R8, as dimensões
+  de 960 × 544, o passo de 1024 pixels e as duas extremidades de cada
+  faixa e do preenchimento em todas as linhas dos quadros verde e amarelo.
+- Com os cabeçalhos do VitaSDK, GCC 16.2.1, avisos como erros e UBSan,
+  o teste passou com 120 µs de tempo ativo. Uma cópia temporária que
+  desenhava a faixa verde no quadro amarelo falhou na asserção esperada.
+- O SHA-256 do VPK do relógio coincide com o registrado no roteiro.
+  O pacote foi reaproveitado. A busca no GitHub não encontrou issue aberta
+  específica de C03 e a issue #4 não tinha comentários com novas evidências.
+  A pausa, a retomada, o relógio e a saída com START seguem pendentes de
+  verificação no console com esse VPK. C04 aguarda C03.
+
 ## Ciclo C03 — retomada da pausa
 
 - O teste em `vita-prototype/test_loop.c` confere que Círculo com X

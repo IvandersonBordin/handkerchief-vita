@@ -123,6 +123,9 @@ e ligam as funções simuladas em um executável temporário. O último comando
 confere o tempo ativo registrado: 50 µs antes da pausa e 70 µs após
 a retomada. O teste também confere a troca para o quadro amarelo
 ao retomar com Círculo e X pressionados.
+Para os quadros verde e amarelo, a simulação verifica o formato,
+as dimensões, o passo e as cores nas extremidades de cada faixa e
+do preenchimento em todas as linhas.
 
 ```sh
 sdk_include=/home/ivanderson/vitasdk/arm-vita-eabi/include

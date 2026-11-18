@@ -3,7 +3,7 @@ Description=Verificar periodicamente tarefas Codex aprovadas - Handkerchief Vita
 
 [Timer]
 OnBootSec=5min
-OnUnitInactiveSec=15min
+OnUnitInactiveSec=5min
 AccuracySec=1min
 Unit=handkerchief-worker.service
 Persistent=false

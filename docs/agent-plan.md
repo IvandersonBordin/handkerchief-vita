@@ -28,3 +28,28 @@ com testes reproduzíveis e integração gradual.
 10. Ao terminar, atualize docs/agent-progress.md.
 11. Só marque CONCLUIDA com critérios verificáveis.
 12. Não inclua recursos comerciais no repositório.
+
+## Evidência de compilação real — 18/11/2026
+
+O VitaSDK 2026.08 foi instalado em:
+/home/ivanderson/vitasdk
+
+A compilação manual ARM foi concluída com sucesso.
+
+Diretório de build:
+/home/ivanderson/Projetos/handkerchief-vita-build-manual
+
+VPK gerado:
+handkerchief_smoke.vpk
+
+O pacote foi validado como ZIP íntegro, contendo eboot.bin,
+param.sfo e recursos da LiveArea.
+
+Próximas ações:
+1. Reproduzir a compilação usando o VitaSDK real.
+2. Executar os verificadores técnicos do VPK.
+3. Registrar C01 como concluída somente após essas verificações.
+4. Preparar C02 para teste no console físico.
+5. Não declarar C02 concluída sem confirmação do usuário.
+
+Nunca publicar arquivos comerciais do jogo.

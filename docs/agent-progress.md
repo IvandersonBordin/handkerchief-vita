@@ -8,6 +8,13 @@
 
 ## Ciclo de verificação — B02 (18/11/2026)
 
+Na verificação mais recente, a issue #8 estava aberta, sem comentários e
+sem `codex-ready`. Na issue #6, a aprovação citada no corpo se refere à
+Etapa 81. O comentário de entrega de `bd1a8bc` ainda registra revisão
+técnica pendente para a Etapa 82. A B02 segue bloqueada antes da análise
+estática. O diretório original estava acessível em leitura e os 31 testes
+locais passaram.
+
 Na nova consulta, a issue #6 continuava aberta com `codex-done` e o
 comentário de entrega ainda indicava revisão técnica pendente. A issue
 #8 seguia aberta e sem `codex-ready`. A cópia original estava acessível

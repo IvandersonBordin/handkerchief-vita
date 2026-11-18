@@ -188,8 +188,9 @@ simuladas, os três caminhos ausentes e os três substituídos por diretórios
 produziram o diagnóstico esperado com o caminho correspondente. A checagem
 sem `VITASDK` e a validação dos recursos da LiveArea também passaram.
 
-O ambiente local não tinha VitaSDK disponível. A compilação para ARM e a
-geração e verificação do VPK continuam pendentes.
+As verificações com toolchain simulada foram feitas antes da disponibilidade
+do VitaSDK. A compilação ARM e as verificações do VPK real estão registradas
+em `docs/agent-progress.md`.
 
 Com CMake 4.4.4 no Linux, uma toolchain simulada indicada por
 `-DCMAKE_TOOLCHAIN_FILE` chegou à etapa de configuração do empacotamento

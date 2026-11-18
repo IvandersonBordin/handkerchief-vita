@@ -11,6 +11,20 @@ C03 — EM ANDAMENTO. O loop tem entrada, pausa e contagem de tempo ativo
 validadas localmente. Falta verificar o comportamento do novo pacote no
 console e confirmar o encerramento completo com START.
 
+## Ciclo C03 — caminho de encerramento no executável ARM
+
+- A inspeção com `arm-vita-eabi-objdump -d` do ELF local
+  `build/vita-smoke-c03-clock/handkerchief_smoke` mostrou que `_start`
+  chama `main` e encaminha seu retorno para `exit`. A função `exit`
+  chama `_exit`, que por sua vez chama `sceKernelExitProcess`.
+- Essa evidência confirma o caminho de encerramento no executável
+  compilado. Ainda falta observar no console se START chega a esse
+  caminho e se o processo desaparece antes da reabertura.
+- O código e o pacote foram reaproveitados. A consulta à issue #4
+  e a busca de issues abertas não encontraram uma tarefa específica
+  para C03. Os comandos `vita3k`, `vitacompanion` e `vita-agent-use`
+  não estavam no PATH.
+
 ## Ciclo C03 — preparar a verificação de START
 
 - O roteiro em `docs/vita-smoke-test.md` identifica o VPK do relógio e

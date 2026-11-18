@@ -89,3 +89,17 @@ continuam sem confirmação.
 
 A identificação da engine e a viabilidade do port para PS Vita seguem
 em aberto.
+
+## A0.HDK, STAGE_0 (issue #6)
+
+A Etapa 82 depende da conclusão e da revisão técnica da
+[Etapa 81](character-identification.md#etapa-81--folhas-locais-dos-candidatos-visuais).
+O commit `a1afce2` registra a entrega e a validação local da issue #5.
+A aprovação técnica da Etapa 81 ainda precisa ser confirmada. A análise
+dos registros de `STAGE_0` fica pendente dessa confirmação.
+
+O ponto `(852, 540)` é uma referência candidata para a janela de estudo.
+Ainda faltam evidências sobre sua relação com a posição inicial e com
+a colisão. A interpretação de `CEarthFluct` e o valor efetivo do ajuste
+selecionado pelo índice 26 também precisam ser verificados antes de
+usar essas referências na composição gráfica.

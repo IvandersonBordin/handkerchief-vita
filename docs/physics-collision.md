@@ -103,6 +103,39 @@ em jogo, o próximo ponto é o slot `+0x18`, que contém
 e `0x445EB9`. Vale rastrear o código que o chama e a origem
 dos valores que ele lê.
 
+## Despacho do slot +0x18 e uso da origem
+
+Em `0x412CE5`, o laço zera o índice em `+0x4C` e percorre o
+vetor em `+0x04` até o limite em `+0x08`. Para cada elemento
+não nulo, lê sua tabela de métodos em `0x412CFF` e chama o
+slot `+0x18` em `0x412D06`, passando o argumento recebido pelo
+laço e o endereço do objeto que mantém o vetor. O método de
+`CCastMK` também invoca esse laço sobre si em `0x445F7B`,
+via `0x40241E → 0x412CE5`. A chamada indireta em `0x412D06`
+alcança `0x402BD5 → 0x445DF3` quando a entrada usa a tabela
+`0x471EB0`, cujo slot fica em `0x471EC8` (offset de arquivo
+`0x70EC8`). Falta identificar um ponto de preenchimento do vetor
+com um `CCastMK` para confirmar essa passagem.
+
+No ramo que passa pelos testes em `0x445E70`, `0x445E78` e
+`0x445E88`, quando a chamada em `0x445EA1` retorna um ponteiro
+não nulo, o método lê Y e X do ator em `0x445EB6` e `0x445EB9`.
+Em `0x445EBC`, passa os dois valores e um terceiro argumento a
+`0x40259F → 0x415DA2`, com o ponteiro retornado em `ECX`.
+A rotina passa X e Y a `0x401276 → 0x410CB0`, que os grava
+nos dois primeiros campos de uma estrutura temporária em
+`0x410CCB` e `0x410CD2`. Em seguida, chama
+`0x40475A → 0x4122BA`, que copia dez palavras de 32 bits
+dessa estrutura para o **objeto retornado**, começando em
+`+0x18` (`0x4122D6`, `0x4122F3`). A rotina instala a
+tabela `0x46E100` durante a cópia e depois troca para
+`0x46E478` em `0x415E05`.
+
+A cadeia confirma que outro objeto recebe o par de origem de
+`CCastMK` durante sua inicialização. A escrita anterior que
+produziu os valores do ator nesse ramo, a frequência do despacho
+e a relação com movimento, gravidade e salto seguem em aberto.
+
 ## Reprodução local
 
 Execute na raiz do worktree. `objdump` lê as seções em disco e
@@ -124,7 +157,10 @@ for intervalo in 445b82:445bbc 401bdb:401be0 445cd2:445d67 \
                  40374c:403751 429ba0:429c01 402c4d:402c52 \
                  4125e2:412614 41271c:41276a 404142:404147 \
                  40b34c:40b360 40356c:403571 40a6d8:40a72a \
-                 402bd5:402bda 445ea8:445ec1; do
+                 402bd5:402bda 445df3:445f86 40241e:402423 \
+                 412ce5:412d1c 40259f:4025a4 415da2:415e12 \
+                 401276:40127b 410cb0:410cf6 40475a:40475f \
+                 4122ba:41231c; do
     objdump -d -Mintel --start-address="0x${intervalo%:*}" \
         --stop-address="0x${intervalo#*:}" "$exe"
 done

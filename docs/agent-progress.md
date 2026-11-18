@@ -7,6 +7,22 @@
 - B02 — em andamento. A Etapa 82 foi aprovada e a issue #8 recebeu
   `codex-ready`. A integração de posição e velocidade segue em aberto.
 
+## Ciclo de despacho e uso da origem — B02 (18/11/2026)
+
+A issue #8 segue aberta com `codex-ready` e a aprovação restrita da
+Etapa 82 consta na issue #6. O laço em `0x412CE5` chama o slot
+`+0x18` das entradas não nulas. Falta provar qual caminho insere um
+`CCastMK` no vetor. O método de `CCastMK` nesse slot lê X e Y e,
+no ramo analisado, usa o par para inicializar outro objeto. A cadeia e
+os comandos de reprodução estão em
+[physics-collision.md](physics-collision.md#despacho-do-slot-0x18-e-uso-da-origem).
+
+A conferência independente do PE32 confirmou a identificação da cópia,
+um slot, nove transferências relativas e sete sequências de instruções.
+Os 31 testes locais e `git diff --check` passaram. A publicação do
+resumo na issue #8 foi bloqueada porque o conector exige aprovação e
+a política da sessão não permite essa aprovação.
+
 ## Ciclo de escrita da origem — B02 (18/11/2026)
 
 A issue #8 seguia com `codex-ready`, e a aprovação restrita da Etapa 82
@@ -194,8 +210,9 @@ A suíte local passou com 31 testes
 
 ## Próxima ação
 
-Para B02, rastrear o chamador do slot `+0x18` de `CCastMK`
-e buscar a escrita que fornece os valores de X e Y lidos nesse caminho.
+Para B02, rastrear uma inserção de `CCastMK` no vetor percorrido em
+`0x412CE5`. Isso permite investigar quem prepara o ator antes do
+despacho e buscar a escrita que fornece o X e o Y lidos nesse caminho.
 A integração por quadro, a gravidade e o salto seguem em aberto.
 
 O conector do GitHub listou as issues abertas. Nenhuma correspondia à

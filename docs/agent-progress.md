@@ -13,6 +13,14 @@ O protótipo independente e o roteiro de console já estão em
 LiveArea passaram em `python3 vita-prototype/check_livearea.py`.
 
 ## Último ciclo
+Em 18/11/2026, `sha256sum` confirmou que o VPK em
+`build/vita-smoke/handkerchief_smoke.vpk` tem o mesmo SHA-256 registrado
+abaixo. `git check-ignore` confirmou que o Git ignora o pacote. O ciclo
+reaproveitou a compilação e os resultados dos verificadores desse arquivo.
+A consulta às issues pelo `gh` exigiu autenticação, e a consulta à página
+web também falhou. C02 segue pendente do teste físico e C03 depende de C02.
+
+## Ciclo de preparação do VPK para C02
 Em 18/11/2026, para preparar C02, os dois caminhos de VPK registrados
 anteriormente foram verificados e estavam indisponíveis. Um novo pacote
 Release foi compilado com o VitaSDK em `/home/ivanderson/vitasdk` e

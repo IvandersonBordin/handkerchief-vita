@@ -76,6 +76,13 @@ indica o primeiro deslocamento fora do bloco, em hexadecimal. A coluna
 bytes decimais. Com apenas `--bounds`, o inspetor aceita blocos sem nome de
 classe válido.
 
+Na validação externa do inspetor, o menor bloco aceito tem seis bytes.
+São quatro para o comprimento, um para o rótulo e um para o terminador.
+Com dados sintéticos, `--bounds` aceita esse mínimo e rejeita um comprimento
+de cinco bytes ou um rótulo cujo terminador só apareça no bloco seguinte.
+Se um bloco posterior for inválido, o comando encerra com código `1` e
+deixa a saída padrão vazia, mesmo após ler um bloco válido.
+
 Para ver o intervalo dos dados de cada seção junto da sua classe, combine
 as opções.
 

@@ -23,6 +23,28 @@ class SectionClassCommandTests(unittest.TestCase):
                 text=True,
             )
 
+    def test_bounds_accepts_minimum_size_block(self):
+        result = self.inspect(make_block(b"A\0"), "--bounds")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, "0x0000 A fim=0x0006 comprimento=6\n")
+
+    def test_bounds_rejects_length_below_minimum(self):
+        result = self.inspect(make_block(b"A"), "--bounds")
+
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(result.stdout, "")
+        self.assertIn("bloco em 0x0000: comprimento inválido (5 bytes)", result.stderr)
+
+    def test_label_terminator_must_be_inside_its_block(self):
+        data = make_block(b"ONE\0") + make_block(b"TWO") + make_block(b"THREE\0")
+
+        result = self.inspect(data, "--bounds")
+
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(result.stdout, "")
+        self.assertIn("bloco em 0x0008: nome da seção sem terminador", result.stderr)
+
     def test_prints_absolute_payload_offsets(self):
         first = make_block(b"ONE\0ClassA\0data")
         second = make_block(b"TWO\0ClassB\0")

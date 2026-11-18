@@ -46,6 +46,7 @@ def fail(issue, message):
     if issue:
         try:
             label(issue, "codex-ready", remove=True)
+            label(issue, "codex-running", remove=True)
             label(issue, "codex-blocked")
             comment(issue, "Execução interrompida: " + message +
                     "\nVerifique os arquivos locais e o log em `build/` antes de reativar.")
@@ -94,10 +95,13 @@ def sandbox_command():
     """Isola o Codex: projeto gravável, originais e metadados Git somente leitura."""
     originals = ROOT / "original-data"
     git_dir = ROOT / ".git"
+    codex_home = Path.home() / ".codex"
     if (not originals.is_dir() or not git_dir.is_dir() or
             originals.is_symlink() or git_dir.is_symlink()):
         raise ValueError("original-data/ e .git/ reais são obrigatórios")
-    return [
+    if not codex_home.is_dir() or codex_home.is_symlink():
+        raise ValueError("Diretório ~/.codex não encontrado ou é um link simbólico")
+    mounts = [
         "bwrap", "--ro-bind", "/", "/",
         "--dev-bind", "/dev", "/dev",
         "--proc", "/proc",
@@ -105,8 +109,15 @@ def sandbox_command():
         "--bind", str(ROOT), str(ROOT),
         "--ro-bind", str(originals), str(originals),
         "--ro-bind", str(git_dir), str(git_dir),
-        "--chdir", str(ROOT),
+        # Somente o estado do Codex recebe escrita fora do projeto.
+        # Todo o restante do HOME continua somente leitura.
+        "--bind", str(codex_home), str(codex_home),
     ]
+    auth_file = codex_home / "auth.json"
+    if auth_file.is_file() and not auth_file.is_symlink():
+        mounts.extend(["--ro-bind", str(auth_file), str(auth_file)])
+    mounts.extend(["--chdir", str(ROOT)])
+    return mounts
 
 
 def verify_sandbox(prefix):
@@ -226,6 +237,7 @@ def process():
         push = cmd(["git", "push", "origin", "main"], check=False, timeout=120)
         if push.returncode:
             return fail(issue, "Commit local feito, mas push falhou; intervenção necessária")
+        label(issue, "codex-running", remove=True)
         label(issue, "codex-done")
         comment(issue, f"Executor concluído. Commit: `{git('rev-parse', '--short', 'HEAD')}`. "
                 f"Arquivos: {', '.join(paths)}. Verificações: diff --check, sintaxe Python "

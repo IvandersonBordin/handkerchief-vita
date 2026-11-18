@@ -43,8 +43,7 @@ def iter_sections(data):
         yield offset, name
 
 
-def iter_section_classes(data):
-    """Lista as classes de seção e o primeiro deslocamento após cada classe."""
+def _iter_section_class_bounds(data):
     for offset, name, class_start, end in _iter_section_bounds(data):
         class_end = data.find(b"\x00", class_start, end)
         if class_end == -1:
@@ -54,18 +53,23 @@ def iter_section_classes(data):
         if not class_name or not all(0x21 <= byte <= 0x7E for byte in class_name):
             raise ValueError(f"bloco em 0x{offset:04X}: nome da classe inválido")
 
-        yield offset, name, class_name.decode("ascii"), class_end + 1
+        yield offset, name, class_name.decode("ascii"), class_end + 1, end
+
+
+def iter_section_classes(data):
+    """Lista as classes de seção e o primeiro deslocamento após cada classe."""
+    for offset, name, class_name, data_start, _ in _iter_section_class_bounds(data):
+        yield offset, name, class_name, data_start
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("arquivo", type=Path, help="caminho do arquivo HDK")
-    mode = parser.add_mutually_exclusive_group()
-    mode.add_argument(
+    parser.add_argument(
         "--classes", action="store_true",
         help="inclui a classe e o deslocamento dos dados após o cabeçalho",
     )
-    mode.add_argument(
+    parser.add_argument(
         "--bounds", action="store_true",
         help="inclui o fim exclusivo e o comprimento de cada bloco",
     )
@@ -74,7 +78,7 @@ def main():
     try:
         inspect = iter_sections
         if args.classes:
-            inspect = iter_section_classes
+            inspect = _iter_section_class_bounds
         elif args.bounds:
             inspect = _iter_section_bounds
         sections = list(inspect(args.arquivo.read_bytes()))
@@ -82,8 +86,11 @@ def main():
         parser.exit(1, f"Erro ao inspecionar {args.arquivo}: {error}\n")
 
     if args.classes:
-        for offset, name, class_name, data_start in sections:
-            print(f"0x{offset:04X} {name} {class_name} dados=0x{data_start:04X}")
+        for offset, name, class_name, data_start, end in sections:
+            line = f"0x{offset:04X} {name} {class_name} dados=0x{data_start:04X}"
+            if args.bounds:
+                line += f" fim=0x{end:04X} comprimento={end - offset}"
+            print(line)
     elif args.bounds:
         for offset, name, _, end in sections:
             print(f"0x{offset:04X} {name} fim=0x{end:04X} comprimento={end - offset}")

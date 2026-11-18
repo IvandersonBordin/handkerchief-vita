@@ -73,9 +73,21 @@ python3 -B tools/inspect_hdk.py --bounds original-data/USER/USER01.HDK
 A primeira coluna aponta para o campo de comprimento. A coluna `fim`
 indica o primeiro deslocamento fora do bloco, em hexadecimal. A coluna
 `comprimento` mostra a diferença entre esses dois deslocamentos, em
-bytes decimais. Os modos `--bounds` e `--classes` são usados em invocações
-separadas. Um teste sintético confirma a listagem de dois blocos
-consecutivos sem exigir nomes de classe válidos.
+bytes decimais. Com apenas `--bounds`, o inspetor aceita blocos sem nome de
+classe válido.
+
+Para ver o intervalo dos dados de cada seção junto da sua classe, combine
+as opções.
+
+```sh
+python3 -B tools/inspect_hdk.py --classes --bounds original-data/SYSTEM/A0.HDK
+```
+
+Os dados ocupam o intervalo de `dados` (inclusivo) até `fim` (exclusivo).
+Se os dois deslocamentos forem iguais, o bloco termina logo após a classe.
+O modo combinado exige uma classe válida em cada bloco. Os testes
+sintéticos cobrem blocos consecutivos, um bloco sem dados após a classe e
+um campo de comprimento truncado.
 
 ## Validação do conjunto de arquivos
 

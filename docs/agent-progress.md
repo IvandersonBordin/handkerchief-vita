@@ -11,6 +11,19 @@ C03 — EM ANDAMENTO. O loop tem entrada, pausa e contagem de tempo ativo
 validadas localmente. Falta verificar o comportamento do novo pacote no
 console e confirmar o encerramento completo com START.
 
+## Ciclo C03 — preparar a verificação de START
+
+- O roteiro em `docs/vita-smoke-test.md` identifica o VPK do relógio e
+  usa a retomada via botão PS para verificar se a sessão suspensa mantém
+  a pausa. O roteiro compara essa observação com a reabertura após START
+  e pede evidência do término do processo, se houver diagnóstico disponível.
+- O SHA-256 do VPK local coincide com o do ciclo do relógio.
+  `git check-ignore` confirmou que o pacote é ignorado. A compilação ARM
+  e a validação da estrutura do pacote permanecem as do ciclo anterior.
+- A consulta ao GitHub encontrou o roteiro geral na issue #4 e nenhuma
+  issue específica para este ciclo do C03. O teste físico do pacote do
+  relógio continua pendente, assim como a captura de sua saída padrão.
+
 ## Ciclo C03 — relógio do loop (18/11/2026)
 
 - O loop mede o intervalo entre atualizações da tela com o relógio de

@@ -56,12 +56,27 @@ Se faltar um deles, a mensagem informa a variável do VitaSDK e o caminho verifi
 
 ## Roteiro adicional para a pausa (C03)
 
+Use `build/vita-smoke-c03-clock/handkerchief_smoke.vpk` para este roteiro.
+Confira o SHA-256 com `sha256sum` e registre-o junto com o resultado para
+identificar a versão testada.
+
 1. Com a barra central verde, pressione Círculo para pausar. Mantenha Círculo
    pressionado e segure X. A barra deve continuar verde.
 2. Solte Círculo e, ainda segurando X, pressione Círculo novamente. A barra
    deve ficar amarela. Solte X e confira o retorno ao verde.
-3. Solte Círculo, pause novamente e pressione START. Confira se volta à
-   LiveArea e se, ao abrir o aplicativo, X volta a alterar a cor imediatamente.
+3. Solte Círculo e pause novamente com a barra verde. Pressione o botão PS
+   para ir à LiveArea e retome o aplicativo sem fechá-lo manualmente.
+   Segure X e confirme que a barra continua verde. Isso verifica que a
+   pausa permanece ao retomar o aplicativo suspenso.
+4. Solte X e pressione START com o aplicativo ainda em pausa. Se voltar à
+   LiveArea, abra o aplicativo sem fechá-lo manualmente e segure X, sem
+   tocar em Círculo. Registre se a barra fica amarela ou continua verde.
+   A barra amarela indica que o estado de pausa foi descartado. A barra
+   verde é compatível com a retomada da sessão pausada.
+5. Se houver uma ferramenta de diagnóstico já disponível que mostre o
+   processo, registre se ele desaparece após START, antes de reabrir.
+   Sem essa observação, registre o resultado como evidência do estado
+   visual após a reabertura e deixe o encerramento do processo pendente.
 
 O teste básico em console está registrado em `docs/agent-progress.md`.
 A pausa, o encerramento completo com START e as medições de memória e FPS

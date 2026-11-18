@@ -54,7 +54,18 @@ Se faltar um deles, a mensagem informa a variável do VitaSDK e o caminho verifi
 4. Pressione START e confirme o retorno à LiveArea. Abra o aplicativo novamente
    para verificar se ele inicia com a barra central verde.
 
-A validação em console e as medições de memória e FPS continuam pendentes.
+## Roteiro adicional para a pausa (C03)
+
+1. Com a barra central verde, pressione Círculo para pausar. Mantenha Círculo
+   pressionado e segure X. A barra deve continuar verde.
+2. Solte Círculo e, ainda segurando X, pressione Círculo novamente. A barra
+   deve ficar amarela. Solte X e confira o retorno ao verde.
+3. Solte Círculo, pause novamente e pressione START. Confira se volta à
+   LiveArea e se, ao abrir o aplicativo, X volta a alterar a cor imediatamente.
+
+O teste básico em console está registrado em `docs/agent-progress.md`.
+A pausa, o encerramento completo com START e as medições de memória e FPS
+ainda precisam de verificação no console.
 
 ## Validação local
 

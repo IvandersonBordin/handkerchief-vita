@@ -4,15 +4,37 @@
 C01 — CONCLUIDA. A compilação ARM com VitaSDK e os dois verificadores
 passaram sobre o VPK gerado neste ciclo.
 
-C02 — PENDENTE. A instalação e a execução no console físico aguardam
-confirmação humana.
+C02 — teste básico confirmado no console pelo usuário, conforme o registro
+abaixo. O encerramento completo com START segue sem confirmação.
+
+C03 — EM ANDAMENTO. O loop do protótipo agora alterna entre execução e
+pausa a cada novo toque em Círculo. A pausa conserva a última cor exibida,
+e START continua aceito nos dois estados. O relógio do loop fica para o
+próximo ciclo.
+
+## Ciclo C03 — pausa do protótipo (18/11/2026)
+
+- Compilação Release com VitaSDK e GCC ARM 15.2.0 em `build/vita-smoke-c03/`.
+- `check_livearea.py` e `check_vpk.py` passaram. O segundo retornou seis
+  entradas, zero erros e zero avisos para o ID `HKSM00001`, versão `01.00`.
+- O VPK local é ignorado pelo Git. SHA-256
+  `83c680a6327d3c5a56a20b0078addbb1fa5c297e2d140a990ec935280d6f338c`.
+- A simulação temporária no Linux com avisos como erros e UBSan confirmou
+  retenção da cor durante a pausa, ausência de repetição ao segurar Círculo,
+  retomada após novo toque e liberação dos quadros ao sair com START em pausa.
+  Uma leitura sem amostra entre duas leituras com Círculo pressionado também
+  preservou a pausa.
+- A busca de issues abertas pelo conector do GitHub não encontrou uma issue
+  específica para C03. O trabalho seguiu o plano local.
+- Próximos passos de C03 incluem acrescentar o relógio do loop e verificar
+  a pausa e o encerramento no console com o novo pacote.
 
 ## Evidências já verificadas
 O protótipo independente e o roteiro de console já estão em
 `vita-prototype/` e `docs/vita-smoke-test.md`. Os recursos sintéticos da
 LiveArea passaram em `python3 vita-prototype/check_livearea.py`.
 
-## Último ciclo
+## Ciclo anterior ao teste físico
 Em 18/11/2026, `sha256sum` confirmou que o VPK em
 `build/vita-smoke/handkerchief_smoke.vpk` tem o mesmo SHA-256 registrado
 abaixo. `git check-ignore` confirmou que o Git ignora o pacote. O ciclo
@@ -81,10 +103,32 @@ Essas verificações exercitaram apenas a configuração do CMake.
 
 A busca nas issues abertas do GitHub não encontrou uma issue atribuída à C01.
 
-## Próxima ação
+## Próxima ação registrada antes do teste físico
 Executar o roteiro de console em `docs/vita-smoke-test.md` durante C02.
 Confirmar a instalação, a abertura pela LiveArea, as cores, a resposta
 ao botão X, a saída com START e a reabertura.
 
-## Bloqueios
+## Bloqueio registrado antes do teste físico
 C02 requer teste em hardware com confirmação humana.
+
+## Teste no PS Vita físico — 18/11/2026
+
+O usuário instalou e executou o handkerchief_smoke.vpk
+no PS Vita real.
+
+Resultados confirmados:
+- Instalação e inicialização: OK.
+- Três retângulos verticais: vermelho, verde e azul: OK.
+- Botão X altera o retângulo verde para amarelo: OK.
+- Retorno à LiveArea e retomada do aplicativo: OK.
+
+Observação:
+O usuário relatou que START minimiza o aplicativo.
+O encerramento completo pelo START não foi confirmado.
+
+C02: teste básico de hardware validado.
+Próxima tarefa: C03, desenvolver o loop de jogo e os
+controles, seguindo docs/agent-plan.md.
+
+Não confundir o protótipo com um port jogável do
+Handkerchief. Não incluir arquivos comerciais no Git.

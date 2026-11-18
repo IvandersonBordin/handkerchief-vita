@@ -60,6 +60,8 @@ int main(void)
     if (sceDisplaySetFrameBuf(&frame, SCE_DISPLAY_SETBUF_NEXTFRAME) < 0)
         goto cleanup;
 
+    uint32_t previous_buttons = 0;
+    int paused = 0;
     while (sceDisplayWaitVblankStart() >= 0) {
         SceCtrlData pad = {0};
         const int samples = sceCtrlPeekBufferPositive(0, &pad, 1);
@@ -71,6 +73,13 @@ int main(void)
             result = 0;
             break;
         }
+
+        const uint32_t pressed_buttons = pad.buttons & ~previous_buttons;
+        previous_buttons = pad.buttons;
+        if (pressed_buttons & SCE_CTRL_CIRCLE)
+            paused = !paused;
+        if (paused)
+            continue;
 
         void *next_frame = (pad.buttons & SCE_CTRL_CROSS) ? pressed_frame : base;
         if (next_frame != frame.base) {

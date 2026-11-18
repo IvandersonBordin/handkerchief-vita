@@ -36,6 +36,8 @@ O primeiro comando configura a compilação para o Vita. O segundo gera
 `eboot.bin`, `sce_sys/param.sfo` e os quatro recursos da LiveArea, sem
 duplicatas, e compara os recursos com os arquivos locais. O quarto verifica
 a estrutura do pacote, incluindo o cabeçalho do executável e os metadados.
+O terceiro também rejeita `eboot.bin` e `sce_sys/param.sfo` vazios e lê
+as duas entradas até o fim para conferir o CRC do ZIP.
 Antes de selecionar o compilador, o CMake confere se os quatro recursos
 sintéticos da LiveArea estão presentes. A lista usada nessa checagem também
 define os caminhos de origem e destino desses recursos no VPK.
@@ -55,6 +57,11 @@ Se faltar um deles, a mensagem informa a variável do VitaSDK e o caminho verifi
 A validação em console e as medições de memória e FPS continuam pendentes.
 
 ## Validação local
+
+Um ZIP sintético com as seis entradas esperadas e os recursos atuais passou.
+O verificador rejeitou cada uma das duas entradas principais quando vazia
+ou com CRC incorreto, além de rejeitar um ícone diferente do arquivo local.
+Os recursos locais passaram e o CMake confirmou o diagnóstico de VitaSDK ausente.
 
 O modo de inspeção do pacote aceitou um ZIP temporário com as seis entradas
 esperadas e rejeitou entrada ausente, extra, duplicada, recurso alterado e

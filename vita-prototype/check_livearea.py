@@ -103,7 +103,8 @@ def check_image_data(path, compressed, width, height, interlaced):
 
 
 def check_package(path, root, assets):
-    expected = {"eboot.bin", "sce_sys/param.sfo"}
+    required = ("eboot.bin", "sce_sys/param.sfo")
+    expected = set(required)
     expected.update(asset.relative_to(root).as_posix() for asset in assets)
     with zipfile.ZipFile(path) as package:
         names = package.namelist()
@@ -115,6 +116,14 @@ def check_package(path, root, assets):
             raise ValueError(f"VPK: entradas ausentes {sorted(missing)!r}")
         if extra:
             raise ValueError(f"VPK: entradas inesperadas {sorted(extra)!r}")
+
+        for name in required:
+            if package.getinfo(name).file_size == 0:
+                raise ValueError(f"VPK: {name} está vazio")
+            with package.open(name) as bundled:
+                # Ler até o fim permite que zipfile confira o CRC da entrada.
+                while bundled.read(64 * 1024):
+                    pass
 
         for asset in assets:
             name = asset.relative_to(root).as_posix()

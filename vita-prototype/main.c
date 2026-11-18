@@ -8,6 +8,8 @@
 #include <psp2/kernel/sysmem.h>
 #include <psp2/kernel/threadmgr.h>
 
+#include "sprite.h"
+
 enum {
     SCREEN_WIDTH = 960,
     SCREEN_HEIGHT = 544,
@@ -15,6 +17,9 @@ enum {
     CDRAM_ALIGNMENT = 256 * 1024,
     FRAME_BYTES = SCREEN_PITCH * SCREEN_HEIGHT * sizeof(uint32_t),
     FRAME_STORAGE = (FRAME_BYTES + CDRAM_ALIGNMENT - 1) / CDRAM_ALIGNMENT * CDRAM_ALIGNMENT,
+    SPRITE_SIZE = 16,
+    SPRITE_STEP = 4,
+    SPRITE_FRAME_US = 250000,
 };
 
 static void draw_bars(uint32_t *pixels, uint32_t middle_color)
@@ -35,6 +40,17 @@ static void draw_bars(uint32_t *pixels, uint32_t middle_color)
     }
 }
 
+static int move_axis(int position, uint32_t buttons, uint32_t negative,
+                     uint32_t positive, int limit)
+{
+    position += SPRITE_STEP * (!!(buttons & positive) - !!(buttons & negative));
+    if (position < 0)
+        return 0;
+    if (position > limit)
+        return limit;
+    return position;
+}
+
 int main(void)
 {
     const SceUID block = sceKernelAllocMemBlock("smoke_frames",
@@ -47,10 +63,21 @@ int main(void)
     if (sceKernelGetMemBlockBase(block, &base) < 0)
         goto cleanup;
 
-    /* Prepare both images before handing either one to the display. */
-    void *pressed_frame = (uint8_t *)base + FRAME_STORAGE;
-    draw_bars(base, 0xff00ff00);          /* Green. */
-    draw_bars(pressed_frame, 0xff00ffff); /* Yellow. */
+    uint32_t *back_buffer = (uint32_t *)((uint8_t *)base + FRAME_STORAGE);
+    const SpriteSurface screen = { SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_PITCH };
+    const SpriteSurface sprite = { SPRITE_SIZE, SPRITE_SIZE, SPRITE_SIZE };
+    uint32_t sprite_pixels[2][SPRITE_SIZE * SPRITE_SIZE];
+    for (int i = 0; i < SPRITE_SIZE * SPRITE_SIZE; ++i) {
+        sprite_pixels[0][i] = 0xffffffff; /* White. */
+        sprite_pixels[1][i] = 0xffff00ff; /* Magenta. */
+    }
+
+    int sprite_x = (SCREEN_WIDTH - SPRITE_SIZE) / 2;
+    int sprite_y = (SCREEN_HEIGHT - SPRITE_SIZE) / 2;
+    uint32_t sprite_frame = 0;
+    uint32_t middle_color = 0xff00ff00;
+    draw_bars(base, middle_color);
+    sprite_blit(base, screen, sprite_pixels[sprite_frame], sprite, sprite_x, sprite_y);
 
     SceDisplayFrameBuf frame = {
         .size = sizeof(frame),
@@ -93,12 +120,31 @@ int main(void)
         if (paused)
             continue;
 
-        void *next_frame = (pad.buttons & SCE_CTRL_CROSS) ? pressed_frame : base;
-        if (next_frame != frame.base) {
-            frame.base = next_frame;
-            if (sceDisplaySetFrameBuf(&frame, SCE_DISPLAY_SETBUF_NEXTFRAME) < 0)
-                break;
-        }
+        const int next_x = move_axis(sprite_x, pad.buttons, SCE_CTRL_LEFT,
+                                     SCE_CTRL_RIGHT, SCREEN_WIDTH - SPRITE_SIZE);
+        const int next_y = move_axis(sprite_y, pad.buttons, SCE_CTRL_UP,
+                                     SCE_CTRL_DOWN, SCREEN_HEIGHT - SPRITE_SIZE);
+        const uint32_t next_sprite_frame = sprite_animation_frame(active_time_us,
+                                                                   SPRITE_FRAME_US, 2);
+        const uint32_t next_middle_color = (pad.buttons & SCE_CTRL_CROSS)
+            ? 0xff00ffff : 0xff00ff00;
+        if (next_x == sprite_x && next_y == sprite_y && next_sprite_frame == sprite_frame
+            && next_middle_color == middle_color)
+            continue;
+
+        draw_bars(back_buffer, next_middle_color);
+        sprite_blit(back_buffer, screen, sprite_pixels[next_sprite_frame], sprite, next_x, next_y);
+
+        /* The vblank at the start of the iteration released the old buffer. */
+        uint32_t *old_front = frame.base;
+        frame.base = back_buffer;
+        if (sceDisplaySetFrameBuf(&frame, SCE_DISPLAY_SETBUF_NEXTFRAME) < 0)
+            break;
+        back_buffer = old_front;
+        sprite_x = next_x;
+        sprite_y = next_y;
+        sprite_frame = next_sprite_frame;
+        middle_color = next_middle_color;
     }
 
     /* Let process teardown reclaim the block if the display still owns it. */

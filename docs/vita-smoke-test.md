@@ -1,11 +1,12 @@
 # Smoke test nativo no PS Vita
 
 O aplicativo em `vita-prototype/` verifica a saída de vídeo e a entrada do controle com
-três barras de cor geradas em C. Ele usa as APIs de tela, controle e memória do VitaSDK.
-Os dois quadros são preparados na inicialização e ocupam juntos 4,5 MiB de CDRAM,
-incluindo o alinhamento. O protótipo usa os padrões de heap e pilha do SDK.
-Cada linha tem 960 pixels visíveis e 64 pixels de preenchimento, gravados em
-preto opaco na inicialização.
+três barras de cor e um quadrado sintético de 16 × 16 pixels gerados em C.
+Ele usa as APIs de tela, controle e memória do VitaSDK. Os dois buffers
+ocupam juntos 4,5 MiB de CDRAM, incluindo o alinhamento. O protótipo usa
+os padrões de heap e pilha do SDK. Quando a imagem muda, o loop redesenha
+o fundo no buffer livre e desenha o quadrado por cima. Cada linha tem
+960 pixels visíveis e 64 pixels de preenchimento em preto opaco.
 As imagens da LiveArea foram geradas pelo script `make_placeholder_assets.py`
 da skill `vita-port`. O aplicativo é independente dos arquivos do jogo.
 
@@ -46,6 +47,11 @@ Durante a configuração, o CMake também confere os caminhos de
 Se faltar um deles, a mensagem informa a variável do VitaSDK e o caminho verificado.
 
 ## Roteiro no console
+
+No pacote com sprite, observe o quadrado alternar entre branco e magenta
+a cada 250 ms de tempo ativo. Segure o direcional para movê-lo e confira
+se ele para nas bordas e deixa o fundo limpo. Em pausa, a imagem deve
+ficar imóvel mesmo com X ou o direcional pressionado.
 
 1. Instale o VPK pelo VitaShell e abra **Handkerchief Smoke Test** na LiveArea.
 2. Confirme a presença das barras vermelha, verde e azul, nessa ordem.
@@ -120,17 +126,19 @@ Para repetir a simulação do loop no Linux, ajuste `sdk_include` para a
 pasta de cabeçalhos da sua instalação do VitaSDK. Os dois comandos `cc`
 compilam o código real com o ponto de entrada renomeado para `smoke_main`
 e ligam as funções simuladas em um executável temporário. O último comando
-confere o tempo ativo registrado: 50 µs antes da pausa e 70 µs após
-a retomada. O teste confere a troca para o quadro amarelo ao retomar
+confere o tempo ativo registrado, com 500.000 µs antes da pausa e
+700.000 µs após a retomada. O teste confere a troca para o quadro amarelo ao retomar
 com Círculo e X pressionados. Com o loop ativo, soltar X volta ao
 quadro verde e pressionar X novamente volta ao amarelo.
-Para os quadros verde e amarelo, a simulação verifica o formato,
-as dimensões, o passo e as cores nas extremidades de cada faixa e
-do preenchimento em todas as linhas.
+Para cada quadro apresentado, a simulação verifica formato, dimensões,
+passo e todos os pixels. Isso cobre os dois quadros da animação, o
+deslocamento horizontal e vertical e a restauração do fundo. O teste
+também confere a alternância dos buffers, a integridade do quadro em
+exibição e a ausência de novas imagens durante a pausa.
 Em outra execução, após START, a chamada que desvincula o quadro falha.
 O teste exige código de retorno 1, sem aguardar outra sincronização nem
 liberar o bloco que a tela ainda pode estar usando. As duas execuções que
-chegam a START registram 120 µs antes da tentativa de desvinculação.
+chegam a START registram 1.200.000 µs antes da tentativa de desvinculação.
 A simulação também força um erro na primeira
 leitura do controle. O teste exige código de retorno 1, uma única leitura
 do controle e liberação da memória após desvincular o quadro e aguardar
@@ -147,9 +155,10 @@ cc -std=c11 -Wall -Wextra -Werror -fsanitize=undefined \
   -Dmain=smoke_main -c vita-prototype/main.c -o "$loop_test_dir/main.o" &&
 cc -std=c11 -Wall -Wextra -Werror -fsanitize=undefined \
   -fno-sanitize-recover=undefined -idirafter "$sdk_include" \
-  vita-prototype/test_loop.c "$loop_test_dir/main.o" -o "$loop_test_dir/test_loop" &&
+  vita-prototype/test_loop.c vita-prototype/sprite.c "$loop_test_dir/main.o" \
+  -o "$loop_test_dir/test_loop" &&
 loop_result=$("$loop_test_dir/test_loop") &&
-test "$loop_result" = "$(printf 'Active loop time: 120 us\nActive loop time: 120 us')"
+test "$loop_result" = "$(printf 'Active loop time: 1200000 us\nActive loop time: 1200000 us')"
 ```
 
 Um ZIP sintético com as seis entradas esperadas e os recursos atuais passou.

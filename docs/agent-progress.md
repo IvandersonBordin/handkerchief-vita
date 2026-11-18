@@ -13,6 +13,45 @@ em Círculo, X voltou a alternar verde e amarelo. O encerramento do
 processo com START segue sem confirmação física. Saída em tty0:
 não observada no console.
 
+## Ciclo C04 — sprite integrado ao protótipo
+
+- O comentário da issue #4 autorizou a integração local a partir de
+  `b4ec4e0` enquanto C03 aguarda confirmação física do encerramento
+  por START. C04 tem compilação e validação local, com teste físico pendente.
+- `vita-prototype/CMakeLists.txt` inclui `sprite.c`. O loop em
+  `vita-prototype/main.c` desenha um quadrado de 16 × 16 pixels, branco ou
+  magenta, em quadros de 250 ms de tempo ativo. O direcional desloca o
+  quadrado quatro pixels por atualização, com limites da tela. O loop
+  recompõe o fundo no buffer livre sem alocar memória por quadro.
+- `vita-prototype/test_loop.c` passou nos quatro cenários no Linux com
+  avisos como erros e UBSan, incluindo a verificação de todos os pixels,
+  deslocamento, pausa, retomada e limpeza após START. O relógio
+  simulado registrou 1.200.000 µs nos dois cenários que chegam a START.
+  Os comandos estão em `docs/vita-smoke-test.md`. A primeira tentativa
+  usou `-isystem` e falhou na ligação porque selecionou o `assert.h`
+  do VitaSDK. O comando com `-idirafter` passou.
+- VitaSDK com GCC 15.2.0 gerou um ELF ARM de 32 bits, EABI5. Os dois
+  verificadores aceitaram o VPK `HKSM00001` com seis entradas.
+  Para reproduzir na raiz do worktree:
+
+  ```sh
+  export VITASDK=/home/ivanderson/vitasdk
+  export PATH="$VITASDK/bin:$PATH"
+  cmake -S vita-prototype -B build/vita-smoke-c04-sprite \
+    -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS=-Werror &&
+  cmake --build build/vita-smoke-c04-sprite &&
+  python3 vita-prototype/check_livearea.py build/vita-smoke-c04-sprite/handkerchief_smoke.vpk &&
+  python3 .agents/skills/vita-port/scripts/check_vpk.py build/vita-smoke-c04-sprite/handkerchief_smoke.vpk &&
+  sha256sum build/vita-smoke-c04-sprite/handkerchief_smoke.vpk
+  ```
+
+- SHA-256 do pacote local
+  `ba5c1ae9ca28b46a979002b5732871db2979d1a7dde0140dd25ad8bd58a0a0ec`.
+  A publicação do resumo na issue #4 exigiu aprovação indisponível
+  nesta sessão. O próximo passo é confirmar o fim do processo após
+  START no console e, com autorização para teste físico, verificar o
+  roteiro do pacote com sprite. Alterações locais para revisão.
+
 ## Preparação C04 — seleção de quadro por tempo ativo
 
 - `vita-prototype/sprite.c` e `sprite.h` agora selecionam o quadro de

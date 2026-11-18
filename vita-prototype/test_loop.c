@@ -1,5 +1,6 @@
 #include <assert.h>
 #include <stdint.h>
+#include <string.h>
 
 #include <psp2/ctrl.h>
 #include <psp2/display.h>
@@ -8,6 +9,8 @@
 
 /* Screen storage rounded to 256 KiB for each of the two frames. */
 static uint32_t frames[2 * 2304 * 1024 / sizeof(uint32_t)];
+static uint32_t visible_pixels[1024 * 544];
+static const uint32_t *front_buffer;
 static unsigned time_reads;
 static unsigned pad_reads;
 static unsigned vblanks;
@@ -45,40 +48,63 @@ int sceKernelFreeMemBlock(SceUID uid)
     else if (fail_pad_read)
         assert(display_calls == 2 && vblanks == 2);
     else
-        assert(display_calls == 5 && vblanks == TOTAL_VBLANKS);
+        assert(display_calls == 6 && vblanks == TOTAL_VBLANKS);
     freed = 1;
     return 0;
 }
 
 int sceDisplaySetFrameBuf(const SceDisplayFrameBuf *frame, SceDisplaySetBufSync sync)
 {
+    static const struct {
+        unsigned vblank;
+        unsigned x;
+        unsigned y;
+        uint32_t middle;
+        uint32_t sprite;
+    } expected[] = {
+        {  0, 472, 264, 0xff00ff00, 0xffffffff },
+        {  7, 476, 264, 0xff00ffff, 0xffffffff },
+        {  8, 476, 264, 0xff00ff00, 0xffffffff },
+        {  9, 476, 264, 0xff00ffff, 0xffffffff },
+        { 10, 476, 268, 0xff00ffff, 0xffff00ff },
+    };
+
     assert(sync == SCE_DISPLAY_SETBUF_NEXTFRAME);
-    if (display_calls == 0) {
-        assert(frame && frame->base == frames);
-    } else if (fail_pad_read) {
-        assert(display_calls == 1 && !frame && vblanks == 1);
-    } else if (display_calls < 4) {
-        const uint32_t *expected = display_calls == 2
-            ? frames : frames + sizeof(frames) / sizeof(frames[0]) / 2;
-        assert(frame && frame->base == expected);
-        assert(vblanks == 6 + display_calls);
-    } else {
-        assert(display_calls == 4 && !frame && vblanks == LOOP_VBLANKS);
-    }
+    if (front_buffer)
+        assert(memcmp(front_buffer, visible_pixels, sizeof(visible_pixels)) == 0);
     if (frame) {
+        assert(!fail_pad_read || display_calls == 0);
+        assert(display_calls < sizeof(expected) / sizeof(expected[0]));
+        assert(frame->base == frames + (display_calls % 2) * (sizeof(frames) / sizeof(frames[0]) / 2));
+        assert(vblanks == expected[display_calls].vblank);
         assert(frame->size == sizeof(*frame));
         assert(frame->width == 960 && frame->height == 544);
         assert(frame->pitch == 1024);
         assert(frame->pixelformat == SCE_DISPLAY_PIXELFORMAT_A8B8G8R8);
         const uint32_t *pixels = frame->base;
-        const uint32_t middle = frame->base == frames ? 0xff00ff00 : 0xff00ffff;
+        const unsigned sprite_x = expected[display_calls].x;
+        const unsigned sprite_y = expected[display_calls].y;
         for (unsigned y = 0; y < frame->height; ++y) {
             const uint32_t *row = pixels + y * frame->pitch;
-            assert(row[0] == 0xff0000ff && row[319] == 0xff0000ff);
-            assert(row[320] == middle && row[639] == middle);
-            assert(row[640] == 0xffff0000 && row[959] == 0xffff0000);
-            assert(row[960] == 0xff000000 && row[1023] == 0xff000000);
+            for (unsigned x = 0; x < frame->pitch; ++x) {
+                uint32_t color = 0xff000000;
+                if (x < 320)
+                    color = 0xff0000ff;
+                else if (x < 640)
+                    color = expected[display_calls].middle;
+                else if (x < 960)
+                    color = 0xffff0000;
+                if (x >= sprite_x && x < sprite_x + 16 && y >= sprite_y && y < sprite_y + 16)
+                    color = expected[display_calls].sprite;
+                assert(row[x] == color);
+            }
         }
+        memcpy(visible_pixels, pixels, sizeof(visible_pixels));
+        front_buffer = pixels;
+    } else if (fail_pad_read) {
+        assert(display_calls == 1 && vblanks == 1);
+    } else {
+        assert(display_calls == 5 && vblanks == LOOP_VBLANKS);
     }
     ++display_calls;
     if (!frame && fail_detach)
@@ -95,20 +121,21 @@ int sceDisplayWaitVblankStart(void)
 
 SceInt64 sceKernelGetSystemTimeWide(void)
 {
-    /* Count 20 and 30 before the pause, then 70 after resuming. */
+    /* Units of 10 ms: count 20 and 30 before the pause, then 70 after resuming. */
     static const SceInt64 readings[] = {
         100, 120, 110, 140, 1000, 2000, 3000, 4000, 4010, 4020, 4040, 4070, 5000,
     };
     assert(time_reads < sizeof(readings) / sizeof(readings[0]));
-    return readings[time_reads++];
+    return readings[time_reads++] * 10000;
 }
 
 int sceCtrlPeekBufferPositive(int port, SceCtrlData *pad, int count)
 {
     static const uint32_t buttons[] = {
-        0, 0, SCE_CTRL_CIRCLE, 0, SCE_CTRL_CIRCLE | SCE_CTRL_CROSS,
-        0, SCE_CTRL_CIRCLE | SCE_CTRL_CROSS, 0, SCE_CTRL_CROSS, SCE_CTRL_CROSS,
-        SCE_CTRL_CIRCLE,
+        0, 0, SCE_CTRL_CIRCLE, 0, SCE_CTRL_CIRCLE | SCE_CTRL_CROSS | SCE_CTRL_LEFT,
+        SCE_CTRL_UP, SCE_CTRL_CIRCLE | SCE_CTRL_CROSS | SCE_CTRL_RIGHT, 0,
+        SCE_CTRL_CROSS, SCE_CTRL_CROSS | SCE_CTRL_DOWN,
+        SCE_CTRL_CIRCLE | SCE_CTRL_LEFT,
         SCE_CTRL_START | SCE_CTRL_CIRCLE | SCE_CTRL_CROSS,
     };
     assert(port == 0 && count == 1);
@@ -132,6 +159,7 @@ static void reset_observations(void)
     vblanks = 0;
     display_calls = 0;
     freed = 0;
+    front_buffer = NULL;
 }
 
 int main(void)
@@ -143,7 +171,7 @@ int main(void)
     fail_detach = 1;
     assert(smoke_main() == 1);
     assert(time_reads == LOOP_VBLANKS + 1 && pad_reads == LOOP_VBLANKS);
-    assert(display_calls == 5 && vblanks == LOOP_VBLANKS && !freed);
+    assert(display_calls == 6 && vblanks == LOOP_VBLANKS && !freed);
     fail_detach = 0;
 
     reset_observations();

@@ -48,7 +48,7 @@ foreach(sdk_tool IN ITEMS VITA_ELF_CREATE VITA_MAKE_FSELF VITA_MKSFOEX VITA_PACK
     endif()
 endforeach()
 
-add_executable(handkerchief_smoke main.c)
+add_executable(handkerchief_smoke main.c sprite.c)
 target_compile_features(handkerchief_smoke PRIVATE c_std_11)
 target_compile_options(handkerchief_smoke PRIVATE -Wall -Wextra)
 target_link_libraries(handkerchief_smoke PRIVATE

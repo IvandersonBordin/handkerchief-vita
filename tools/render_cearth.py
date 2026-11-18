@@ -34,10 +34,13 @@ def read_cearth(data):
         raise ValueError("A0.HDK: cabeçalho do primeiro CEarth inesperado em VISTA_0")
 
     fields = record_start + len(marker)
+    start = fields + struct.calcsize("<IiiIH")
+    if start > len(section):
+        raise ValueError("A0.HDK: campos do primeiro CEarth truncados em VISTA_0")
+
     _, base_x, base_y, reference_base, count = struct.unpack_from("<IiiIH", section, fields)
     if count != 5:
         raise ValueError(f"A0.HDK: esperados 5 elementos em CEarth, encontrados {count}")
-    start = fields + struct.calcsize("<IiiIH")
     end = start + count * 12
     if section[end:end + 4] != b"\0\0\xff\xff":
         raise ValueError("A0.HDK: lista truncada ou fim do primeiro CEarth inesperado")
@@ -95,6 +98,8 @@ def read_bitmap(data):
     """Lê a paleta e os índices de um BMP de 8 bits sem compressão."""
     if not data.startswith(b"BM"):
         raise ValueError("BMP: assinatura BMP ausente")
+    if len(data) < 54:
+        raise ValueError("BMP: cabeçalho truncado")
     pixel_offset, dib_size, width, height, planes, depth, compression = struct.unpack_from(
         "<IIiiHHI", data, 10
     )

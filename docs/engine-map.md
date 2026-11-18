@@ -210,6 +210,18 @@ A prévia mantém a translação vertical em zero, usa ajuste gráfico zero
 e a paleta original do BMP. A aparência durante uma partida segue
 sem verificação.
 
+Para verificar a prévia com dados sintéticos, execute a partir da raiz:
+
+```sh
+PYTHONPATH=tools python3 -B -m unittest discover -s tests -p 'test_hdk_camera.py' -v
+```
+
+Os testes cobrem o truncamento de `(X − L) / 3` dos dois lados de L
+e o recorte de uma composição RGBA de 2 × 2 pixels nos quatro cantos
+do quadro. Também verificam que uma composição totalmente fora do quadro
+deixa todos os pixels transparentes. Esses resultados verificam a prévia
+em Python. A correspondência com o jogo durante uma partida segue em aberto.
+
 A análise ainda não determina qual entidade é selecionada em todos os
 modos, quando o caminho de passo limitado é escolhido nem como os limites
 do contexto se relacionam com os de cada fase HDK.

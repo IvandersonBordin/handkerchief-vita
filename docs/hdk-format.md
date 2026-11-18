@@ -50,6 +50,33 @@ calculado coincidiu com o início do seguinte. O fim calculado de
 Os 30 blocos cobrem integralmente os três arquivos, sem sobreposições,
 lacunas ou bytes restantes.
 
+Para listar também as classes e localizar os dados de cada seção em uma
+cópia local, execute:
+
+```sh
+python3 -B tools/inspect_hdk.py --classes original-data/SYSTEM/A0.HDK
+```
+
+A coluna `dados` indica o deslocamento absoluto do primeiro byte após
+o terminador da classe. Se o bloco terminar no próprio terminador,
+esse deslocamento coincide com o fim exclusivo do bloco. A opção exige
+um nome de classe em ASCII visível e terminado em zero dentro do bloco.
+Sem a opção, o inspetor continua listando o deslocamento e o rótulo.
+
+Para localizar o intervalo de cada seção sem interpretar o campo de
+classe, use o modo `--bounds`:
+
+```sh
+python3 -B tools/inspect_hdk.py --bounds original-data/USER/USER01.HDK
+```
+
+A primeira coluna aponta para o campo de comprimento. A coluna `fim`
+indica o primeiro deslocamento fora do bloco, em hexadecimal. A coluna
+`comprimento` mostra a diferença entre esses dois deslocamentos, em
+bytes decimais. Os modos `--bounds` e `--classes` são usados em invocações
+separadas. Um teste sintético confirma a listagem de dois blocos
+consecutivos sem exigir nomes de classe válidos.
+
 ## Validação do conjunto de arquivos
 
 O conjunto em `original-data/` contém 108 arquivos `.HDK`. Os 99 arquivos
@@ -60,9 +87,36 @@ Os nove arquivos de `original-data/USER/USER02.HDK` até
 `original-data/USER/USER10.HDK` têm zero bytes e foram corretamente
 rejeitados pelo leitor com a mensagem `arquivo vazio`.
 
-A validação cobre os limites dos blocos e os nomes das seções. A
-integridade dos registros internos e a função dos arquivos `USER`
-continuam sem confirmação.
+A leitura com `--classes` aceitou 98 arquivos, somando 980 blocos.
+Todos repetem a sequência de dez pares seção/classe da tabela acima.
+Uma segunda leitura percorreu os comprimentos com `struct.unpack_from`
+e delimitou os dois campos terminados em zero dentro de cada bloco,
+confirmando a sequência e as contagens.
+
+### Exceção em USER01.HDK
+
+O modo padrão lista 17 rótulos, com blocos consecutivos até o fim
+exclusivo em `0x1613` (5.651 bytes). No primeiro bloco,
+`a0_FLUG_STAGE_0`, o byte imediatamente após o terminador do rótulo,
+em `0x0014`, é zero. Por isso, `--classes` retorna
+`bloco em 0x0000: nome da classe inválido`.
+
+Ao procurar o primeiro zero após cada rótulo dentro do respectivo bloco,
+o trecho anterior a esse byte fica vazio em oito blocos, contém apenas
+bytes de `0x21` a `0x7E` em cinco e contém bytes fora desse intervalo
+em quatro. Essa contagem descreve os bytes no arquivo. A função desses
+campos em `USER01.HDK` e a integridade dos registros internos seguem
+em aberto.
+
+Os testes sintéticos verificam que o modo padrão lista um bloco com
+campo de classe vazio e que `--classes` o rejeita. Também verificam
+se os dois modos detectam um campo de comprimento incompleto após um
+bloco válido e apontam seu deslocamento. Na linha de comando, esses
+testes conferem o código de saída e a ausência de listagem parcial
+em caso de erro. Um arquivo sintético com dois blocos também confirma
+que a busca pelo terminador da classe para no fim do primeiro bloco,
+mesmo quando há bytes zero no bloco seguinte. Para rodar a suíte na
+raiz do worktree, execute `PYTHONPATH=tools python3 -B -m unittest discover -s tests -v`.
 
 ## Hipóteses sobre a serialização interna
 
@@ -138,6 +192,24 @@ interseção positiva em ambos os eixos.
 | `0x15E9` | `0x165A` | `0x081A81F6` | 2/502 | 26 | (0, 672, 80, 16) | (776, 532, 856, 548) |
 | `0x15E9` | `0x1666` | `0x081A81F6` | 2/502 | 26 | (0, 672, 80, 16) | (856, 532, 936, 548) |
 
+O cruzamento dos destinos brutos com a janela resulta nos seguintes
+retângulos, com bordas finais exclusivas. O cálculo usa o maior valor
+entre as bordas iniciais e o menor entre as bordas finais em cada eixo.
+
+| Elemento | Interseção com a janela | Largura × altura |
+|---|---|---:|
+| `0x0F3C` | (820, 508, 840, 552) | 20 × 44 |
+| `0x0F48` | (868, 508, 884, 548) | 16 × 40 |
+| `0x105E` | (820, 508, 884, 540) | 64 × 32 |
+| `0x1076` | (820, 516, 884, 556) | 64 × 40 |
+| `0x165A` | (820, 532, 856, 548) | 36 × 16 |
+| `0x1666` | (856, 532, 884, 548) | 28 × 16 |
+
+Uma conferência local, a partir da primeira tabela, verificou a extração
+de banco, índice e seletor e a igualdade entre as dimensões de origem e
+destino nos seis casos. A releitura dos registros e dos bancos depende
+da cópia local dos originais.
+
 As origens dos objetos são `(956, 488)` em `0x0F13`,
 `(860, 472)` em `0x1041` e `(588, 580)` em `0x15E9`.
 Em particular, `0x1076` guarda o deslocamento `(-44, 44)`,
@@ -145,15 +217,34 @@ resultando na origem de destino `(816, 516)`.
 
 O [mapa do motor](engine-map.md#associação-com-recursos-gráficos)
 documenta dois caminhos. O cálculo de limites consulta banco e índice
-após somar a base. O desenho soma também o valor selecionado na tabela
-`0x4ABED4`. A leitura indexada seguida de soma pode ser conferida no
-PE no offset `0x8489`. Os slots 25 e 26 ficam em `0x4ABF38` e
-`0x4ABF3C`, na área de `.data` sem bytes gravados no PE
-(a parte gravada termina em `0x4AA200`, com base de imagem `0x400000`).
-A leitura local do arquivo deixa em aberto o valor no momento do desenho.
-Esse valor pode alterar banco, índice, dimensões e chave de cor. A
-lista é um resultado pré-ajuste e a cobertura visual efetiva permanece
-indeterminada. Por isso a entrega é documental.
+após somar a base. No caminho de desenho de `CEarth`, a instrução em
+`0x4095E7` (offset `0x89E7` no PE) lê um inteiro de 32 bits em
+`0x4ABED4 + 4 × seletor` e `0x4095EE` o soma à referência. O offset
+`0x8489` corresponde à leitura equivalente em outra rotina, em
+`0x409089`.
+
+Na cópia analisada, a seção `.data` começa em `0x47A000`, com
+tamanho gravado de `0x30200` bytes e tamanho virtual de `0x34C2C`
+bytes. Os slots 25 e 26, em `0x4ABF38` e `0x4ABF3C`, caem no
+trecho preenchido com zeros pelo carregador, entre `0x4AA200` e
+`0x4AEC2C` (fim exclusivo). Isso estabelece o valor no carregamento
+da imagem. O valor durante o desenho da fase continua em aberto.
+
+A busca pelo endereço-base literal na desmontagem encontrou quatro
+leituras. As de `0x409089`, `0x4094F5` e `0x4095E7` somam o
+valor à referência gráfica. Em `0x42CCAF`, o código multiplica o
+valor lido por 40 e soma o resultado a um campo local de 16 bits.
+A busca também incluiu os endereços literais dos dois slots. Escritas
+por ponteiros ou por operações sobre intervalos ficam fora dessa
+verificação. Uma forma de repetir a busca estática a partir deste worktree é
+
+```sh
+objdump -d original-data/HDKWIN.EXE |
+    rg -i -A 3 '4abed4|4abf38|4abf3c'
+```
+
+Um ajuste durante a fase pode alterar banco, índice, dimensões e chave
+de cor. A tabela de recortes acima descreve a geometria antes do ajuste.
 
 ### Registro CEarthFluct
 
@@ -194,15 +285,17 @@ addresses = (0x48AFF8, 0x48B7A8, 0x48CE08, 0x48D120)
 banks = {i: read_bank(exe, a, b) for i, (a, b) in
          enumerate(zip(addresses, addresses[1:]), 1)}
 _, rows = read_bitmap((original / "BITMAP/HDKMAPA0.BMP").read_bytes())
-for record, following in zip(records, records[1:]):
+record_ends = [record.start() for record in records[1:]] + [end]
+for record, record_end in zip(records, record_ends):
     if record[1] != b"CEarth":
         continue
     fields = record.end() + 2
+    first = fields + struct.calcsize("<IiiIH")
+    assert first + 2 <= record_end, f"CEarth em 0x{record.start():04X}: cabeçalho truncado"
     assert data[record.end():fields] == b"\x0b\x0b"
     _, x, y, base, count = struct.unpack_from("<IiiIH", data, fields)
-    first = fields + 18
     stop = first + 12 * count
-    assert base == 0 and stop + 2 == following.start()
+    assert base == 0 and stop + 2 == record_end
     assert data[stop:stop + 2] == b"\0\0"
     for offset in range(first, stop, 12):
         ref, dx, dy = struct.unpack_from("<Iii", data, offset)
@@ -213,9 +306,34 @@ for record, following in zip(records, records[1:]):
         if bank == 2:
             assert 0 <= sx < sx + w <= len(rows[0])
             assert 0 <= sy < sy + h <= len(rows)
-        if left < 884 and top < 572 and left + w > 820 and top + h > 508:
+        right, bottom = left + w, top + h
+        if max(left, 820) < min(right, 884) and max(top, 508) < min(bottom, 572):
             print(f"{record.start():04X} {offset:04X} {ref:08X}",
                   bank, index, (ref >> 16) & 63, (sx, sy, w, h),
-                  (left, top, left + w, top + h))
+                  (left, top, right, bottom))
 MAPA
+```
+
+Os testes sintéticos do leitor e da geometria podem ser executados a
+partir da raiz, mesmo sem os arquivos originais.
+
+Para o BMP indexado, o leitor exige 54 bytes para o cabeçalho de arquivo
+e o cabeçalho DIB de 40 bytes. O teste de truncamento verifica todos os
+tamanhos de 2 a 53 bytes que preservam a assinatura `BM`.
+
+Um BMP sintético de 3 × 2 pixels verifica que o leitor entrega as
+linhas com origem no topo tanto para altura positiva quanto negativa.
+Cada linha gravada tem um byte de preenchimento com valor 255, fora da
+paleta de duas cores. O teste confirma que esse byte é ignorado, de modo
+que as coordenadas de origem dos recortes sejam medidas apenas sobre
+os pixels da imagem. Também confere a conversão da paleta de BGR para
+RGBA opaco.
+
+Para o banco de retângulos, um PE32 sintético verifica que o leitor
+aceita o terminador dentro do limite explícito quando a seção `.data`
+está completa. Ao retirar o último byte da seção, o leitor rejeita o
+arquivo mesmo quando o registro do banco e o terminador ainda cabem.
+
+```sh
+PYTHONPATH=tools python3 -B -m unittest discover -s tests -v
 ```

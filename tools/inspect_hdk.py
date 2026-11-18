@@ -4,8 +4,7 @@ import argparse
 from pathlib import Path
 
 
-def iter_sections(data):
-    """Encontra as seções seguindo os comprimentos gravados no arquivo."""
+def _iter_section_bounds(data):
     if not data:
         raise ValueError("arquivo vazio")
 
@@ -34,22 +33,63 @@ def iter_sections(data):
         if not name or not all(0x21 <= byte <= 0x7E for byte in name):
             raise ValueError(f"{header}: nome da seção inválido")
 
-        yield offset, name.decode("ascii")
+        yield offset, name.decode("ascii"), name_end + 1, end
         offset = end
+
+
+def iter_sections(data):
+    """Encontra as seções seguindo os comprimentos gravados no arquivo."""
+    for offset, name, _, _ in _iter_section_bounds(data):
+        yield offset, name
+
+
+def iter_section_classes(data):
+    """Lista as classes de seção e o primeiro deslocamento após cada classe."""
+    for offset, name, class_start, end in _iter_section_bounds(data):
+        class_end = data.find(b"\x00", class_start, end)
+        if class_end == -1:
+            raise ValueError(f"bloco em 0x{offset:04X}: nome da classe sem terminador")
+
+        class_name = data[class_start:class_end]
+        if not class_name or not all(0x21 <= byte <= 0x7E for byte in class_name):
+            raise ValueError(f"bloco em 0x{offset:04X}: nome da classe inválido")
+
+        yield offset, name, class_name.decode("ascii"), class_end + 1
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("arquivo", type=Path, help="caminho do arquivo HDK")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument(
+        "--classes", action="store_true",
+        help="inclui a classe e o deslocamento dos dados após o cabeçalho",
+    )
+    mode.add_argument(
+        "--bounds", action="store_true",
+        help="inclui o fim exclusivo e o comprimento de cada bloco",
+    )
     args = parser.parse_args()
 
     try:
-        sections = list(iter_sections(args.arquivo.read_bytes()))
+        inspect = iter_sections
+        if args.classes:
+            inspect = iter_section_classes
+        elif args.bounds:
+            inspect = _iter_section_bounds
+        sections = list(inspect(args.arquivo.read_bytes()))
     except (OSError, ValueError) as error:
         parser.exit(1, f"Erro ao inspecionar {args.arquivo}: {error}\n")
 
-    for offset, name in sections:
-        print(f"0x{offset:04X} {name}")
+    if args.classes:
+        for offset, name, class_name, data_start in sections:
+            print(f"0x{offset:04X} {name} {class_name} dados=0x{data_start:04X}")
+    elif args.bounds:
+        for offset, name, _, end in sections:
+            print(f"0x{offset:04X} {name} fim=0x{end:04X} comprimento={end - offset}")
+    else:
+        for offset, name in sections:
+            print(f"0x{offset:04X} {name}")
 
 
 if __name__ == "__main__":

@@ -149,8 +149,7 @@ def process():
         f"ISSUE #{issue}: {info['title']}\n\n{body}"
     )
     try:
-        result = cmd(["codex", "exec", "--sandbox", "workspace-write",
-                      "--ask-for-approval", "never", "-"],
+        result = cmd(["codex", "exec", "--sandbox", "workspace-write", "-"],
                      input_text=prompt, check=False, timeout=2700)
         logfile.write_text(result.stdout + "\n\nSTDERR:\n" + result.stderr,
                            encoding="utf-8")

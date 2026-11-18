@@ -92,14 +92,130 @@ em aberto.
 
 ## A0.HDK, STAGE_0 (issue #6)
 
-A Etapa 82 depende da conclusão e da revisão técnica da
-[Etapa 81](character-identification.md#etapa-81--folhas-locais-dos-candidatos-visuais).
-O commit `a1afce2` registra a entrega e a validação local da issue #5.
-A aprovação técnica da Etapa 81 ainda precisa ser confirmada. A análise
-dos registros de `STAGE_0` fica pendente dessa confirmação.
+A investigação da Etapa 82 usa a cópia local de `A0.HDK` e a revisão
+da Etapa 81 informada pelo coordenador. A janela de referência é
+`[820, 884) × [508, 572)`, escolhida com 32 unidades em cada direção
+a partir do ponto candidato `(852, 540)`. A janela serve à análise
+gráfica. A posição inicial, a colisão e a física seguem em aberto.
 
-O ponto `(852, 540)` é uma referência candidata para a janela de estudo.
-Ainda faltam evidências sobre sua relação com a posição inicial e com
-a colisão. A interpretação de `CEarthFluct` e o valor efetivo do ajuste
-selecionado pelo índice 26 também precisam ser verificados antes de
-usar essas referências na composição gráfica.
+### Limites e classes
+
+`STAGE_0` ocupa `[0x0921, 0x1E41)` (comprimento `0x1520`).
+O campo de contagem em `0x093D` vale 60. A busca delimitada por
+marcadores de classe encontrou 60 ocorrências, sendo 51 `CEarth`,
+um `CEarthFluct`, sete `CPlate` e um `CNumPlate`. Nos 51 registros
+`CEarth`, os controles são `0B 0B`. Cada lista começa após os campos
+`<IiiIH`, contém elementos `<Iii` de 12 bytes e termina com contagem de
+filhos zero imediatamente antes do marcador seguinte. As bases de
+referência dos 51 registros são zero.
+
+Dos 284 elementos `CEarth`, 281 apontam para o banco 2 antes do ajuste,
+dois para o banco 3 e um para o banco 1. Os três últimos têm posições
+de destino com X ≥ 3936, à direita da janela. Os índices brutos cabem
+nas respectivas tabelas (245, 715 e 98 entradas para os bancos 1, 2 e
+3). No banco 2, todos os recortes brutos cabem no BMP de 640 × 1128.
+A tabela do banco 3 começa em `0x48CE08`, endereço passado ao
+registrador do descritor `0x4ABDAC`, conforme o
+operando imediato no offset `0x50D8C` do PE.
+
+### Recortes que cruzam a janela antes do ajuste
+
+Os offsets são absolutos em `A0.HDK`. O destino foi calculado como
+posição do objeto mais deslocamento local; a origem de destino vem
+desses campos, enquanto seu tamanho depende da referência efetiva.
+`Src` usa `(x, y, largura, altura)`; `Dest` usa
+`(esquerda, topo, direita, fundo)` com bordas finais exclusivas.
+Os seis resultados usam a tabela bruta do banco 2, equivalente a
+simular ajuste zero. Um recorte só entra na lista se houver área de
+interseção positiva em ambos os eixos.
+
+| Objeto | Elemento | Referência bruta | Banco/índice | Seletor | Src bruto | Dest com tamanho bruto |
+|---|---|---|---|---:|---|---|
+| `0x0F13` | `0x0F3C` | `0x08198229` | 2/553 | 25 | (480, 240, 160, 120) | (680, 432, 840, 552) |
+| `0x0F13` | `0x0F48` | `0x08198229` | 2/553 | 25 | (480, 240, 160, 120) | (868, 428, 1028, 548) |
+| `0x1041` | `0x105E` | `0x08198225` | 2/549 | 25 | (480, 0, 160, 120) | (764, 420, 924, 540) |
+| `0x1041` | `0x1076` | `0x081A820E` | 2/526 | 26 | (0, 784, 80, 40) | (816, 516, 896, 556) |
+| `0x15E9` | `0x165A` | `0x081A81F6` | 2/502 | 26 | (0, 672, 80, 16) | (776, 532, 856, 548) |
+| `0x15E9` | `0x1666` | `0x081A81F6` | 2/502 | 26 | (0, 672, 80, 16) | (856, 532, 936, 548) |
+
+As origens dos objetos são `(956, 488)` em `0x0F13`,
+`(860, 472)` em `0x1041` e `(588, 580)` em `0x15E9`.
+Em particular, `0x1076` guarda o deslocamento `(-44, 44)`,
+resultando na origem de destino `(816, 516)`.
+
+O [mapa do motor](engine-map.md#associação-com-recursos-gráficos)
+documenta dois caminhos. O cálculo de limites consulta banco e índice
+após somar a base. O desenho soma também o valor selecionado na tabela
+`0x4ABED4`. A leitura indexada seguida de soma pode ser conferida no
+PE no offset `0x8489`. Os slots 25 e 26 ficam em `0x4ABF38` e
+`0x4ABF3C`, na área de `.data` sem bytes gravados no PE
+(a parte gravada termina em `0x4AA200`, com base de imagem `0x400000`).
+A leitura local do arquivo deixa em aberto o valor no momento do desenho.
+Esse valor pode alterar banco, índice, dimensões e chave de cor. A
+lista é um resultado pré-ajuste e a cobertura visual efetiva permanece
+indeterminada. Por isso a entrega é documental.
+
+### Registro CEarthFluct
+
+O marcador em `0x093F` antecede um trecho com controles `0B 0B`
+em `0x096C`. Interpretado provisoriamente pela estrutura de
+`CEarth`, ele daria posição `(5960, 360)`, base `0x40000000` e
+seis elementos em `[0x0980, 0x09C8)`, seguidos de dois bytes zero até
+o próximo marcador em `0x09CA`. O primeiro elemento tem referência
+bruta `0x081A8202` (banco 2, índice bruto 514, seletor 26).
+A estrutura anterior aos controles e o tratamento da posição e da base
+pela classe ainda precisam de confirmação. Esse trecho ficou fora da
+seleção geométrica de `CEarth`.
+
+### Reprodução local
+
+Na raiz do projeto, o trecho abaixo lê os arquivos originais e imprime
+os recortes brutos que cruzam a janela. Os limites das listas são
+conferidos usando os marcadores como verificação independente.
+
+```sh
+PYTHONPATH=tools python3 -B - <<'MAPA'
+from pathlib import Path
+import re
+import struct
+
+from inspect_hdk import iter_sections
+from render_cearth import read_bank, read_bitmap
+
+original = Path("original-data")
+data = (original / "SYSTEM/A0.HDK").read_bytes()
+sections = {name: offset for offset, name in iter_sections(data)}
+start, end = sections["STAGE_0"], sections["FRONT_0"]
+assert (start, end) == (0x0921, 0x1E41)
+records = list(re.compile(rb"\xff\xff(C[A-Za-z0-9]+)\0").finditer(data, start, end))
+assert len(records) == struct.unpack_from("<H", data, start + 28)[0] == 60
+exe = (original / "HDKWIN.EXE").read_bytes()
+addresses = (0x48AFF8, 0x48B7A8, 0x48CE08, 0x48D120)
+banks = {i: read_bank(exe, a, b) for i, (a, b) in
+         enumerate(zip(addresses, addresses[1:]), 1)}
+_, rows = read_bitmap((original / "BITMAP/HDKMAPA0.BMP").read_bytes())
+for record, following in zip(records, records[1:]):
+    if record[1] != b"CEarth":
+        continue
+    fields = record.end() + 2
+    assert data[record.end():fields] == b"\x0b\x0b"
+    _, x, y, base, count = struct.unpack_from("<IiiIH", data, fields)
+    first = fields + 18
+    stop = first + 12 * count
+    assert base == 0 and stop + 2 == following.start()
+    assert data[stop:stop + 2] == b"\0\0"
+    for offset in range(first, stop, 12):
+        ref, dx, dy = struct.unpack_from("<Iii", data, offset)
+        bank, index = (ref >> 26) & 15, ref & 0x7FFF
+        assert 0 < ref < 0x40000000 and index < len(banks[bank])
+        sx, sy, w, h = banks[bank][index]
+        left, top = x + dx, y + dy
+        if bank == 2:
+            assert 0 <= sx < sx + w <= len(rows[0])
+            assert 0 <= sy < sy + h <= len(rows)
+        if left < 884 and top < 572 and left + w > 820 and top + h > 508:
+            print(f"{record.start():04X} {offset:04X} {ref:08X}",
+                  bank, index, (ref >> 16) & 63, (sx, sy, w, h),
+                  (left, top, left + w, top + h))
+MAPA
+```

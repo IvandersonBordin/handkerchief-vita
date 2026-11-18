@@ -46,3 +46,53 @@ gráfica do ator nesse evento e resolver seus bits até banco e índice.
 As folhas locais são `build/etapa72-banco-5.png` e
 `build/etapa72-banco-6.png`. A amostragem da vinheta está em
 `build/etapa72-video-amostra.png`. As imagens ficam em `build/`.
+
+## Etapa 80 — rastreamento estático dos itens de A0
+
+A ligação entre a coleta do chapéu e a troca de aparência do ator
+controlado ainda não foi encontrada. Em A0, o caminho concreto para
+prosseguir começa em `GIMK_0`.
+
+### Registros da fase
+
+Percorrendo os blocos pelo comprimento com `iter_sections`, de
+`tools/inspect_hdk.py`, foram encontrados 98 blocos `ITEM_0` nos 108 HDK
+locais. Todos têm 30 bytes, classe `CGimkRoot` e os dois últimos bytes
+zerados. O `USER01.HDK` tem outros rótulos de seção e os nove arquivos
+restantes estão vazios.
+
+Em `A0.HDK`, `ITEM_0` ocupa `0x35F7–0x3615` (fim exclusivo).
+O campo de 16 bits em `0x3613` vale zero e termina o bloco. Na seção
+`GIMK_0`, da mesma classe, o campo na posição equivalente vale 9 e é
+seguido por `FF FF` e `CGimkItem`. O método em `0x42A4FB`, cujo
+ponteiro está em `0x46DC18` via `0x403508`, passa o nome de
+`CGimkRoot` ao leitor por meio da entrada em `0x46EF00`. Após a
+chamada de `0x42A515`, usa o retorno como limite dos laços que
+serializam objetos filhos. Em A0, os nomes de classe dos registros
+`CGimkItem` de `GIMK_0` começam em `0x336F` (`PowerUp0`) e
+`0x33BD` (`Master0`). Esses dois offsets são posições no HDK.
+
+### Resolução do item e caminho de ativação
+
+Os endereços abaixo são virtuais em `HDKWIN.EXE`. Para reproduzir a
+leitura nesta cópia, as seções `.text`, `.rdata` e `.data` começam
+nos endereços `0x401000`, `0x46E000` e `0x47A000`, nos offsets
+`0x400`, `0x6D000` e `0x78A00`, respectivamente.
+
+| Endereço | Evidência estática |
+|---|---|
+| `0x470DB8–0x470DC0` | Três entradas consecutivas na tabela virtual apontam, via saltos, para o método que retorna a entrada de classe `CGimkItem` (`0x44509F`) e para os métodos em `0x44538F` e `0x445431`, que passam o mesmo nome de classe ao leitor. |
+| `0x4453CA–0x4453E0` | No ramo de leitura de `0x44538F`, a chamada em `0x4453D3` recebe a tabela em `0x47FCD8` e o endereço de `objeto+0x54`. Em seguida o método lê o primeiro ponteiro do descritor resolvido e o grava em `objeto+0x44`. |
+| `0x47FD68` e `0x47FD78` | Pares de ponteiros (descritor, nome) para `PowerUp0` e `Master0`. Os descritores estão em `0x47FC78` e `0x47FCA8` e começam pelos ponteiros `0x496358` e `0x4963A0`. |
+| `0x496358` e `0x4963A0` | As primeiras referências gráficas são `0x1005816A` e `0x10078194`. Extraindo os bits 26–29 e 0–14 das palavras brutas, obtêm-se banco 4, índice 362 para `PowerUp0` e banco 4, índice 404 para `Master0`. Esses valores antecedem a soma da base e os ajustes do desenho descritos no [mapa do motor](engine-map.md#associação-com-recursos-gráficos). |
+| `0x470DE4` → `0x401D6B` → `0x445137` | Um método da mesma tabela virtual verifica o byte `objeto+0x58` e chama o slot virtual `+0x54` do argumento recebido. Se o byte estiver zerado e o retorno da chamada virtual for não negativo, grava 1 em `objeto+0x58` (`0x445170`) e chama `0x4268FC` via `0x403FE9` (`0x445195`). Entre os argumentos estão a posição do objeto e o valor em `descritor+0x14`, que vale `0x3A` para `PowerUp0`. |
+
+Esse caminho confirma a configuração gráfica bruta dos dois objetos
+de fase e uma mudança de estado no próprio `CGimkItem`. A hipótese de
+que `PowerUp0` represente o chapéu ainda depende de identificar o
+objeto acionado. O próximo teste estático mínimo é seguir o valor
+`0x3A` a partir de `0x4268FC`, identificar o objeto criado ou
+selecionado e procurar, no handler correspondente, uma escrita no
+estado ou na referência gráfica do ator que recebeu a interação.
+A classe do ator controlado, a pose inicial e a ligação com as poses
+do banco 6 seguem em aberto.

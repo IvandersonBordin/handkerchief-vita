@@ -152,6 +152,39 @@ explicar os ajustes gráficos, mapear os outros bancos a seus recursos e
 verificar quais modos de desenho e caminhos de cópia são usados durante
 uma partida.
 
+### Catálogo dos bancos 5 a 8
+
+As chamadas em `0x45180B–0x451842` configuram os caminhos dos quatro
+BMPs. As chamadas em `0x4519A9–0x4519E0` registram as tabelas. Os quatro
+bancos passam pelo mesmo inicializador, e `0x41229A` avança 8 bytes por
+entrada até encontrar X igual a −1. Na amostra, os quatro campos do
+terminador valem −1. O catálogo limita a leitura à seção `.data` gravada
+no PE32 e ao início da tabela seguinte, em `0x4913B8` para o banco 8.
+
+| Banco | BMP original | Tabela | Entradas antes do terminador | Válidas | Inválidas | Possíveis duplicatas |
+|---:|---|---|---:|---:|---:|---:|
+| 5 | HDKCHRA0.BMP | `0x48E070` | 721 | 721 | 0 | 1 |
+| 6 | HDKCHRB0.BMP | `0x48F700` | 661 | 661 | 0 | 56 |
+| 7 | HDKCHRC0.BMP | `0x490BB0` | 195 | 195 | 0 | 0 |
+| 8 | HDKCHRD0.BMP | `0x4911D0` | 60 | 59 | 1 | 0 |
+
+Os quatro BMPs são indexados de 8 bits e sem compressão. A entrada 0
+do banco 8 declara `(0, 0, 640, 480)`, mas o BMP mede 640 × 440.
+O catálogo sinaliza essa entrada e pula o recorte inteiro. A contagem
+de possíveis duplicatas considera cada ocorrência posterior à primeira
+com mesmas dimensões e mesmo hash SHA-256 dos índices de paleta dentro
+do banco. Cada entrada válida mantém seu índice e sua posição no catálogo.
+
+`python3 -B tools/preview_characters.py` gera páginas RGBA em
+`build/characters-bank-*-opaco-*.png`, com os recortes rotulados, em
+escala 1:1 e com a paleta do BMP. As páginas têm até 1024 × 1024 pixels.
+`--transparent-zero` grava uma variante `chave-zero` que simula a
+transparência do índice de paleta zero. No motor, a chave depende do bit
+15 da referência efetiva. Uma entrada da tabela fornece apenas o
+retângulo, então a transparência dessa variante é uma hipótese visual.
+O catálogo ainda deixa em aberto ajustes de paleta em jogo, identidades
+dos personagens e associação dos recortes às poses.
+
 ## Câmera e parallax horizontal
 
 | Endereço | Comportamento observado |

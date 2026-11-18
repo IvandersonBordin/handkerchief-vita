@@ -44,22 +44,24 @@ def read_cearth(data):
     return (base_x, base_y, reference_base), list(struct.iter_unpack("<Iii", section[start:end]))
 
 
-def read_bank(data):
-    """Converte o endereço virtual do banco em uma posição no PE32."""
-    if not data.startswith(b"MZ"):
-        raise ValueError("HDKWIN.EXE: assinatura MZ ausente")
+def read_bank(data, address=BANK_2_ADDRESS, next_address=None):
+    """Lê uma tabela de retângulos em .data, até o marcador X = -1."""
+    if len(data) < 64 or not data.startswith(b"MZ"):
+        raise ValueError("HDKWIN.EXE: cabeçalho DOS inválido ou truncado")
     pe, = struct.unpack_from("<I", data, 0x3C)
-    if data[pe:pe + 4] != b"PE\0\0":
-        raise ValueError("HDKWIN.EXE: assinatura PE ausente")
+    if pe + 24 > len(data) or data[pe:pe + 4] != b"PE\0\0":
+        raise ValueError("HDKWIN.EXE: cabeçalho PE inválido ou truncado")
     machine, section_count = struct.unpack_from("<HH", data, pe + 4)
     optional_size, = struct.unpack_from("<H", data, pe + 20)
     optional = pe + 24
+    if optional_size < 32 or optional + optional_size > len(data):
+        raise ValueError("HDKWIN.EXE: cabeçalho opcional inválido ou truncado")
     magic, = struct.unpack_from("<H", data, optional)
-    if machine != 0x14C or magic != 0x10B or optional_size < 32:
+    if machine != 0x14C or magic != 0x10B:
         raise ValueError("HDKWIN.EXE: esperado um PE32 x86")
 
     image_base, = struct.unpack_from("<I", data, optional + 28)
-    bank_rva = BANK_2_ADDRESS - image_base
+    bank_rva = address - image_base
     section_table = optional + optional_size
     if section_table + section_count * 40 > len(data):
         raise ValueError("HDKWIN.EXE: tabela de seções truncada")
@@ -71,32 +73,38 @@ def read_bank(data):
             continue
         relative = bank_rva - rva
         if not 0 <= relative < min(virtual_size, raw_size) or raw_offset + raw_size > len(data):
-            raise ValueError("HDKWIN.EXE: banco 2 fora dos dados gravados da seção .data")
+            raise ValueError(f"HDKWIN.EXE: tabela 0x{address:X} fora dos dados gravados de .data")
         entries = []
         end = raw_offset + min(virtual_size, raw_size)
-        for offset in range(raw_offset + relative, end - 7, 8):
+        start = raw_offset + relative
+        if next_address is not None:
+            span = next_address - address
+            if span < 8 or span % 8 or start + span > end:
+                raise ValueError(f"HDKWIN.EXE: limite inválido para a tabela 0x{address:X}")
+            end = start + span
+        for offset in range(start, end - 7, 8):
             entry = struct.unpack_from("<hhhh", data, offset)
-            if entry == (-1, -1, -1, -1):
+            if entry[0] == -1:
                 return entries
             entries.append(entry)
-        raise ValueError("HDKWIN.EXE: terminador do banco 2 ausente")
+        raise ValueError(f"HDKWIN.EXE: terminador ausente na tabela 0x{address:X}")
     raise ValueError("HDKWIN.EXE: seção .data ausente")
 
 
 def read_bitmap(data):
     """Lê a paleta e os índices de um BMP de 8 bits sem compressão."""
     if not data.startswith(b"BM"):
-        raise ValueError("HDKMAPA0.BMP: assinatura BMP ausente")
+        raise ValueError("BMP: assinatura BMP ausente")
     pixel_offset, dib_size, width, height, planes, depth, compression = struct.unpack_from(
         "<IIiiHHI", data, 10
     )
     if dib_size != 40 or planes != 1 or depth != 8 or compression != 0 or width <= 0 or height == 0:
-        raise ValueError("HDKMAPA0.BMP: esperado um BMP indexado de 8 bits sem compressão")
+        raise ValueError("BMP: esperado um BMP indexado de 8 bits sem compressão")
     colors, = struct.unpack_from("<I", data, 46)
     colors = colors or 256
     stride = (width + 3) & ~3
     if colors > 256 or 54 + colors * 4 > pixel_offset or pixel_offset + stride * abs(height) > len(data):
-        raise ValueError("HDKMAPA0.BMP: paleta ou pixels fora dos limites do arquivo")
+        raise ValueError("BMP: paleta ou pixels fora dos limites do arquivo")
 
     # A quarta componente da paleta BMP é reservada. A chave de cor é
     # aplicada por elemento, comparando o índice antes de consultar a paleta.
@@ -108,7 +116,7 @@ def read_bitmap(data):
     if height > 0:
         rows.reverse()
     if any(max(row) >= colors for row in rows):
-        raise ValueError("HDKMAPA0.BMP: pixel aponta para fora da paleta")
+        raise ValueError("BMP: pixel aponta para fora da paleta")
     return palette, rows
 
 

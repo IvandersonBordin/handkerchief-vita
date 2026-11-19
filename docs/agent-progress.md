@@ -7,6 +7,20 @@
 - B02 — em andamento. A Etapa 82 foi aprovada e a issue #8 recebeu
   `codex-ready`. A integração de posição e velocidade segue em aberto.
 
+## Ciclo do chamador da atualização da tabela (19/11/2026)
+
+A prioridade da issue #6 continua pelo elo autorizado no comentário
+7005659099. A chamada em `0x453707` segue `0x403E9F → 0x452E6A`.
+No ramo documentado, os despachos pelos slots `+0x08` e `+0x04`
+do objeto em `[receptor+0x38]` precedem a atualização em `0x4530F9`.
+As condições e os comandos estão em
+[hdk-format.md](hdk-format.md#chamador-da-atualização-da-tabela).
+
+A leitura direta do PE32 confirmou o SHA-256, quatro transferências,
+oito trechos e dois offsets. Os 31 testes locais e `git diff --check`
+passaram. O conector exigiu aprovação para comentar na issue #6,
+indisponível pela política da sessão. B02 segue em andamento.
+
 ## Ciclo dos ajustes de STAGE_0 (19/11/2026)
 
 O [comentário da issue #6](https://github.com/IvandersonBordin/handkerchief-vita/issues/6#issuecomment-7005659099)
@@ -404,9 +418,9 @@ A suíte local passou com 31 testes
 
 ## Próxima ação
 
-Para a prioridade da issue #6, rastrear quem chama o método que
-contém `0x4530F9` e verificar se a cadeia parte da preparação ou
-atualização de A0.
+Para a prioridade da issue #6, rastrear a origem de EDI em
+`0x453707` e a inicialização do campo `+0x38` do receptor
+para verificar se a cadeia alcança a instância usada em A0.
 
 Para B02, rastrear a chamada em `0x445F70`, a partir de
 `0x426953`, para verificar se o ramo alcança os campos

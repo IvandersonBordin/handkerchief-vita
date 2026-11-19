@@ -304,6 +304,41 @@ for intervalo in 40d17f:40d195 403b84:403b89 40d1fd:40d20d \
 done
 ```
 
+#### Chamador da atualização da tabela
+
+A chamada direta em `0x453707` (offset `0x52B07`) segue
+`0x403E9F → 0x452E6A`. O chamador passa EDI como receptor, um
+endereço na pilha para a saída e ESI como segundo argumento. O
+ramo em `0x4536F9` exige zero no byte em `[0x4AD228]+0x5C`
+para alcançar a chamada.
+
+O método zera a variável local `[EBP-4]` em `0x452E85`.
+No caminho que passa por `0x453005`, o retorno da chamada em
+`0x452FC3` é positivo e o método marca essa variável com 1.
+Nesse ramo, `0x45302E` chama o slot `+0x08` de
+`[receptor+0x38]`. Se o fluxo alcançar `0x4530A2` com a
+variável marcada, `0x4530E9` chama o slot `+0x04` do mesmo
+campo, passando o segundo argumento do método e dois zeros.
+A atualização da tabela vem depois, em `0x4530F9` (offset
+`0x524F9`). Os desvios em `0x453054` e `0x453063`
+também condicionam a chegada a esse bloco.
+
+Esse recorte estabelece a ordem entre os despachos e a escrita
+gráfica nesse ramo. Para associá-lo a A0, ainda é preciso
+identificar a instância em EDI no chamador e de onde vem seu
+campo `+0x38`. O valor efetivo dos slots durante o desenho
+de A0 segue em aberto.
+
+Com o mesmo `exe` acima, confira os recortes seguintes.
+
+```bash
+for intervalo in 4536d8:453719 403e9f:403ea4 452e6a:452ea5 \
+                 452fb5:45308c 4530a2:453108; do
+    objdump -d -Mintel --start-address="0x${intervalo%:*}" \
+        --stop-address="0x${intervalo#*:}" "$exe"
+done
+```
+
 ### Registro CEarthFluct
 
 O marcador em `0x093F` antecede um trecho com controles `0B 0B`

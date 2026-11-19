@@ -51,6 +51,19 @@ graphics API, or asset formats.
 ## Project Documentation
 Record important findings and decisions in docs/.
 
+## Regra prioritária de economia de tokens
+
+- Os timers de Bruno e Carlos devem aguardar 20 minutos após o término
+  de cada ciclo do respectivo agente.
+- Antes de chamar o Codex, o executor deve verificar localmente o bloqueio
+  de cota compartilhado. Se qualquer agente receber `usage limit`, bloquear
+  novas chamadas dos dois. Retomar manualmente após confirmar a renovação
+  da cota e receber o pedido de Ivan.
+- Reaproveite as evidências já registradas. Se a tarefa depende de hardware,
+  de uma decisão ou de um dado que continua ausente, registre o bloqueio
+  uma vez e aguarde uma mudança. Evite repetir investigações, testes ou
+  commits apenas para registrar mais um ciclo de espera.
+
 ## Validação e publicação automática
 
 Após cada tarefa de implementação ou documentação neste projeto:

@@ -48,15 +48,28 @@ foreach(sdk_tool IN ITEMS VITA_ELF_CREATE VITA_MAKE_FSELF VITA_MKSFOEX VITA_PACK
     endif()
 endforeach()
 
+# The SDK macro appends assets and SFO flags to variables in its caller's scope.
+function(package_vita_app target title_id title)
+    vita_create_self(${target}.self ${target})
+    vita_create_vpk(${target}.vpk ${title_id} ${target}.self
+        VERSION "01.00"
+        NAME "${title}"
+        ${vpk_files}
+    )
+endfunction()
+
 add_executable(handkerchief_smoke main.c sprite.c)
 target_compile_features(handkerchief_smoke PRIVATE c_std_11)
 target_compile_options(handkerchief_smoke PRIVATE -Wall -Wextra)
 target_link_libraries(handkerchief_smoke PRIVATE
     SceDisplay_stub SceCtrl_stub SceSysmem_stub SceKernelThreadMgr_stub)
 
-vita_create_self(handkerchief_smoke.self handkerchief_smoke)
-vita_create_vpk(handkerchief_smoke.vpk HKSM00001 handkerchief_smoke.self
-    VERSION "01.00"
-    NAME "Handkerchief Smoke Test"
-    ${vpk_files}
-)
+package_vita_app(handkerchief_smoke HKSM00001 "Handkerchief Smoke Test")
+
+add_executable(handkerchief_round round_main.c demo_round.c)
+target_compile_features(handkerchief_round PRIVATE c_std_11)
+target_compile_options(handkerchief_round PRIVATE -Wall -Wextra)
+target_link_libraries(handkerchief_round PRIVATE
+    SceDisplay_stub SceCtrl_stub SceSysmem_stub)
+
+package_vita_app(handkerchief_round HKRD00001 "Handkerchief Synthetic Round")

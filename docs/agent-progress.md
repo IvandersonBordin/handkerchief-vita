@@ -24,6 +24,35 @@ limites. A recomposição do fundo foi verificada por pixels no Linux.
 C05 — aguarda os insumos B02 e B03 para a movimentação e as colisões
 do jogo. A rodada sintética independente foi autorizada na issue #4.
 
+## Rodada sintética — aplicativo Vita separado
+
+- `vita-prototype/round_main.c` integra a lógica existente ao display e
+  ao controle do VitaSDK. Cada leitura válida após a sincronização da tela
+  avança um passo fixo. O app redesenha quando a posição ou o estado de
+  conclusão muda. Os dois buffers usam 4,5 MiB de CDRAM, com uma única
+  alocação na inicialização.
+- `vita-prototype/CMakeLists.txt` gera `HKRD00001` com os recursos
+  sintéticos já existentes da LiveArea. A primeira build falhou no
+  empacotamento porque a macro do SDK acumulava argumentos entre os
+  alvos. Isolar as chamadas em uma função resolveu a duplicação.
+- VitaSDK com GCC 15.2.0 compilou em Release com `-Werror` em
+  `build/vita-round.vMxen7`. Duas execuções da build paralela passaram
+  após a correção. O executável da rodada é ELF ARM de 32 bits, EABI5.
+  `check_livearea.py` e `check_vpk.py` aprovaram os dois VPKs, com seis
+  entradas cada e os IDs `HKRD00001` e `HKSM00001`. O teste existente
+  da lógica também passou no Linux com UBSan e avisos como erros.
+- Pacote local: `build/vita-round.vMxen7/handkerchief_round.vpk`.
+  SHA-256: `069297981f6a87e836cdcedfe622e2e0298198933a29ee07c8d6cae8cd3f0687`.
+- Validação física pendente. No console, abrir `HKRD00001`, mover para a
+  esquerda e para a direita, avançar até o obstáculo laranja e confirmar
+  que ele bloqueia a passagem no chão. Usar X com o direcional direito
+  para passar por cima, observar a aterrissagem e continuar até a linha
+  verde. O fundo deve ficar verde ao cruzar a saída. Soltar e pressionar X
+  para voltar ao início e encerrar com START. O cenário é todo sintético.
+- O comentário na issue #4 ficou pendente porque o conector exigiu
+  aprovação e a sessão não permite essa aprovação. Alterações locais
+  para revisão, sem commit ou push.
+
 ## Rodada sintética — lógica independente
 
 - `demo_round.c` e `demo_round.h` implementam uma rodada com passos

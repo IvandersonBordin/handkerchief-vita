@@ -66,7 +66,7 @@ target_link_libraries(handkerchief_smoke PRIVATE
 
 package_vita_app(handkerchief_smoke HKSM00001 "Handkerchief Smoke Test")
 
-add_executable(handkerchief_round round_main.c demo_round.c)
+add_executable(handkerchief_round round_main.c demo_round.c round_scene.c)
 target_compile_features(handkerchief_round PRIVATE c_std_11)
 target_compile_options(handkerchief_round PRIVATE -Wall -Wextra)
 target_link_libraries(handkerchief_round PRIVATE

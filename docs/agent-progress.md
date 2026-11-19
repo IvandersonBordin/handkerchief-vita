@@ -24,6 +24,42 @@ limites. A recomposição do fundo foi verificada por pixels no Linux.
 C05 — aguarda os insumos B02 e B03 para a movimentação e as colisões
 do jogo. A rodada sintética independente foi autorizada na issue #4.
 
+## Rodada sintética — camada opcional VISTA_0
+
+- `HKRD00001` lê opcionalmente `ux0:data/HKVW00001/vista0.rgba`, o
+  caminho da demo de referência. O arquivo bruto tem 4464 × 384 pixels
+  de 32 bits no formato A8B8G8R8. A câmera acompanha o jogador
+  horizontalmente, e os obstáculos e a saída permanecem na geometria
+  sintética. Com arquivo ausente, curto, excedente ou com erro de
+  leitura, o aplicativo desenha a rodada sintética. O VPK contém apenas
+  as seis entradas habituais, com a LiveArea sintética.
+- O cenário usa 6.856.704 bytes de armazenamento estático. Os dois
+  buffers de vídeo continuam usando 4,5 MiB de CDRAM.
+- No Linux, o teste abaixo gerou seus próprios pixels e verificou a
+  leitura, o fallback, o deslocamento da câmera por comparação de
+  pixels, o salto, a saída e o reinício. O teste existente da lógica
+  também passou com avisos como erros e UBSan.
+
+  ```sh
+  dest=$(mktemp -d /tmp/hkrd-host.XXXXXX) &&
+    gcc -std=c11 -Wall -Wextra -Werror -pedantic -fsanitize=undefined \
+      -fno-sanitize-recover=all vita-prototype/demo_round.c \
+      vita-prototype/round_scene.c vita-prototype/test_round_scene.c \
+      -o "$dest/test_round_scene" &&
+    "$dest/test_round_scene" "$dest/synthetic.rgba"
+  ```
+
+- VitaSDK com GCC 15.2.0 compilou em Release com `-Werror`. Os dois
+  verificadores aprovaram `HKRD00001` e `HKSM00001`. O SHA-256 do
+  `eboot.bin` de `HKSM00001` coincidiu com o da build anterior.
+- Pacote local: `build/vita-round-scene.Ik0weV/handkerchief_round.vpk`.
+  SHA-256: `182a389a613adbad5b249eb27f43750fea737d923118d86f2bf1395818ef833d`.
+  A validação física da rodada permanece pendente. Este ciclo usou
+  exclusivamente dados sintéticos e deixou as alterações locais para
+  revisão. [Tarefa na issue #4](https://github.com/IvandersonBordin/handkerchief-vita/issues/4#issuecomment-6997924705)
+- O conector do GitHub exigiu aprovação para publicar o resumo na
+  issue #4. A política da sessão impediu a publicação.
+
 ## Rodada sintética — aplicativo Vita separado
 
 - `vita-prototype/round_main.c` integra a lógica existente ao display e

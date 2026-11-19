@@ -5,40 +5,18 @@
 #include <psp2/display.h>
 #include <psp2/kernel/sysmem.h>
 
-#include "demo_round.h"
+#include "round_scene.h"
 
 enum {
-    WIDTH = 960,
-    HEIGHT = 544,
-    PITCH = 1024,
     CDRAM_ALIGNMENT = 256 * 1024,
-    FRAME_BYTES = PITCH * HEIGHT * sizeof(uint32_t),
+    FRAME_BYTES = ROUND_PITCH * ROUND_HEIGHT * sizeof(uint32_t),
     FRAME_STORAGE = (FRAME_BYTES + CDRAM_ALIGNMENT - 1) / CDRAM_ALIGNMENT * CDRAM_ALIGNMENT,
 };
 
-static void fill_rect(uint32_t *pixels, int left, int top, int right, int bottom,
-                      uint32_t color)
-{
-    for (int y = top; y < bottom; ++y)
-        for (int x = left; x < right; ++x)
-            pixels[y * PITCH + x] = color;
-}
-
-static void draw_round(uint32_t *pixels, const DemoRound *round)
-{
-    fill_rect(pixels, 0, 0, PITCH, DEMO_FLOOR_Y,
-              round->finished ? 0xff234d23 : 0xff302028);
-    fill_rect(pixels, 0, DEMO_FLOOR_Y, PITCH, HEIGHT, 0xff524545);
-    fill_rect(pixels, DEMO_OBSTACLE_LEFT, DEMO_OBSTACLE_TOP,
-              DEMO_OBSTACLE_RIGHT, DEMO_FLOOR_Y, 0xff0088dd);
-    fill_rect(pixels, DEMO_EXIT_X, DEMO_FLOOR_Y - 80,
-              DEMO_EXIT_X + 4, DEMO_FLOOR_Y, 0xff55ef70);
-    fill_rect(pixels, round->x, round->feet_y - DEMO_PLAYER_SIZE,
-              round->x + DEMO_PLAYER_SIZE, round->feet_y, 0xffffffff);
-}
-
 int main(void)
 {
+    round_scene_load("ux0:data/HKVW00001/vista0.rgba");
+
     const SceUID block = sceKernelAllocMemBlock("round_frames",
         SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW, 2 * FRAME_STORAGE, NULL);
     if (block < 0)
@@ -51,16 +29,16 @@ int main(void)
 
     DemoRound round;
     demo_round_init(&round);
-    draw_round(base, &round);
+    round_scene_draw(base, &round);
 
     uint32_t *back_buffer = (uint32_t *)((uint8_t *)base + FRAME_STORAGE);
     SceDisplayFrameBuf frame = {
         .size = sizeof(frame),
         .base = base,
-        .pitch = PITCH,
+        .pitch = ROUND_PITCH,
         .pixelformat = SCE_DISPLAY_PIXELFORMAT_A8B8G8R8,
-        .width = WIDTH,
-        .height = HEIGHT,
+        .width = ROUND_WIDTH,
+        .height = ROUND_HEIGHT,
     };
     if (sceDisplaySetFrameBuf(&frame, SCE_DISPLAY_SETBUF_NEXTFRAME) < 0)
         goto cleanup;
@@ -84,7 +62,7 @@ int main(void)
             round.finished == previous.finished)
             continue;
 
-        draw_round(back_buffer, &round);
+        round_scene_draw(back_buffer, &round);
         uint32_t *old_front = frame.base;
         frame.base = back_buffer;
         if (sceDisplaySetFrameBuf(&frame, SCE_DISPLAY_SETBUF_NEXTFRAME) < 0)

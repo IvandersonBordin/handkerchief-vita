@@ -442,6 +442,27 @@ proveniente de um registro de `STAGE_0` de A0.
 Para reproduzir, use `objdump -d -Mintel --start-address=0x435ef4 --stop-address=0x43609c "$exe"`
 e confira o salto no intervalo de `0x4014EC` a `0x4014F1` (fim exclusivo).
 
+#### Inicialização das referências da primeira entrada
+
+Em `0x45282C`, o chamador guarda EAX em `[ESI+0x48]`. Em
+`0x452835`, passa esse mesmo ponteiro em ECX como receptor. A chamada
+em `0x452840` passa por `0x403C92` e chega a `0x435E7D`. Os três
+últimos valores empilhados tornam-se os três primeiros argumentos.
+
+| Campo da entrada | Origem no chamador | Instrução que empilha | Instrução que grava |
+| --- | --- | --- | --- |
+| `+0x28` | Primeiro argumento do chamador, em `[EBP+8]` | `0x45283D` | `0x435E87` |
+| `+0x2C` | Palavra de 32 bits em `[EDI+0x489B90]` | `0x452837` | `0x435E8D` |
+| `+0x30` | Palavra de 32 bits em `[EDI+0x489BB0]` | `0x45282F` | `0x435E97` |
+
+O quinto argumento, a constante `0x4B` empilhada em `0x452829`,
+preenche `+0x34` em `0x435EA7`. Portanto, ao retornar da inicialização,
+esse campo já satisfaz o teste de valor diferente de zero do slot
+`+0x04`. A execução desse slot no desenho de A0 continua em aberto.
+Para reproduzir, use `objdump -d -Mintel` nos intervalos
+`[0x452828, 0x452845)`, `[0x403C92, 0x403C97)` e
+`[0x435E7D, 0x435EB4)` do executável original.
+
 #### Origem do seletor em 0x4ABFD8
 
 O receptor da chamada em `0x440C19` é o subobjeto embutido em

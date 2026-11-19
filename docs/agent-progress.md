@@ -526,3 +526,14 @@ quem fornece as referências usadas nessa entrada no ramo de A0.
 Os 31 testes locais passaram. O próximo rastreio é verificar se
 a inicialização chamada em `0x452840` grava os campos `+0x28`,
 `+0x2C` ou `+0x30` lidos pelo slot.
+
+## Ciclo da inicialização da primeira entrada — issue #6
+
+A chamada em `0x452840` fornece as três referências lidas pelo slot
+`+0x04`. O campo `+0x28` recebe o primeiro argumento do chamador.
+Os campos `+0x2C` e `+0x30` recebem valores de duas tabelas acessadas
+com o mesmo deslocamento em EDI. Os endereços de leitura e escrita
+estão no [rastreio da inicialização](hdk-format.md#inicialização-das-referências-da-primeira-entrada).
+A conferência foi estática com GNU objdump e os 31 testes locais passaram.
+O próximo passo é identificar a origem de EDI em `0x45282F` e verificar
+quais entradas das tabelas são selecionadas no caminho de A0.

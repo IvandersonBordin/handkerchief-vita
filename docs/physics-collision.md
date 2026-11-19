@@ -112,6 +112,42 @@ for intervalo in 445c17:445c31 445cd2:445cfa 4462bb:4462ca 4027ed:4027f2 \
 done
 ```
 
+### Leitura do nome em +0x50
+
+Na cadeia `0x4462B6 → 0x40374C → 0x429BA0`, o XOR
+transforma a máscara `0x04` em `0x0E`, deixando o bit
+`0x10` limpo. Se a verificação em `0x429BC1` retorna
+um valor diferente de zero e `[fluxo+0x30] = 0`,
+`0x429BE2` calcula o endereço `CCastMK+0x50`. A chamada
+em `0x429BEA` (offset de arquivo `0x28FEA`) passa esse
+endereço e o limite `0x0C` a `0x402E8C → 0x40AB0E`,
+com o fluxo em `ECX`.
+
+No caminho em `0x40AB3C`, a chamada em `0x40AB47` passa
+a `0x45D930` o endereço de destino, tamanho de elemento 1,
+quantidade 12 e o ponteiro do fluxo em `[fluxo+0x18]`.
+Depois de copiar, o leitor procura o byte zero no destino
+e ajusta o cursor em `[fluxo+0x24]` em `0x40AB60`.
+Quando encontra o zero dentro do limite, o avanço conta
+também o terminador. Em outro ramo, `0x40AB35` zera o
+primeiro byte do destino. Portanto, a janela pedida à rotina
+de leitura tem 12 bytes, mas o avanço pode ser menor.
+
+Esse caminho identifica como o nome usado na busca chega
+ao próprio `CCastMK`. O offset dessa janela em um registro
+específico de A0.HDK e uma escrita na origem durante a
+atualização continuam em aberto.
+
+Com o `exe` da seção de reprodução, confira os intervalos abaixo.
+
+```bash
+for intervalo in 4462b1:4462ca 40374c:403751 429ba0:429c01 \
+                 402e8c:402e91 40ab0e:40ab6d 45d930:45d956; do
+    objdump -d -Mintel --start-address="0x${intervalo%:*}" \
+        --stop-address="0x${intervalo#*:}" "$exe"
+done
+```
+
 ## Escrita da origem durante leitura de dados
 
 O slot `+0x0C` da tabela de `CCastMK` (endereço `0x471EBC`)

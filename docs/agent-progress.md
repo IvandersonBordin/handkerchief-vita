@@ -7,6 +7,21 @@
 - B02 — em andamento. A Etapa 82 foi aprovada e a issue #8 recebeu
   `codex-ready`. A integração de posição e velocidade segue em aberto.
 
+## Ciclo de leitura do nome em +0x50 — B02 (18/11/2026)
+
+A issue #8 segue aberta com `codex-ready`. O leitor passa
+`CCastMK+0x50` como destino e solicita uma janela de 12 bytes.
+O cursor pode avançar menos ao encontrar o terminador. A cadeia
+e a reprodução estão em
+[physics-collision.md](physics-collision.md#leitura-do-nome-em-0x50).
+A associação a um registro específico de A0.HDK e a escrita
+em X/Y durante a atualização seguem em aberto.
+
+A leitura direta do PE32 confirmou o SHA-256, cinco
+transferências relativas, cinco trechos e um offset de arquivo.
+Os 31 testes passaram. A política de aprovação da sessão
+impediu a publicação do resumo na issue #8.
+
 ## Ciclo de origem do ponteiro +0x78 — B02 (18/11/2026)
 
 A issue #8 permanece aberta com `codex-ready`. O leitor de
@@ -357,9 +372,9 @@ A suíte local passou com 31 testes
 
 ## Próxima ação
 
-Para B02, rastrear o preenchimento de `CCastMK+0x50` a partir
-de um registro de fase para identificar a entrada da busca
-que alcança o slot `+0x10` em `0x42972C`.
+Para B02, rastrear o cursor entre a entrada do leitor de
+`CCastMK` e `0x429BEA` para localizar a janela em um
+registro de `ENEMY_0` de A0.HDK.
 A integração por quadro, a gravidade e o salto seguem em aberto.
 
 O conector do GitHub listou as issues abertas. Nenhuma correspondia à

@@ -51,6 +51,10 @@ graphics API, or asset formats.
 ## Project Documentation
 Record important findings and decisions in docs/.
 
+Ao aplicar a skill `vita-port` neste projeto, consulte o
+[plano de recompilação](docs/plano-recompilacao.md) para ver as referências
+avaliadas, o procedimento experimental e os critérios de autorização.
+
 ## Regra prioritária de economia de tokens
 
 - Os timers verificam localmente a cada minuto se há trabalho liberado.

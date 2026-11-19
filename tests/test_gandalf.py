@@ -21,7 +21,7 @@ class Supervisor(unittest.TestCase):
             stack.enter_context(patch.object(g, attr, value))
         self.tests = stack.enter_context(patch.object(g, "tests"))
         self.review = stack.enter_context(patch.object(g, "review", return_value={
-            "decision": "approve", "reason": "testado", "release": True}))
+            "decision": "approve", "reason": "testado", "next_action": "b03-edi"}))
         self.git = lambda *args: subprocess.check_output(["git", "-C", root, *args], text=True).strip()
         self.git("init", "-qb", "main")
         self.git("config", "user.name", "Teste")
@@ -49,7 +49,7 @@ class Supervisor(unittest.TestCase):
         self.tick()
         self.tick(20000)
         self.review.assert_called_once()
-        self.assertTrue((self.state / "bruno.approved").exists())
+        self.assertEqual(self.db["grants"]["bruno/" + self.head]["action"], "b03-edi")
 
     def test_lock_quota_and_cooldown(self):
         with g.lock("bruno"):
@@ -76,14 +76,14 @@ class Supervisor(unittest.TestCase):
         self.review.assert_not_called()
 
     def test_dependency_and_hold(self):
-        (self.state / "bruno.pending").write_text(self.head + "\nexaminar\ncarlos/abc\n")
+        (self.state / "bruno.pending").write_text(self.head + "\nexaminar\ncarlos/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n")
         self.tick()
         self.review.assert_not_called()
-        self.db["approved"]["carlos/abc"] = True
-        self.review.return_value["decision"] = "hold"
+        self.db["approved"]["carlos/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] = True
+        self.review.return_value.update(decision="hold", next_action="hold")
         self.tick()
         self.review.assert_called_once()
-        self.assertFalse((self.state / "bruno.approved").exists())
+        self.assertNotIn("grants", self.db)
 
     def test_budget_and_interrupted_reservation(self):
         self.db["calls"] = list(range(8))
@@ -107,3 +107,31 @@ class Supervisor(unittest.TestCase):
         self.review.side_effect = None
         self.tick(20001)
         self.assertEqual(self.review.call_count, 2)
+
+    def test_hold_empty_proposal_consumed_once(self):
+        self.review.return_value["decision"] = "hold"
+        self.tick()
+        self.assertFalse(self.db["approved"])
+        (self.state / "gandalf.json").write_text(g.json.dumps(self.db))
+        self.assertEqual(g.consume("bruno", self.root), 0)
+        self.assertEqual(g.consume("bruno", self.root), 4)
+        self.commit("tools/new")
+        self.assertEqual(g.consume("bruno", self.root), 3)
+
+    def test_approval_does_not_authorize_unknown_action(self):
+        self.review.return_value["next_action"] = "installer"
+        self.tick()
+        self.assertNotIn("grants", self.db)
+
+    def test_legacy_migration_preserves_verdict_and_budget(self):
+        key = "bruno/" + self.head + "/" + g.hashlib.sha256(b"").hexdigest()
+        previous = {"decision": "hold", "release": False, "reason": "dados"}
+        self.db["events"][key] = previous.copy()
+        self.db["calls"] = [9800]
+        with patch.object(g, "LEGACY_SHA", self.head):
+            self.tick()
+            self.tick()
+        self.review.assert_not_called()
+        self.assertEqual(self.db["events"][key], previous)
+        self.assertEqual(self.db["calls"], [9800])
+        self.assertEqual(len(self.db["grants"]), 1)

@@ -6,7 +6,17 @@ O serviço testa um arquivo Git do SHA em bwrap, sem rede, com fontes somente pa
 
 O intervalo mínimo entre chamadas de Gandalf é 20 minutos e o teto é oito chamadas por janela móvel de 24 horas. O limite é local a Gandalf. Todos respeitam o arquivo usage-limit. O desbloqueio de cota continua manual após confirmar a renovação. O estado inclui o SHA, a identidade da proposta e a decisão. Um teste reprovado, interrupção após a reserva ou erro do revisor estaciona o evento. Uma alteração técnica publicada permite nova avaliação. Falha de cota permite retomar após desbloqueio e respeita o intervalo mínimo. Alterações exclusivamente no diário e sondagens ociosas dispensam o modelo.
 
-Para uma tarefa já autorizada que dependa do outro agente, o coordenador pode preparar no diretório de estado um arquivo bruno.pending ou carlos.pending. As linhas são o SHA completo da entrega do próprio agente, a ação técnica em uma linha e, opcionalmente, o identificador do pré-requisito no formato agente/SHA-completo. Grave por renomeação atômica enquanto o agente estiver em espera. A aprovação registrada do pré-requisito habilita a revisão da proposta. O revisor só libera a ação fornecida. Bloqueios que exigem decisão humana permanecem em espera.
+Para uma tarefa já autorizada que dependa do outro agente, o coordenador pode preparar no diretório de estado um arquivo bruno.pending ou carlos.pending. As linhas são o SHA completo da entrega do próprio agente, a ação técnica em uma linha e, opcionalmente, o identificador do pré-requisito no formato agente/SHA-completo. Grave por renomeação atômica enquanto o agente estiver em espera. A aprovação registrada do pré-requisito habilita a revisão da proposta. O revisor pode escolher uma ação do catálogo mesmo com proposta ausente. Bloqueios que exigem decisão humana permanecem em espera.
+
+## Continuação e migração
+
+O campo `decision` registra o parecer sobre a entrega. O campo `next_action` registra espera ou uma ação do catálogo mantido em `deploy/gandalf.py`. A mesma chamada decide ambos. O executor recebe exclusivamente a instrução fixa correspondente ao agente. Os pareceres e os textos de propostas ficam fora dessa instrução. C05 permanece bloqueada.
+
+Cada autorização em `grants` inclui agente, SHA, identificador da tarefa e dependência explícita. Sob as travas existentes, o executor valida o recibo, a branch e sua referência publicada e cria um marcador exclusivo antes de iniciar o agente. Se houver interrupção após o consumo, o marcador preserva a execução única. Autorizações antigas em arquivo .approved exigem inspeção. Uma proposta com dependência ausente ou inválida aguarda correção ou evidência.
+
+Para Bruno no SHA `80375220230ce2a4c7276d4ed5d7363dee84b7de`, o parecer anterior já registrou testes aprovados e hold com proposta vazia. A migração acrescenta uma autorização para a investigação estática de EDI, +0x38 e slots virtuais quando esse SHA ainda é a ponta publicada. Preserva o parecer e o histórico de chamadas.
+
+A validação local da alteração passou em dez testes Python e na suíte Bash do executor com Git temporário. Foram exercitados hold com e sem continuação, proposta vazia, escopo, dependência, consumo único, SHA obsoleto, repetição, falha de teste, migração, cota e sondagem ociosa.
 
 ## Operação
 

@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
 # O teste usa um Git temporário e executores simulados, sem modelo nem rede.
 set -eu
-repo=$(git rev-parse --show-toplevel)
+repo=$(cd "$(dirname "$0")/.." && pwd)
 fixture=$(mktemp -d)
 trap 'python3 -c "import shutil,sys; shutil.rmtree(sys.argv[1])" "$fixture"' EXIT
 mkdir -p "$fixture/bin" "$fixture/work/docs"
 export XDG_STATE_HOME="$fixture/state" FIXTURE="$fixture"
 cycle="$fixture/cycle"
-sed -e "s|\$HOME/.local/bin/|$fixture/bin/|g" \
+sed -e "s|\$HOME/Projetos/handkerchief-vita/deploy/gandalf.py|$repo/deploy/gandalf.py|g" -e "s|\$HOME/.local/bin/|$fixture/bin/|g" \
     -e "s|\$HOME/Projetos/handkerchief-vita-\$agent|$fixture/work|g" \
     "${1:-$repo/deploy/handkerchief-cycle}" > "$cycle"
 cd "$fixture/work"
-git init -q
+git init -qb agent/reverse-engineering
 git config user.name teste
 git config user.email teste@localhost
 git commit -qm inicio --allow-empty
@@ -45,7 +45,9 @@ test "$(cat "$schedule")" = 'espera 0'
 test "$(head -1 "$state/bruno.pending")" = "$(git rev-parse HEAD)"
 run
 test "$(calls)" = 1
-cp "$state/bruno.pending" "$state/bruno.approved"
+head=$(git rev-parse HEAD)
+git update-ref refs/remotes/origin/agent/reverse-engineering "$head"
+printf '{"approved":{},"grants":{"bruno/%s":{"agent":"bruno","sha":"%s","action":"b03-edi","dependency":""}}}' "$head" "$head" > "$state/gandalf.json"
 run
 test "$(calls)" = 2
 run

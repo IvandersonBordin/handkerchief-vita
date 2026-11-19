@@ -22,19 +22,20 @@ due=0
 if [[ -f "$schedule" ]]; then
     read -r mode due < "$schedule"
 fi
-head=$(git -C "$worktree" rev-parse HEAD)
-approved="$state/$agent.approved"
 handoff=""
-if [[ -s "$approved" ]]; then
-    { read -r reviewed; IFS= read -r handoff; } < "$approved"
-    if [[ "$reviewed" != "$head" || "$mode" != espera ]]; then
-        echo "Aprovação obsoleta para $agent." >&2
-        mv "$approved" "$approved.stale"
-        exit 0
-    fi
-    mv "$approved" "$approved.consumed"
-    mode=normal
-    due=0
+if [[ -e "$state/$agent.approved" ]]; then
+    echo "Autorização legada aguarda inspeção." >&2
+    exit 0
+fi
+if [[ -e "$state/gandalf.json" ]]; then
+    status=0
+    handoff=$(python3 -B "$HOME/Projetos/handkerchief-vita/deploy/gandalf.py" consume "$agent" "$worktree") || status=$?
+    case "$status" in
+        0) mode=normal; due=0; echo "Consumida continuação de $agent: $handoff" ;;
+        3) ;;
+        4) exit 0 ;;
+        *) exit "$status" ;;
+    esac
 fi
 if [[ "$mode" == espera ]] || (( $(date +%s) < due )); then
     exit 0
@@ -83,9 +84,7 @@ agent_status=0
     done || agent_status=$?
 if [[ -e "$marker" ]]; then
     # A liberação manual do marcador compartilhado deve permitir retomar.
-    if [[ -n "$handoff" ]]; then
-        mv "$approved.consumed" "$approved"
-    else
+    if [[ -z "$handoff" ]]; then
         set_schedule normal 0
     fi
     exit 0

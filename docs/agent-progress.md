@@ -7,6 +7,25 @@
 - B02 — em andamento. A Etapa 82 foi aprovada e a issue #8 recebeu
   `codex-ready`. A integração de posição e velocidade segue em aberto.
 
+## Ciclo da chamada em 0x445F70 — B02 (19/11/2026)
+
+A issue #8 está aberta com `codex-ready`. O recorte autorizado
+segue `0x445F70 → 0x4035D5 → 0x426953`, com os parâmetros
+`(código, X, Y, 0)`. A escrita em `0x45C7A0` grava zero
+no campo `+0x18` de uma entrada selecionada por tabela.
+As instruções `0x426A4A` e `0x426A50` leem o par
+`+0x18/+0x1C` de um ponteiro obtido por outra busca.
+A identidade dos receptores em execução e a escrita da
+origem do próprio `CCastMK` seguem em aberto. A cadeia e
+os comandos estão em
+[physics-collision.md](physics-collision.md#destino-da-chamada-em-0x445f70).
+
+A leitura direta do PE32 confirmou o SHA-256, 16 transferências,
+seis trechos e dois offsets. Os 31 testes e `git diff --check`
+passaram. A política da sessão impediu a aprovação exigida
+pelo conector para publicar na issue #8. O ciclo fica para
+revisão local e B02 segue em andamento.
+
 ## Ciclo da instância e dos destinos virtuais (19/11/2026)
 
 Na continuidade da issue #6, EDI em `0x453707` vem da instância
@@ -440,9 +459,9 @@ Para a prioridade da issue #6, resolver o slot `+0x10` do
 subobjeto em `ESI+0xB8` na chamada de `0x440C19` e
 rastrear o valor gravado em `0x4ABFD8` em `0x440C1D`.
 
-Para B02, rastrear a chamada em `0x445F70`, a partir de
-`0x426953`, para verificar se o ramo alcança os campos
-`+0x18/+0x1C` do próprio `CCastMK`.
+Para B02, rastrear a origem das entradas do vetor percorrido
+após `0x445F7B` e verificar se algum destino do slot `+0x18`
+recebe o `CCastMK` pai e escreve no par de origem dele.
 A integração por quadro, a gravidade e o salto seguem em aberto.
 
 O conector do GitHub listou as issues abertas. Nenhuma correspondia à

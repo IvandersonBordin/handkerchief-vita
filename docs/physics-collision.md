@@ -89,16 +89,68 @@ Os valores empilhados de X e Y ficam sem leitura nesse corpo.
 
 O chamador transforma o bit baixo do retorno em `0x1E` ou
 `0x1F` e empilha esse código para a chamada de `0x445F70`,
-com `[ator+0x48]` em `ECX`. O trecho até `0x445F60` delimita
-uma escrita no contador. A chamada seguinte
-(`0x4035D5 → 0x426953`) ainda precisa ser rastreada para
-verificar se alcança a origem do próprio ator.
+com `[ator+0x48]` em `ECX`. A chamada em `0x445F70`
+(offset de arquivo `0x45370`) segue `0x4035D5 → 0x426953`.
+
+### Destino da chamada em 0x445F70
+
+O retorno simples em `0x40F52C` deixa os três argumentos na
+pilha. Com o código adicional empilhado em `0x445F6F`, a
+rotina em `0x426953` recebe quatro valores, na ordem
+`(código, X, Y, 0)`, e os remove com `ret 0x10`. O código é
+`0x1E` se o retorno anterior for ímpar e `0x1F` se for par.
+
+1. Em `0x42695F → 0x4036B1 → 0x42683A`, o receptor
+   `[ator+0x48]` fornece um teste de disponibilidade. A rotina
+   retorna zero se qualquer bit da máscara `0x10020` estiver
+   ativo no campo `+0x58`. Caso contrário, retorna o valor lido
+   seguindo os campos `+0x20 → +0x04 → +0x20`. Um retorno
+   zero encerra o ramo em `0x426992`.
+2. Com teste diferente de zero, `0x426983 → 0x40370B →
+   0x45D1F6` usa o código para selecionar uma entrada da
+   tabela em `[0x4AD3D0+0x04]`, após os testes de faixa
+   em `0x45D1A5`. Para uma entrada válida, `0x45D213 →
+   0x40249B → 0x45CD31` seleciona outra entrada em
+   `0x45CD50` e a usa como receptor de
+   `0x45CD57 → 0x402B08 → 0x45C78E`. A escrita em
+   `0x45C7A0` (offset `0x5BBA0`) grava o primeiro parâmetro
+   desse último método em `[receptor+0x18]`. Neste caminho,
+   o valor vem do zero empilhado em `0x42697F`, que é
+   o primeiro parâmetro depois do código na chamada em
+   `0x426983`. O receptor vem das duas seleções
+   de tabela. Nesse recorte, falta estabelecer a identidade
+   em execução da entrada e resolver suas chamadas indiretas
+   em `0x45C7B7`, `0x45C7E3` e `0x45C812`.
+3. `0x42698B → 0x403D14 → 0x426A11` recebe o identificador
+   retornado, X, Y, zero e `0x1000`. Quando o identificador
+   e o teste de disponibilidade passam, `0x426A33 →
+   0x403A03 → 0x42494E` resolve outro ponteiro a partir
+   de `[ator+0x48]`, por uma tabela indexada pelo campo
+   `+0x64` desse receptor. Se a comparação em `0x426A41`
+   passa, `0x426A4A` e `0x426A50` **leem** o par
+   `+0x18/+0x1C` desse ponteiro e `0x426A53/0x426A5B`
+   subtraem o par dos argumentos X/Y. Os caminhos finais
+   chamam métodos com receptor fixo `0x4AD3D0` e passam
+   o identificador, com ou sem os valores calculados.
+
+O trecho confirma uma escrita isolada de zero em `+0x18` de
+uma entrada selecionada por índice e uma leitura de um par de
+coordenadas em outro ponteiro. A cadeia examinada ainda não
+identifica um escritor do par de origem do próprio `CCastMK`.
+Após o retorno, a chamada em `0x445F7B` percorre o
+[vetor de filhos](#despacho-do-slot-0x18-e-uso-da-origem),
+um caminho distinto.
 
 Com o `exe` da seção de reprodução, confira estes intervalos.
 
 ```bash
-for intervalo in 445ee9:445f75 4033f0:4033f5 40f512:40f52d \
-                 4035d5:4035da 426953:426999; do
+for intervalo in 445ee9:445f86 4033f0:4033f5 40f512:40f52d \
+                 4035d5:4035da 426953:426999 4036b1:4036b6 \
+                 42683a:426850 40370b:403710 45d1f6:45d23a \
+                 401feb:401ff0 45d1a5:45d1c8 40249b:4024a0 \
+                 45cd31:45cd63 402b08:402b0d 45c78e:45c828 \
+                 403d14:403d19 426a11:426b31 403a03:403a08 \
+                 42494e:424960; do
     objdump -d -Mintel --start-address="0x${intervalo%:*}" \
         --stop-address="0x${intervalo#*:}" "$exe"
 done

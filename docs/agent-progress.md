@@ -7,6 +7,20 @@
 - B02 — em andamento. A Etapa 82 foi aprovada e a issue #8 recebeu
   `codex-ready`. A integração de posição e velocidade segue em aberto.
 
+## Ciclo de origem do ponteiro +0x78 — B02 (18/11/2026)
+
+A issue #8 permanece aberta com `codex-ready`. O leitor de
+`CCastMK` grava em `+0x78` o resultado de uma busca pelo nome
+em dois vetores. Isso delimita de onde vem o receptor de
+`0x42972C`. O método concreto e seu efeito sobre X/Y seguem
+em aberto. A cadeia e a reprodução constam em
+[physics-collision.md](physics-collision.md#origem-do-receptor-em-0x78).
+
+A leitura direta conferiu o SHA-256, nove transferências
+relativas, nove trechos de instruções e um offset de arquivo.
+Os 31 testes locais passaram. A política da sessão impediu
+a aprovação exigida pelo conector para comentar na issue #8.
+
 ## Ciclo de escrita direta no slot +0x18 — B02 (18/11/2026)
 
 A issue #8 continua aberta com `codex-ready`. A escrita por
@@ -343,9 +357,9 @@ A suíte local passou com 31 testes
 
 ## Próxima ação
 
-Para B02, rastrear a atribuição a `CCastMK+0x78` para
-resolver o slot `+0x10` chamado em `0x42972C` e verificar
-se o método pode alcançar a origem do ator.
+Para B02, rastrear o preenchimento de `CCastMK+0x50` a partir
+de um registro de fase para identificar a entrada da busca
+que alcança o slot `+0x10` em `0x42972C`.
 A integração por quadro, a gravidade e o salto seguem em aberto.
 
 O conector do GitHub listou as issues abertas. Nenhuma correspondia à

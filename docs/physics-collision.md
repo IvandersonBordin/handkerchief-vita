@@ -71,6 +71,47 @@ um `CCastMK`, a ligação com `STAGE_0` ou `CRock` e a resposta física
 seguem em aberto. Também faltam as unidades das coordenadas e a
 origem do Y alternativo.
 
+## Origem do receptor em +0x78
+
+Na inicialização, a chamada em `0x445CE8` passa zero a
+`0x4027ED → 0x425586`, que retorna zero nesse caso. A instrução
+em `0x445CED` grava o retorno em `CCastMK+0x78`. O caminho
+de cópia em `0x445C22–0x445C28` usa o campo equivalente do
+objeto fonte.
+
+Após a leitura em `0x4462B6`, a chamada em `0x4462C2` usa
+a mesma função, agora com `[ator+0x48]` como receptor e o endereço
+`ator+0x50` como argumento. O retorno vai para `ator+0x78`
+em `0x4462C7` (offset de arquivo `0x456C7`).
+
+Em `0x425598`, a função busca no vetor apontado por
+`[receptor+0x50]`. Se o retorno for zero, repete a busca em
+`0x4255A8`, com o vetor apontado por `[[receptor+0x3C]+0x70]`.
+Ambas as chamadas seguem `0x402E28 → 0x42967F`. A busca
+percorre o vetor de ponteiros em `+0x04` até a contagem em
+`+0x08`. Para cada entrada, `0x429697` chama
+`0x4025EF → 0x4293AC`, que usa a comparação de strings em
+`0x45DA70` com o argumento da busca e o ponteiro em
+`entrada+0x08`. A primeira entrada que coincide é devolvida
+em `0x4296AE`. Sem coincidência, a busca retorna zero.
+
+Assim, neste caminho de leitura, o receptor de `0x42972C`
+depende do nome em `ator+0x50` e da ordem dos vetores. Falta
+demonstrar qual entrada corresponde a um registro de fase e
+qual método concreto ocupa o slot `+0x10`. Segue em aberto
+se a chamada pode escrever na origem do ator.
+
+Com o `exe` da seção de reprodução, examine os intervalos abaixo.
+
+```bash
+for intervalo in 445c17:445c31 445cd2:445cfa 4462bb:4462ca 4027ed:4027f2 \
+                 425586:4255b2 402e28:402e2d 42967f:4296b2 4025ef:4025f4 \
+                 4293ac:4293c2 45da70:45db00 42970e:429736; do
+    objdump -d -Mintel --start-address="0x${intervalo%:*}" \
+        --stop-address="0x${intervalo#*:}" "$exe"
+done
+```
+
 ## Escrita da origem durante leitura de dados
 
 O slot `+0x0C` da tabela de `CCastMK` (endereço `0x471EBC`)

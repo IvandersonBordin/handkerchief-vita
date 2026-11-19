@@ -7,6 +7,21 @@
 - B02 — em andamento. A Etapa 82 foi aprovada e a issue #8 recebeu
   `codex-ready`. A integração de posição e velocidade segue em aberto.
 
+## Ciclo de escrita direta no slot +0x18 — B02 (18/11/2026)
+
+A issue #8 continua aberta com `codex-ready`. A escrita por
+ponteiro em `0x445E19` decrementa `CCastMK+0x94`. As demais
+escritas diretas no ator nesse método atingem `+0x84`. A
+análise também delimitou uma chamada indireta a partir de
+`ator+0x78`, cujo efeito sobre X/Y segue em aberto. Os endereços
+e a reprodução estão em
+[physics-collision.md](physics-collision.md#escritas-diretas-e-chamada-indireta-no-slot-0x18).
+
+A leitura direta conferiu o SHA-256, nove trechos de instruções,
+duas transferências relativas e um offset de arquivo. Os 31
+testes locais passaram. O conector exigiu aprovação para
+comentar na issue #8, indisponível pela política da sessão.
+
 ## Ciclo de rastreamento das coordenadas de desenho — B02 (18/11/2026)
 
 A issue #8 segue aberta com `codex-ready`. O ramo opcional do
@@ -328,9 +343,9 @@ A suíte local passou com 31 testes
 
 ## Próxima ação
 
-Para B02, inspecionar os ramos de `0x445DF3` no despacho
-`+0x18` e verificar se alguma escrita fora dos caminhos
-de inicialização já estudados usa o próprio `CCastMK`.
+Para B02, rastrear a atribuição a `CCastMK+0x78` para
+resolver o slot `+0x10` chamado em `0x42972C` e verificar
+se o método pode alcançar a origem do ator.
 A integração por quadro, a gravidade e o salto seguem em aberto.
 
 O conector do GitHub listou as issues abertas. Nenhuma correspondia à

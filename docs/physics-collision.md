@@ -136,6 +136,40 @@ A cadeia confirma que outro objeto recebe o par de origem de
 produziu os valores do ator nesse ramo, a frequência do despacho
 e a relação com movimento, gravidade e salto seguem em aberto.
 
+### Escritas diretas e chamada indireta no slot +0x18
+
+Em `0x445DF5`, `ESI` recebe o ponteiro de `CCastMK`. Quando
+o bit `0x02` do byte em `[ator+0x48]+0x58` está ativo e
+`ator+0x94` é diferente de zero, `0x445E0C` carrega em
+`EAX` o endereço de `ator+0x94`. A escrita em `0x445E19`
+(offset de arquivo `0x45219`) grava nesse endereço o valor
+anterior menos um. Quando o resultado é zero, `0x445E1D`
+limpa os dois bits inferiores de `ator+0x84`. As demais
+escritas diretas no ator no corpo de `0x445DF3–0x445F85`
+atingem `+0x84` (`0x445E4F`, `0x445EE3`, `0x445F4D`).
+As instruções que acessam `+0x18/+0x1C` nesse corpo
+leem o par para passá-lo como argumento.
+
+O recorte deixa em aberto os efeitos das chamadas. Uma cadeia
+ainda sem receptor resolvido passa por `0x445E68 → 0x401398
+→ 0x42970E`. Quando `ator+0x78` guarda um ponteiro não nulo
+e `ator+0x7C & 0x07` é diferente de zero, a chamada indireta
+em `0x42972C` usa esse ponteiro como receptor do slot
+`+0x10`. O retorno indexa a tabela em `0x46EE68`, cujo
+valor participa do teste que controla o salto em `0x445E72`.
+Falta identificar a tabela concreta do receptor para avaliar
+efeitos indiretos sobre a origem de `CCastMK`. O decremento
+comprovado em `+0x94` deixa em aberto a integração de posição.
+
+Com o `exe` da seção de reprodução, confira os intervalos abaixo.
+
+```bash
+for intervalo in 445df3:445f86 401398:40139d 42970e:4297e3; do
+    objdump -d -Mintel --start-address="0x${intervalo%:*}" \
+        --stop-address="0x${intervalo#*:}" "$exe"
+done
+```
+
 ## Inserção de CCastMK no vetor durante a leitura
 
 1. Em `0x446084`, o código registra o descritor de `CCastMK` em

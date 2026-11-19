@@ -265,6 +265,45 @@ objdump -d original-data/HDKWIN.EXE |
 Um ajuste durante a fase pode alterar banco, índice, dimensões e chave
 de cor. A tabela de recortes acima descreve a geometria antes do ajuste.
 
+### Escrita indireta na tabela de ajustes
+
+A sequência `0x40D17F → 0x40D18B → 0x403B84 → 0x40D1FD`
+passa a base fixa `0x4AA398` em ECX. O corpo preserva essa base
+em ESI e, ao alcançar `0x40D340` (offset `0xC740`), grava
+64 inteiros zero a partir de `ESI+0x1B3C = 0x4ABED4`.
+Em seguida grava quatro inteiros com valor 2 a partir de
+`ESI+0x1C3C`.
+
+Outra cadeia chega à mesma tabela. Em `0x4530F4`, o código
+carrega `0x4AA398` em ECX e chama `0x4023A6 → 0x40DA89`
+em `0x4530F9`. A rotina preserva o receptor em ESI. Ela
+atualiza os slots 0–15 em quatro grupos e, em `0x40DB00`,
+prepara três grupos de 16 slots a partir de `ESI+0x1B7C`.
+Para o primeiro desses grupos (slots 16–31), a condição vem
+do inteiro em `ESI+0x1C40 = 0x4ABFD8`.
+
+| Valor da condição | Escrita nos slots 25 e 26 |
+| --- | --- |
+| 0 | `0x40DB74` (offset `0xCF74`) zera o grupo. |
+| 1 | `0x40DB63` (offset `0xCF63`) copia, respectivamente, os slots 9 e 10. |
+| 2 | `0x40DB49` (offset `0xCF49`) copia, respectivamente, os slots 5 e 6. A primeira cópia desse ramo preenche os slots 16–19. |
+| Outros | O laço pula as escritas diretas desse grupo. |
+
+Isso identifica a origem dos ajustes nos ramos observados.
+Falta estabelecer se o carregamento ou desenho de A0 alcança esse
+chamador e qual condição está ativa nessa sequência. As duas chamadas
+após o laço também ficam fora deste recorte.
+
+```bash
+exe=/home/ivanderson/Projetos/handkerchief-vita/original-data/HDKWIN.EXE
+for intervalo in 40d17f:40d195 403b84:403b89 40d1fd:40d20d \
+                 40d305:40d352 4530f4:4530fe 4023a6:4023ab \
+                 40da89:40db90; do
+    objdump -d -Mintel --start-address="0x${intervalo%:*}" \
+        --stop-address="0x${intervalo#*:}" "$exe"
+done
+```
+
 ### Registro CEarthFluct
 
 O marcador em `0x093F` antecede um trecho com controles `0B 0B`

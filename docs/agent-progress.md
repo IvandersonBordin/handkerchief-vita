@@ -7,6 +7,22 @@
 - B02 — em andamento. A Etapa 82 foi aprovada e a issue #8 recebeu
   `codex-ready`. A integração de posição e velocidade segue em aberto.
 
+## Ciclo dos ajustes de STAGE_0 (19/11/2026)
+
+O [comentário da issue #6](https://github.com/IvandersonBordin/handkerchief-vita/issues/6#issuecomment-7005659099)
+priorizou investigar escritas indiretas na tabela gráfica. A inicialização
+em `0x40D340` zera os 64 slots. A chamada em `0x4530F9` alcança
+uma rotina que pode zerar ou copiar valores para os slots 25 e 26,
+conforme o inteiro em `0x4ABFD8`. As condições, os offsets e a reprodução
+estão em [hdk-format.md](hdk-format.md#escrita-indireta-na-tabela-de-ajustes).
+
+A leitura direta do PE32 conferiu o SHA-256, cinco transferências,
+12 trechos, quatro offsets e o mapeamento dos dois slots. Os 31 testes
+locais e `git diff --check` passaram. O conector exigiu aprovação
+para comentar na issue #6, indisponível pela política da sessão.
+A relação do chamador com A0 e a condição ativa durante seu desenho
+seguem em aberto. B02 permanece em andamento.
+
 ## Ciclo da chamada em 0x445F60 — B02 (18/11/2026)
 
 A issue #8 segue aberta com `codex-ready`. O comentário mais
@@ -387,6 +403,10 @@ A suíte local passou com 31 testes
 (`PYTHONPATH=tools python3 -B -m unittest discover -s tests -v`).
 
 ## Próxima ação
+
+Para a prioridade da issue #6, rastrear quem chama o método que
+contém `0x4530F9` e verificar se a cadeia parte da preparação ou
+atualização de A0.
 
 Para B02, rastrear a chamada em `0x445F70`, a partir de
 `0x426953`, para verificar se o ramo alcança os campos

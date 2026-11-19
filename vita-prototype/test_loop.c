@@ -19,7 +19,7 @@ static int freed;
 static int fail_pad_read;
 static int fail_get_base;
 static int fail_detach;
-enum { LOOP_VBLANKS = 12, TOTAL_VBLANKS = LOOP_VBLANKS + 1 };
+enum { LOOP_VBLANKS = 14, TOTAL_VBLANKS = LOOP_VBLANKS + 1 };
 
 int smoke_main(void);
 
@@ -48,7 +48,7 @@ int sceKernelFreeMemBlock(SceUID uid)
     else if (fail_pad_read)
         assert(display_calls == 2 && vblanks == 2);
     else
-        assert(display_calls == 6 && vblanks == TOTAL_VBLANKS);
+        assert(display_calls == 8 && vblanks == TOTAL_VBLANKS);
     freed = 1;
     return 0;
 }
@@ -67,6 +67,8 @@ int sceDisplaySetFrameBuf(const SceDisplayFrameBuf *frame, SceDisplaySetBufSync 
         {  8, 476, 264, 0xff00ff00, 0xffffffff },
         {  9, 476, 264, 0xff00ffff, 0xffffffff },
         { 10, 476, 268, 0xff00ffff, 0xffff00ff },
+        { 11, 472, 268, 0xff00ffff, 0xffffffff },
+        { 12, 472, 264, 0xff00ffff, 0xffffffff },
     };
 
     assert(sync == SCE_DISPLAY_SETBUF_NEXTFRAME);
@@ -104,7 +106,7 @@ int sceDisplaySetFrameBuf(const SceDisplayFrameBuf *frame, SceDisplaySetBufSync 
     } else if (fail_pad_read) {
         assert(display_calls == 1 && vblanks == 1);
     } else {
-        assert(display_calls == 5 && vblanks == LOOP_VBLANKS);
+        assert(display_calls == sizeof(expected) / sizeof(expected[0]) && vblanks == LOOP_VBLANKS);
     }
     ++display_calls;
     if (!frame && fail_detach)
@@ -123,7 +125,7 @@ SceInt64 sceKernelGetSystemTimeWide(void)
 {
     /* Units of 10 ms: count 20 and 30 before the pause, then 70 after resuming. */
     static const SceInt64 readings[] = {
-        100, 120, 110, 140, 1000, 2000, 3000, 4000, 4010, 4020, 4040, 4070, 5000,
+        100, 120, 110, 140, 1000, 2000, 3000, 4000, 4010, 4020, 4040, 4050, 4060, 4070, 5000,
     };
     assert(time_reads < sizeof(readings) / sizeof(readings[0]));
     return readings[time_reads++] * 10000;
@@ -135,6 +137,7 @@ int sceCtrlPeekBufferPositive(int port, SceCtrlData *pad, int count)
         0, 0, SCE_CTRL_CIRCLE, 0, SCE_CTRL_CIRCLE | SCE_CTRL_CROSS | SCE_CTRL_LEFT,
         SCE_CTRL_UP, SCE_CTRL_CIRCLE | SCE_CTRL_CROSS | SCE_CTRL_RIGHT, 0,
         SCE_CTRL_CROSS, SCE_CTRL_CROSS | SCE_CTRL_DOWN,
+        SCE_CTRL_CROSS | SCE_CTRL_LEFT, SCE_CTRL_CROSS | SCE_CTRL_UP,
         SCE_CTRL_CIRCLE | SCE_CTRL_LEFT,
         SCE_CTRL_START | SCE_CTRL_CIRCLE | SCE_CTRL_CROSS,
     };
@@ -171,7 +174,7 @@ int main(void)
     fail_detach = 1;
     assert(smoke_main() == 1);
     assert(time_reads == LOOP_VBLANKS + 1 && pad_reads == LOOP_VBLANKS);
-    assert(display_calls == 6 && vblanks == LOOP_VBLANKS && !freed);
+    assert(display_calls == 8 && vblanks == LOOP_VBLANKS && !freed);
     fail_detach = 0;
 
     reset_observations();

@@ -19,6 +19,39 @@ confirmação física da animação branco/magenta, do deslocamento para
 a direita e da pausa e retomada da animação. Faltam esquerda, cima,
 baixo e os limites da tela no console.
 
+## Ciclo C04 — movimento nas quatro direções no teste Linux
+
+- O teste do loop em `vita-prototype/test_loop.c` agora verifica Esquerda
+  e Cima com o loop ativo. A comparação de pixels confere a posição, a
+  cor da animação e a recomposição do fundo. Os quatro cenários passaram
+  com avisos como erros e UBSan, usando os cabeçalhos do VitaSDK.
+  As duas execuções que chegam a START registraram 1.200.000 µs.
+- Duas cópias temporárias com Esquerda e Cima invertidos separadamente
+  falharam na comparação de pixels. O VPK reservado foi reaproveitado.
+- C04 segue em andamento. Faltam três direções e as quatro bordas no
+  console. A issue #4 registra a retomada autorizada para uma demo
+  separada. Neste ciclo, a ordem solicitada manteve o trabalho em C04.
+  O conector do GitHub exigiu aprovação indisponível para publicar o
+  resumo. Alterações locais para revisão, sem commit ou push.
+
+## Ciclo C04 — roteiro para as bordas no console
+
+- A consulta à issue #4 encontrou como último registro o aceite funcional
+  de START. A revisão local e o VPK reservado foram reaproveitados. O diff
+  de `vita-prototype/` em relação a `71ed7a2` estava vazio.
+- No próximo teste físico com a demo `71ed7a2`, parta com o quadrado no
+  centro. Segure Esquerda até a borda, solte e segure Cima até a borda.
+  Depois segure Direita até a borda direita e Baixo até a borda inferior.
+  Em cada parada, mantenha o botão pressionado por mais um instante e
+  confirme visualmente que o quadrado inteiro continua visível, encostado
+  na borda, e que o fundo ficou limpo no trajeto. Registre o resultado
+  de cada borda na issue #4.
+- O código limita o canto superior esquerdo do quadrado de 16 × 16 a
+  `x=0…944` e `y=0…528` na tela de 960 × 544. Esses valores foram
+  conferidos no código e servem de referência para o roteiro. O ciclo
+  segue pendente de observação física. C05 depende do aceite de C04 e
+  dos insumos B02 e B03.
+
 ## Ciclo de aceite funcional de C03 e validação parcial de C04
 
 - A issue #4 registra instalação e abertura da demo e a coincidência dos

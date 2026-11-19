@@ -147,13 +147,52 @@ O [mapa do motor](engine-map.md#associação-com-recursos-gráficos)
 documenta dois caminhos. O cálculo de limites consulta banco e índice
 após somar a base. O desenho soma também o valor selecionado na tabela
 `0x4ABED4`. A leitura indexada seguida de soma pode ser conferida no
-PE no offset `0x8489`. Os slots 25 e 26 ficam em `0x4ABF38` e
+PE no offset `0x89E7` (endereço virtual `0x4095E7` no caminho de desenho de
+`CEarth`). O offset `0x8489` corresponde a outra leitura da mesma tabela. Os slots 25 e 26 ficam em `0x4ABF38` e
 `0x4ABF3C`, na área de `.data` sem bytes gravados no PE
 (a parte gravada termina em `0x4AA200`, com base de imagem `0x400000`).
 A leitura local do arquivo deixa em aberto o valor no momento do desenho.
 Esse valor pode alterar banco, índice, dimensões e chave de cor. A
 lista é um resultado pré-ajuste e a cobertura visual efetiva permanece
 indeterminada. Por isso a entrega é documental.
+
+### Sensibilidade dos seis recortes ao ajuste
+
+A tabela abaixo compara três valores hipotéticos do ajuste, somados à
+referência antes da escolha do recorte. As células mostram a origem no
+BMP e o tamanho em pixels. A ordem das linhas é por seletor e índice.
+
+| Seletor / índice bruto | Ajuste 0 | Ajuste +1 | Ajuste +2 |
+|---|---|---|---|
+| 25 / 549 | (480,0) 160×120 | (480,120) 160×120 | (440,480) 100×144 |
+| 25 / 553 | (480,240) 160×120 | (480,360) 160×120 | (240,624) 216×88 |
+| 26 / 502 | (0,672) 80×16 | (80,672) 80×16 | (160,672) 80×16 |
+| 26 / 526 | (0,784) 80×40 | (80,784) 80×40 | (160,784) 80×40 |
+
+Os seis elementos usam quatro índices distintos. O ajuste +1 preserva
+todos os tamanhos e muda todas as origens no BMP. Portanto, conferir
+apenas dimensões ou interseção com a janela deixa ambígua a seleção de
+pixels. Com +2, o elemento em `0x0F3C` passaria de (680,432,840,552)
+para (680,432,896,520). Esses exemplos medem o efeito da soma. O valor
+efetivo e a ordem temporal dos ajustes continuam em aberto.
+
+Para reproduzir na raiz, lendo a cópia local:
+
+```sh
+PYTHONPATH=tools python3 -B - <<'PYBANK'
+from pathlib import Path
+from render_cearth import read_bank
+
+bank = read_bank(Path("original-data/HDKWIN.EXE").read_bytes())
+for index in (549, 553, 502, 526):
+    print(index, bank[index:index + 3])
+PYBANK
+```
+
+A menor evidência que permitiria avançar é localizar quem escreve nos
+slots 25 e 26 durante a preparação ou atualização da fase e identificar
+o valor gravado. Na falta dessa evidência, a rodada usa a vegetação
+validada e mantém sua geometria provisória.
 
 ### Registro CEarthFluct
 

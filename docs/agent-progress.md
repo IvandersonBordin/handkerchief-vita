@@ -7,6 +7,24 @@
 - B02 — em andamento. A Etapa 82 foi aprovada e a issue #8 recebeu
   `codex-ready`. A integração de posição e velocidade segue em aberto.
 
+## Ciclo da instância e dos destinos virtuais (19/11/2026)
+
+Na continuidade da issue #6, EDI em `0x453707` vem da instância
+local inicializada em `0x451309`. Seu campo `+0x38` recebe em
+`0x452628` um contêiner com tabela `0x46E200`. Os slots
+`+0x08` e `+0x04` chegam a `0x4135E8` e `0x4135A0` e
+repassam chamadas às entradas do vetor. O elo com o desenho
+de `STAGE_0` de A0.HDK segue em aberto. A escrita em
+`0x440C1D` fornece uma origem para o seletor `0x4ABFD8`.
+Os endereços e comandos estão em
+[hdk-format.md](hdk-format.md#instância-e-destinos-virtuais-do-chamador).
+
+A leitura direta do PE32 conferiu o SHA-256, 14 transferências,
+20 trechos, dois slots e três offsets. Os 31 testes locais e
+`git diff --check` passaram. O conector exigiu aprovação para
+comentar na issue #6, indisponível pela política da sessão.
+B02 segue em andamento.
+
 ## Ciclo do chamador da atualização da tabela (19/11/2026)
 
 A prioridade da issue #6 continua pelo elo autorizado no comentário
@@ -418,9 +436,9 @@ A suíte local passou com 31 testes
 
 ## Próxima ação
 
-Para a prioridade da issue #6, rastrear a origem de EDI em
-`0x453707` e a inicialização do campo `+0x38` do receptor
-para verificar se a cadeia alcança a instância usada em A0.
+Para a prioridade da issue #6, resolver o slot `+0x10` do
+subobjeto em `ESI+0xB8` na chamada de `0x440C19` e
+rastrear o valor gravado em `0x4ABFD8` em `0x440C1D`.
 
 Para B02, rastrear a chamada em `0x445F70`, a partir de
 `0x426953`, para verificar se o ramo alcança os campos

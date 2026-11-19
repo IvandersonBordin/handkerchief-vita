@@ -324,16 +324,65 @@ A atualização da tabela vem depois, em `0x4530F9` (offset
 também condicionam a chegada a esse bloco.
 
 Esse recorte estabelece a ordem entre os despachos e a escrita
-gráfica nesse ramo. Para associá-lo a A0, ainda é preciso
-identificar a instância em EDI no chamador e de onde vem seu
-campo `+0x38`. O valor efetivo dos slots durante o desenho
-de A0 segue em aberto.
+gráfica nesse ramo. A origem do receptor e os destinos virtuais
+estão detalhados abaixo.
 
 Com o mesmo `exe` acima, confira os recortes seguintes.
 
 ```bash
 for intervalo in 4536d8:453719 403e9f:403ea4 452e6a:452ea5 \
                  452fb5:45308c 4530a2:453108; do
+    objdump -d -Mintel --start-address="0x${intervalo%:*}" \
+        --stop-address="0x${intervalo#*:}" "$exe"
+done
+```
+
+#### Instância e destinos virtuais do chamador
+
+Em `0x451309`, o código passa o endereço da instância local
+`[EBP-0x104]` em ECX a `0x404421 → 0x452514`. O
+construtor guarda o receptor em ESI em `0x45252C` e instala
+a tabela `0x472470` em `0x452541`. Em `0x45131B`, o mesmo
+endereço volta a ECX para a chamada em `0x451321 → 0x401FD7
+→ 0x45353A`. A instrução `0x453548` guarda ECX em EDI,
+que volta a ECX em `0x453705` para a chamada em `0x453707`.
+O método chamado preserva o receptor em ESI em `0x452E80`.
+
+Com alocação bem-sucedida de `0x24` bytes em `0x4525F6`,
+o construtor instala `0x46E200` no objeto alocado em
+`0x45260D` e guarda seu ponteiro em `[ESI+0x38]` em
+`0x452628` (offset `0x51A28`). O ramo de falha grava zero
+nesse campo. Na inicialização bem-sucedida, as chamadas em
+`0x45284F`, `0x4528CB`, `0x4528D9` e `0x45293A` usam
+`0x402275 → 0x459F54` para inserir entradas no vetor desse
+objeto. O vetor fica em `+0x04` e sua contagem em `+0x08`.
+
+| Chamada | Entrada na tabela `0x46E200` | Destino e efeito |
+| --- | --- | --- |
+| `0x45302E`, slot `+0x08` | `0x46E208` (offset `0x6D208`) | `0x404246 → 0x4135E8`. Percorre o vetor e chama o slot `+0x08` de cada entrada não nula em `0x413604`. |
+| `0x4530E9`, slot `+0x04` | `0x46E204` (offset `0x6D204`) | `0x4025B3 → 0x4135A0`. Percorre o vetor e encaminha os três argumentos ao slot `+0x04` de cada entrada não nula em `0x4135C8`. |
+
+O caminho de `CMarkRoot` já documentado inicializa outro objeto
+com a tabela `0x46EBC8` e grava seu ponteiro em `+0x38` em
+`0x422392`. A coincidência do deslocamento não vincula os dois
+receptores. No caminho de `0x453707`, a montagem do vetor acima
+estabelece os despachos do contêiner. O vínculo desse caminho com
+a leitura e o desenho de `STAGE_0` de `A0.HDK` segue em aberto.
+Também falta determinar o valor de `0x4ABFD8` no desenho. Uma
+escrita direta em `0x440C1D` guarda ali o retorno da chamada
+virtual feita em `0x440C19`, pelo slot `+0x10` do subobjeto
+em `ESI+0xB8`.
+
+Com o mesmo `exe`, confira a tabela e os trechos citados.
+
+```bash
+objdump -s --start-address=0x46e200 --stop-address=0x46e20c "$exe"
+for intervalo in 451300:451327 404421:404426 452514:452548 \
+                 4525ee:45262b 452845:452854 4528c4:4528de \
+                 45292b:45293f 402275:40227a 459f54:459f7b \
+                 401fd7:401fdc 45353a:453551 4536f4:45370c \
+                 452e6a:452e89 4025b3:4025b8 404246:40424b \
+                 4135a0:413614 440c08:440c22; do
     objdump -d -Mintel --start-address="0x${intervalo%:*}" \
         --stop-address="0x${intervalo#*:}" "$exe"
 done

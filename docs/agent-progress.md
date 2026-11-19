@@ -7,6 +7,22 @@
 - B02 — em andamento. A Etapa 82 foi aprovada e a issue #8 recebeu
   `codex-ready`. A integração de posição e velocidade segue em aberto.
 
+## Ciclo da origem do seletor gráfico
+
+A continuidade da issue #6 retomou o elo pendente do ramo
+que grava em `0x4ABFD8`. O slot `+0x10` do subobjeto
+`wind` em `ESI+0xB8` retorna seu campo `+0x04`.
+O campo começa em zero e pode receber um valor da tabela
+local pela chamada em `0x44096B`. O valor efetivo durante
+o desenho de A0 segue em aberto. Os endereços e comandos
+estão em [hdk-format.md](hdk-format.md#origem-do-seletor-em-0x4abfd8).
+
+A leitura direta do PE32 conferiu o SHA-256, três slots,
+quatro offsets, nove transferências e seis trechos. Os 31
+testes locais e `git diff --check` passaram. O conector
+exigiu aprovação para comentar na issue #6, indisponível
+pela política da sessão. B02 segue em andamento.
+
 ## Ciclo do vetor de CCastMK — B02 (19/11/2026)
 
 A issue #8 segue aberta com `codex-ready`. No caminho
@@ -474,9 +490,10 @@ A suíte local passou com 31 testes
 
 ## Próxima ação
 
-Para a prioridade da issue #6, resolver o slot `+0x10` do
-subobjeto em `ESI+0xB8` na chamada de `0x440C19` e
-rastrear o valor gravado em `0x4ABFD8` em `0x440C1D`.
+Para a prioridade da issue #6, rastrear os receptores das
+chamadas em `0x44C6F1` e `0x44CEC2` e verificar se uma
+delas precede a atualização gráfica em `0x4530F9` no
+caminho que prepara ou desenha A0.
 
 Para B02, rastrear os chamadores de `0x402275` que possam
 receber um `CCastMK` como destino da inserção. Se houver

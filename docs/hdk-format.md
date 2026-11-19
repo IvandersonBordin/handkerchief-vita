@@ -388,6 +388,58 @@ for intervalo in 451300:451327 404421:404426 452514:452548 \
 done
 ```
 
+#### Origem do seletor em 0x4ABFD8
+
+O receptor da chamada em `0x440C19` é o subobjeto embutido em
+`ESI+0xB8`. A instrução em `0x440C08` lê sua tabela virtual e a
+de `0x440C16` carrega seu slot `+0x10` em EBX. A chamada usa o
+endereço do subobjeto em ECX. O resultado em EAX é gravado em
+`0x4ABFD8` pela instrução em `0x440C1D` (offset `0x4001D`).
+
+No construtor `0x43FD18`, a chamada em `0x43FD90` passa esse
+subobjeto a `0x401717 → 0x429206`. Em `0x429219` o método
+instala a tabela `0x46F010`. Em `0x44007F`, a chamada
+`0x40196F → 0x4293C7` inicializa os campos `+0x04` e
+`+0x08` do subobjeto com zero e o endereço da string `wind`
+(`0x489178`), respectivamente.
+
+| Slot da tabela `0x46F010` | Entrada | Destino e efeito |
+| --- | --- | --- |
+| `+0x10` | `0x46F020` (offset `0x6E020`) | `0x40123F → 0x429260` retorna o inteiro de `[ECX+0x04]`. |
+| `+0x14` | `0x46F024` (offset `0x6E024`) | `0x402897 → 0x429264` grava o argumento em `[ECX+0x04]`. |
+
+A rotina `0x4407A4` preserva o receptor em ESI em `0x4407AF`.
+No ramo em que `[ESI+0xD8]` vale zero em `0x440933`, a
+chamada em `0x44096B` usa o slot `+0x14` para passar ao
+subobjeto `wind` um valor da tabela local em `[EBP-0x30]`,
+indexada pelo inteiro em `[ESI+0xDC]`. No ramo em que
+`[ESI+0xD8]` é diferente de zero, `0x440936` decrementa esse
+campo e `0x44093C` pula a chamada de escrita. A tabela
+`0x471960`, instalada no receptor principal em `0x43FFF3`, tem
+`0x40470F → 0x4407A4` no slot `+0x10`. Há também chamadas
+diretas a `0x40470F` em `0x44C6F1` e `0x44CEC2`.
+
+O seletor global pode, portanto, receber o valor inicial ou um
+valor atualizado do subobjeto. Falta estabelecer o receptor efetivo
+nos dois chamadores diretos e a ordem dessa escrita em relação a
+`0x4530F9` e ao desenho de `STAGE_0` de A0. O valor dos ajustes
+25 e 26 no desenho segue em aberto.
+
+```bash
+objdump -s --start-address=0x46f020 --stop-address=0x46f028 "$exe"
+objdump -s --start-address=0x471970 --stop-address=0x471974 "$exe"
+objdump -s --start-address=0x489178 --stop-address=0x48917d "$exe"
+for intervalo in 43fd86:43fd95 401717:40171c 429206:429225 \
+                 43fff3:43fff9 440073:440084 40196f:401974 \
+                 4293c7:4293d8 40470f:404714 4407a4:4407b1 \
+                 4408f9:44096e 440c08:440c22 40123f:401244 \
+                 402897:40289c 429260:42926e 44c6f1:44c6f6 \
+                 44cec2:44cec7; do
+    objdump -d -Mintel --start-address="0x${intervalo%:*}" \
+        --stop-address="0x${intervalo#*:}" "$exe"
+done
+```
+
 ### Registro CEarthFluct
 
 O marcador em `0x093F` antecede um trecho com controles `0B 0B`

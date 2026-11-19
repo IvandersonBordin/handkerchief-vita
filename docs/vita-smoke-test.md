@@ -268,3 +268,10 @@ encerrou com mensagens específicas quando a toolchain não definiu
 `VITASDK`, quando `share/vita.cmake` estava ausente ou quando havia um
 diretório no lugar desse arquivo. A configuração padrão sem `VITASDK`
 também emitiu o diagnóstico esperado. A checagem dos recursos passou.
+
+## Robô provisório da rodada HKRD00001
+
+A rodada desenha um robô original de 16 × 16 pixels. Seus pés usam a mesma
+referência do obstáculo e do chão. A caminhada alterna duas poses conforme
+a distância percorrida, e o salto recolhe as pernas. O teste de cena no
+Linux verifica transparência, visor, mudança de passada e pose aérea.

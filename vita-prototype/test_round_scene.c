@@ -34,11 +34,19 @@ int main(int argc, char **argv)
     assert(round_scene_load(argv[1]));
 
     round_scene_draw(pixels, &round);
+    assert(PIXEL(DEMO_FLOOR_Y - 16, DEMO_START_X) == row[DEMO_START_X]);
+    assert(PIXEL(DEMO_FLOOR_Y - 11, DEMO_START_X + 6) == 0xffffff80);
     assert(PIXEL(ROUND_SCENE_TOP, 0) == row[0]);
     demo_round_step(&round, false, true, false);
     round_scene_draw(pixels, &round);
     assert(PIXEL(ROUND_SCENE_TOP, 0) == row[4]);
     assert(PIXEL(ROUND_SCENE_TOP, ROUND_WIDTH - 1) == row[ROUND_WIDTH + 3]);
+
+    uint32_t first_stride = PIXEL(DEMO_FLOOR_Y - 3, DEMO_START_X + 3);
+    for (int step = 0; step < 6; ++step)
+        demo_round_step(&round, false, true, false);
+    round_scene_draw(pixels, &round);
+    assert(PIXEL(DEMO_FLOOR_Y - 3, DEMO_START_X + 3) != first_stride);
 
     for (int step = 0; step < 30; ++step)
         demo_round_step(&round, false, true, false);
@@ -46,7 +54,8 @@ int main(int argc, char **argv)
     demo_round_step(&round, false, true, true);
     round_scene_draw(pixels, &round);
     assert(round.feet_y < DEMO_FLOOR_Y);
-    assert(PIXEL(round.feet_y - DEMO_PLAYER_SIZE, DEMO_START_X) == 0xffffffff);
+    assert(PIXEL(round.feet_y - DEMO_PLAYER_SIZE, DEMO_START_X + 6) == 0xff332322);
+    assert(PIXEL(round.feet_y - 1, DEMO_START_X + 7) == row[round.x + 7]);
     assert(PIXEL(DEMO_OBSTACLE_TOP, DEMO_OBSTACLE_LEFT - (round.x - DEMO_START_X))
            == 0xff0088dd);
 

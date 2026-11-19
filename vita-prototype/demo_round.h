@@ -17,6 +17,8 @@ typedef struct {
     int x;
     int feet_y;
     int velocity_y;
+    bool walking;
+    bool facing_left;
     bool grounded;
     bool finished;
     bool x_held;

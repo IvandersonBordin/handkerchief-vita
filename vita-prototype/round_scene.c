@@ -41,6 +41,54 @@ static void fill_rect(uint32_t *pixels, int left, int top, int right, int bottom
             pixels[y * ROUND_PITCH + x] = color;
 }
 
+/* Original survey robot. Rows share the collision box and transparent margins. */
+static void draw_robot(uint32_t *pixels, const DemoRound *round, int left)
+{
+    static const char helmet[][17] = {
+        "      ##        ",
+        "      oo#       ",
+        "     #####      ",
+        "   ##ooooo##    ",
+        "   #o++++++#    ",
+        "   #o+@@+@@#    ",
+        "   #o++++++#    ",
+        "    ##oooo#     ",
+        "  ###ooooo##    ",
+        "  #o#oo@@o#o#   ",
+        "  ###ooooo###   ",
+        "    #######     ",
+    };
+    static const char legs[][4][17] = {
+        {"     #oo#oo#    ", "     #oo#oo#    ", "    ##oo#oo##   ", "    #####o###   "},
+        {"    #oo# #oo#   ", "   #oo#   #oo#  ", "  #oo#    #oo#  ", "  ####    ##### "},
+        {"      #oo##     ", "      #oo#o#    ", "     ##oo###    ", "     #####      "},
+        {"   ##oo###oo#   ", "   #oo#  #oo##  ", "   ####   ####  ", "                "},
+    };
+    int pose = 0;
+    if (!round->grounded)
+        pose = 3;
+    else if (round->walking && !round->finished)
+        pose = 1 + (round->x / 24) % 2;
+
+    for (int y = 0; y < DEMO_PLAYER_SIZE; ++y) {
+        const char *row = y < 12 ? helmet[y] : legs[pose][y - 12];
+        for (int x = 0; x < DEMO_PLAYER_SIZE; ++x) {
+            uint32_t color;
+            switch (row[x]) {
+            case '#': color = 0xff332322; break;
+            case 'o': color = 0xff4fbbff; break;
+            case '+': color = 0xff604427; break;
+            case '@': color = 0xffffff80; break;
+            default: continue;
+            }
+            int screen_x = round->x - left + (round->facing_left ? 15 - x : x);
+            int screen_y = round->feet_y - DEMO_PLAYER_SIZE + y;
+            if ((unsigned)screen_x < ROUND_WIDTH && (unsigned)screen_y < ROUND_HEIGHT)
+                pixels[screen_y * ROUND_PITCH + screen_x] = color;
+        }
+    }
+}
+
 void round_scene_draw(uint32_t *pixels, const DemoRound *round)
 {
     const int left = loaded ? camera_x(round->x) : 0;
@@ -66,6 +114,5 @@ void round_scene_draw(uint32_t *pixels, const DemoRound *round)
               DEMO_OBSTACLE_RIGHT - left, DEMO_FLOOR_Y, 0xff0088dd);
     fill_rect(pixels, DEMO_EXIT_X - left, DEMO_FLOOR_Y - 80,
               DEMO_EXIT_X + 4 - left, DEMO_FLOOR_Y, 0xff55ef70);
-    fill_rect(pixels, round->x - left, round->feet_y - DEMO_PLAYER_SIZE,
-              round->x + DEMO_PLAYER_SIZE - left, round->feet_y, 0xffffffff);
+    draw_robot(pixels, round, left);
 }

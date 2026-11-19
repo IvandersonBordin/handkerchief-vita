@@ -59,7 +59,8 @@ int main(void)
         demo_round_step(&round, pad.buttons & SCE_CTRL_LEFT,
                         pad.buttons & SCE_CTRL_RIGHT, pad.buttons & SCE_CTRL_CROSS);
         if (round.x == previous.x && round.feet_y == previous.feet_y &&
-            round.finished == previous.finished)
+            round.finished == previous.finished && round.walking == previous.walking &&
+            round.grounded == previous.grounded)
             continue;
 
         round_scene_draw(back_buffer, &round);

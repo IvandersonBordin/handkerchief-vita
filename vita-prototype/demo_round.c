@@ -35,6 +35,9 @@ void demo_round_step(DemoRound *round, bool left, bool right, bool x_held)
         if (round->x >= DEMO_OBSTACLE_RIGHT && next_x < DEMO_OBSTACLE_RIGHT)
             next_x = DEMO_OBSTACLE_RIGHT;
     }
+    round->walking = next_x != round->x;
+    if (round->walking)
+        round->facing_left = next_x < round->x;
     round->x = next_x;
 
     /* The obstacle top is a landing surface only when approached from above. */

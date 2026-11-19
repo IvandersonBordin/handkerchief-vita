@@ -7,6 +7,24 @@
 - B02 — em andamento. A Etapa 82 foi aprovada e a issue #8 recebeu
   `codex-ready`. A integração de posição e velocidade segue em aberto.
 
+## Ciclo de rastreamento do receptor no ramo zero — B02 (18/11/2026)
+
+A issue #8 segue aberta com `codex-ready`. O experimento de
+tradução anterior já estava registrado. Neste ciclo, a leitura
+estática confirmou que o ramo com `CCastMK+0x89` igual a
+zero pode copiar a origem para o ponteiro guardado em
+`CCastMK+0x60`. A identidade desse ponteiro depende do alvo
+indireto em `0x43DE28`. A cadeia e a reprodução estão em
+[physics-collision.md](physics-collision.md#destino-da-cópia-quando-o-campo-0x89-é-zero).
+
+A conferência do PE32 validou o SHA-256, oito trechos de
+instruções, duas transferências relativas e dois offsets de
+arquivo. Os 31 testes locais e `git diff --check` passaram.
+A B02 segue em andamento. O próximo recorte é identificar
+o alvo da chamada em `0x43DE28` para determinar a identidade
+do receptor da escrita. O conector exigiu aprovação para comentar
+na issue #8, indisponível pela política da sessão.
+
 ## Ciclo de tradução de um retângulo de entrada — B02 (18/11/2026)
 
 O comentário mais recente da issue #8 priorizou avaliar o método

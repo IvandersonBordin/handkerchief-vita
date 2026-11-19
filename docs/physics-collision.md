@@ -285,6 +285,46 @@ for intervalo in 445ed7:445ee3 403d37:403d3c 43dd53:43dde9 \
 done
 ```
 
+## Destino da cópia quando o campo +0x89 é zero
+
+No mesmo despacho do slot `+0x18`, `0x43DD53` conserva o
+`CCastMK` em `ESI` e lê seu par de origem para `[EBP-0x24]`
+em `0x43DD6F`. Depois dos testes iniciais descritos acima,
+`0x43DDCD` zera `[EBP-0x4]`. O caminho que passa por
+`0x43DE28` requer `ator+0x8C` diferente de zero, bit
+`0x04` de `ator+0x84` limpo e retorno diferente de zero
+da consulta em `0x43DE0A`.
+
+A chamada indireta em `0x43DE28` usa o receptor retornado
+pela chamada em `0x43DE1C`. Seu retorno vai para
+`[EBP-0x4]` em `0x43DE30` (offset de arquivo `0x3D230`)
+e para `ator+0x60` em `0x43DE4C`. Com `ator+0x89`
+igual a zero, o salto em `0x43DE53` chega a `0x43E0CB`.
+Esse trecho põe `[EBP-0x4]` em `ECX` e verifica se é
+diferente de zero antes de passar o par local à chamada em
+`0x43E0E4` (offset de arquivo `0x3D4E4`).
+
+A cadeia já identificada, `0x40159B → 0x418C93 → 0x402964
+→ 0x41D14E`, grava X e Y em `+0x18` e `+0x1C` do
+receptor em `0x41D15A` e `0x41D160`. Nesse caminho a
+escrita tem como destino o ponteiro guardado em `ator+0x60`,
+cuja classe e eventual identidade com o próprio ator ainda
+dependem de resolver a chamada indireta em `0x43DE28`.
+O valor gravado vem da leitura da origem, sem integração
+demonstrada. Gravidade, salto e resposta à sobreposição seguem
+em aberto.
+
+Para reproduzir o recorte, use o mesmo `exe` da seção
+[Reprodução local](#reprodução-local).
+
+```bash
+for intervalo in 43dd53:43de59 43e0cb:43e0ee 40159b:4015a0 \
+                 418c93:418cb9 402964:402969 41d14e:41d180; do
+    objdump -d -Mintel --start-address="0x${intervalo%:*}" \
+        --stop-address="0x${intervalo#*:}" "$exe"
+done
+```
+
 ## Experimento de tradução de 0x40963E para C
 
 O trecho `0x409663–0x40969E` processa uma entrada de 12 bytes

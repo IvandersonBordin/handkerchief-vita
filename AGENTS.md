@@ -25,6 +25,16 @@ graphics API, or asset formats.
 - Continue autonomamente nas etapas já autorizadas. Acione Ivan quando
   for necessária uma decisão, autorização ou verificação que dependa dele.
 
+## Comunicação de autonomia e pedido de intervenção
+
+- Em todos os relatórios de Bruno, Carlos e Gandalf, use linguagem clara e natural em português brasileiro.
+- Quando houver trabalho autorizado que possa prosseguir sem o usuário, escreva **Próxima ação automática:** seguido da tarefa concreta. Não use `CONTINUAR:` isoladamente nem formule isso como um pedido ao usuário.
+- Quando o agente terminar uma etapa e ficar aguardando outra tarefa, revisão de outro agente ou dependência técnica, escreva **Aguardando automaticamente:** e explique o motivo. Não peça resposta de Ivan quando nenhuma ação dele for necessária.
+- **Somente quando uma ação humana for indispensável**, comece a mensagem com a frase exata: **Ivan, preciso de você.** Em seguida, diga objetivamente qual decisão, autorização, dado ou teste no PS Vita é necessário e por quê.
+- Não use essa frase para simples avisos de progresso, revisões entre agentes, tarefas pendentes ou esperas automáticas.
+- Os marcadores `CONTINUAR:` e `AGUARDAR:` podem permanecer no fim dos registros técnicos se forem necessários para o executor automático, mas devem ser acompanhados da explicação clara acima. Esses marcadores são sinais internos, não instruções para Ivan digitar algo.
+- Esta regra de comunicação não altera limites de autorização, cota, escopo nem as verificações obrigatórias.
+
 ## Safety
 - Do not run sudo or install packages without approval.
 - Do not execute downloaded scripts without reviewing them.

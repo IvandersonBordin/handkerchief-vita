@@ -332,6 +332,51 @@ for intervalo in 445df3:445f86 401398:40139d 42970e:4297e3; do
 done
 ```
 
+### Origem do vetor percorrido em 0x445F7B
+
+Em `0x445F79`, `ECX` recebe o próprio `CCastMK` de `ESI`.
+A cadeia `0x445F7B → 0x40241E → 0x412CE5` lê a entrada em
+`[ator+0x04][índice]` em `0x412CF5–0x412CF8`. A chamada
+indireta em `0x412D06` (offset de arquivo `0x12106`) usa
+a entrada como receptor e recebe `CCastMK` como segundo
+argumento explícito, empilhado em `0x412D01`.
+
+O leitor de `CCastMK` em `0x4462B6` passa a máscara `0x04`
+para `0x40374C → 0x429BA0`. O XOR com `0x0A` em
+`0x429BA8` produz `0x0E`, preservado pelo AND com `0x0F`
+em `0x429BEF` e encaminhado a `0x402C4D → 0x4125E2`.
+No modo de leitura, se o fluxo tem o bit `0x01` ativo em
+`+0x34`, o teste da máscara em `0x412892` encontra esse
+bit limpo. O salto em `0x412896` (offset `0x11C96`) segue
+para `0x4128DD`, que lê as referências restantes e chama
+o slot `+0x00` para as entradas não nulas em `0x4128F9`.
+Esse ramo pula a inserção em `0x4128CF`. A inserção descrita
+na seção seguinte coloca um `CCastMK` no vetor de um pai
+com o bit `0x01` ativo na máscara.
+
+As chamadas de inserção do próprio método, em `0x445ED2`
+e `0x445F48`, usam como receptor
+`[[[ator+0x48]+0x3C]+0x44]`. Ambas chegam a
+`0x402275 → 0x459F54`, que grava a entrada no vetor em
+`+0x04` desse receptor, em `0x459F74`. Falta demonstrar
+uma origem para uma entrada concreta do vetor em
+`[CCastMK+0x04]` e resolver seu slot `+0x18`. A evidência
+desse ramo termina no despacho em `0x412D06`, sem uma
+escrita confirmada em `CCastMK+0x18/+0x1C`.
+
+Com o `exe` da seção de reprodução, confira os intervalos
+abaixo.
+
+```bash
+for intervalo in 445ec5:445ed7 445f3b:445f4d 445f75:445f86 \
+                 40241e:402423 412ce5:412d1c 4462b1:4462bb \
+                 40374c:403751 429ba0:429c01 402c4d:402c52 \
+                 412888:412904 402275:40227a 459f54:459f79; do
+    objdump -d -Mintel --start-address="0x${intervalo%:*}" \
+        --stop-address="0x${intervalo#*:}" "$exe"
+done
+```
+
 ## Inserção de CCastMK no vetor durante a leitura
 
 1. Em `0x446084`, o código registra o descritor de `CCastMK` em

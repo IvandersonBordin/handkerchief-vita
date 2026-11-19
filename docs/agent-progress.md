@@ -7,6 +7,25 @@
 - B02 — em andamento. A Etapa 82 foi aprovada e a issue #8 recebeu
   `codex-ready`. A integração de posição e velocidade segue em aberto.
 
+## Ciclo do vetor de CCastMK — B02 (19/11/2026)
+
+A issue #8 segue aberta com `codex-ready`. No caminho
+`0x445F7B → 0x40241E → 0x412CE5`, a entrada do vetor
+recebe o próprio `CCastMK` como segundo argumento explícito.
+A máscara `0x0E` do leitor de `CCastMK` pula a inserção nesse
+vetor. As duas inserções no método de atualização usam um
+receptor obtido pelo contexto em `ator+0x48`. A evidência
+termina no despacho em `0x412D06`, com a origem das
+entradas e a escrita de X/Y do próprio ator em aberto.
+Os detalhes estão em
+[physics-collision.md](physics-collision.md#origem-do-vetor-percorrido-em-0x445f7b).
+
+A leitura direta do PE32 confirmou o SHA-256, nove
+transferências, 12 trechos e dois offsets. Os 31 testes
+locais e `git diff --check` passaram. O conector exigiu aprovação
+para comentar na issue #8, indisponível pela política da sessão.
+B02 segue em andamento.
+
 ## Ciclo da chamada em 0x445F70 — B02 (19/11/2026)
 
 A issue #8 está aberta com `codex-ready`. O recorte autorizado
@@ -459,9 +478,10 @@ Para a prioridade da issue #6, resolver o slot `+0x10` do
 subobjeto em `ESI+0xB8` na chamada de `0x440C19` e
 rastrear o valor gravado em `0x4ABFD8` em `0x440C1D`.
 
-Para B02, rastrear a origem das entradas do vetor percorrido
-após `0x445F7B` e verificar se algum destino do slot `+0x18`
-recebe o `CCastMK` pai e escreve no par de origem dele.
+Para B02, rastrear os chamadores de `0x402275` que possam
+receber um `CCastMK` como destino da inserção. Se houver
+um caso, resolver a tabela da entrada e verificar o uso do
+segundo argumento no slot `+0x18`.
 A integração por quadro, a gravidade e o salto seguem em aberto.
 
 O conector do GitHub listou as issues abertas. Nenhuma correspondia à

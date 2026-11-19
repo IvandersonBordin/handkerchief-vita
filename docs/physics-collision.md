@@ -71,6 +71,39 @@ um `CCastMK`, a ligação com `STAGE_0` ou `CRock` e a resposta física
 seguem em aberto. Também faltam as unidades das coordenadas e a
 origem do Y alternativo.
 
+## Uso do retorno da chamada em 0x445F60
+
+No slot `+0x18` de `CCastMK`, quando o bit `0x01` do byte
+`ator+0x81` está ativo e o bit `0x40000000` de `ator+0x84`
+está limpo, o ramo alcança `0x445F53`. O código empilha zero,
+Y e X e coloca o endereço fixo `0x4AA398` em `ECX`.
+A chamada em `0x445F60` (offset de arquivo `0x45360`) segue
+`0x4033F0 → 0x40F512`.
+
+Entre a entrada em `0x40F512` (offset `0xE912`) e o retorno
+em `0x40F52C`, a única escrita em memória é o incremento do
+byte em `ECX+0x1B24` (endereço `0x4ABEBC` neste ramo).
+A função usa esse byte incrementado como índice na tabela
+em `0x47B148` e retorna o byte da tabela estendido com sinal.
+Os valores empilhados de X e Y ficam sem leitura nesse corpo.
+
+O chamador transforma o bit baixo do retorno em `0x1E` ou
+`0x1F` e empilha esse código para a chamada de `0x445F70`,
+com `[ator+0x48]` em `ECX`. O trecho até `0x445F60` delimita
+uma escrita no contador. A chamada seguinte
+(`0x4035D5 → 0x426953`) ainda precisa ser rastreada para
+verificar se alcança a origem do próprio ator.
+
+Com o `exe` da seção de reprodução, confira estes intervalos.
+
+```bash
+for intervalo in 445ee9:445f75 4033f0:4033f5 40f512:40f52d \
+                 4035d5:4035da 426953:426999; do
+    objdump -d -Mintel --start-address="0x${intervalo%:*}" \
+        --stop-address="0x${intervalo#*:}" "$exe"
+done
+```
+
 ## Origem do receptor em +0x78
 
 Na inicialização, a chamada em `0x445CE8` passa zero a

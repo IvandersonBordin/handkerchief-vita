@@ -7,6 +7,22 @@
 - B02 — em andamento. A Etapa 82 foi aprovada e a issue #8 recebeu
   `codex-ready`. A integração de posição e velocidade segue em aberto.
 
+## Ciclo da chamada em 0x445F60 — B02 (18/11/2026)
+
+A issue #8 segue aberta com `codex-ready`. O comentário mais
+recente prioriza uma escrita em X/Y do próprio ator durante a
+atualização. No slot `+0x18`, a chamada em `0x445F60`
+incrementa um contador em endereço fixo e usa o valor para
+indexar uma tabela. O corpo da rotina deixa X/Y sem leitura.
+A cadeia e a reprodução estão em
+[physics-collision.md](physics-collision.md#uso-do-retorno-da-chamada-em-0x445f60).
+
+A leitura direta do PE32 confirmou o SHA-256, quatro transferências,
+cinco trechos e dois offsets. Os 31 testes locais e
+`git diff --check` passaram. A escrita na origem durante a
+atualização segue em aberto. O conector exigiu aprovação para
+comentar na issue #8, indisponível pela política da sessão.
+
 ## Ciclo de leitura do nome em +0x50 — B02 (18/11/2026)
 
 A issue #8 segue aberta com `codex-ready`. O leitor passa
@@ -372,9 +388,9 @@ A suíte local passou com 31 testes
 
 ## Próxima ação
 
-Para B02, rastrear o cursor entre a entrada do leitor de
-`CCastMK` e `0x429BEA` para localizar a janela em um
-registro de `ENEMY_0` de A0.HDK.
+Para B02, rastrear a chamada em `0x445F70`, a partir de
+`0x426953`, para verificar se o ramo alcança os campos
+`+0x18/+0x1C` do próprio `CCastMK`.
 A integração por quadro, a gravidade e o salto seguem em aberto.
 
 O conector do GitHub listou as issues abertas. Nenhuma correspondia à

@@ -238,6 +238,43 @@ gravações atingem argumentos na pilha da chamada. O método
 
 Esse caminho identifica outro consumidor da origem.
 
+### Destino das coordenadas no ramo de desenho
+
+No caminho que começa em `0x412C42`, a chamada para
+`0x402095 → 0x40953C` passa zero como terceiro argumento.
+Em `0x409547`, a rotina lê esse zero em `ESI` e o salto
+em `0x409558` chega a `0x409595`. Quando a referência de
+uma entrada da lista em `ator+0x44` passa pelo filtro em
+`0x4095BE–0x4095CA`, as instruções em `0x4095D2` e
+`0x4095D6` leem Y e X locais da entrada. As somas em
+`0x4095DB` e `0x4095DE` acrescentam a esses valores as
+coordenadas acumuladas nos argumentos da pilha, que já
+incluem a origem do ator.
+
+Em `0x4095F3` (offset de arquivo `0x89F3`), a rotina
+passa X e Y resultantes, a referência gráfica ajustada e
+o endereço do retângulo de recorte a
+`0x401230 → 0x408C75`. O receptor da chamada indireta
+em `0x408D59` vem do ponteiro global em `0x4AA3E0`.
+A chamada usa os argumentos de desenho descritos no
+[mapa do motor](engine-map.md#associação-com-recursos-gráficos).
+Esse recorte mostra o consumo da origem para desenhar uma
+peça. A busca por uma escrita na origem do próprio ator
+continua nos ramos do despacho `+0x18`.
+
+Para reproduzir, use o mesmo `exe` da seção
+[Reprodução local](#reprodução-local).
+
+```bash
+objdump -s --start-address=0x471ec4 --stop-address=0x471ec8 "$exe"
+for intervalo in 402bf3:402bf8 412c38:412c63 402095:40209a \
+                 40953c:40955a 409595:40960b 401230:401235 \
+                 408c75:408caf 408d3d:408d5c; do
+    objdump -d -Mintel --start-address=0x${intervalo%:*} \
+        --stop-address=0x${intervalo#*:} "$exe"
+done
+```
+
 ## Cópia da origem para o objeto retornado em 0x43DE7B
 
 No slot `+0x18`, a chamada em `0x445EDE` passa o `CCastMK`

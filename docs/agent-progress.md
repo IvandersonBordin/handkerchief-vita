@@ -7,6 +7,24 @@
 - B02 — em andamento. A Etapa 82 foi aprovada e a issue #8 recebeu
   `codex-ready`. A integração de posição e velocidade segue em aberto.
 
+## Ciclo de rastreamento das coordenadas de desenho — B02 (18/11/2026)
+
+A issue #8 segue aberta com `codex-ready`. O ramo opcional do
+slot `+0x14` combina a origem de `CCastMK` com as coordenadas
+locais da peça e passa o par ao caminho de desenho. O receptor
+da chamada final é a superfície obtida de `0x4AA3E0`. A cadeia
+e os comandos estão em
+[physics-collision.md](physics-collision.md#destino-das-coordenadas-no-ramo-de-desenho).
+
+A leitura direta do PE32 conferiu o SHA-256, um slot, cinco
+transferências relativas, oito trechos de instruções e um offset
+de arquivo. Os 31 testes locais e `git diff --check` passaram.
+O conector exigiu aprovação para comentar na issue #8, indisponível
+pela política da sessão. B02 segue em andamento.
+O próximo recorte é rastrear o receptor das escritas no ramo
+que começa em `0x445DF3` no slot `+0x18`, fora dos caminhos
+de inicialização já documentados.
+
 ## Ciclo de identificação de CRobot0 — B02 (18/11/2026)
 
 A issue #8 segue aberta com `codex-ready`. Para `CCastMK+0x8C = 1`,
@@ -310,10 +328,9 @@ A suíte local passou com 31 testes
 
 ## Próxima ação
 
-Para B02, o ramo já examinado em `0x43DD53` copia a origem
-para o objeto retornado em `0x43DE7B`. Um próximo recorte é
-rastrear o destino das escritas de outro ramo do despacho
-`+0x18` e verificar se ele usa o próprio `CCastMK`.
+Para B02, inspecionar os ramos de `0x445DF3` no despacho
+`+0x18` e verificar se alguma escrita fora dos caminhos
+de inicialização já estudados usa o próprio `CCastMK`.
 A integração por quadro, a gravidade e o salto seguem em aberto.
 
 O conector do GitHub listou as issues abertas. Nenhuma correspondia à

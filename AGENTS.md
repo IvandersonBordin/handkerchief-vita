@@ -53,8 +53,16 @@ Record important findings and decisions in docs/.
 
 ## Regra prioritária de economia de tokens
 
-- Os timers de Bruno e Carlos devem aguardar 20 minutos após o término
-  de cada ciclo do respectivo agente.
+- Os timers verificam localmente a cada minuto se há trabalho liberado.
+  O intervalo normal entre chamadas ao modelo é de 20 minutos. Após uma
+  publicação com alterações além do diário, permitir uma continuação no
+  próximo disparo se houver uma próxima ação concreta e já autorizada.
+  Após essa continuação, aplicar novamente o intervalo normal.
+- O agente encerra o resumo com `CONTINUAR: <ação concreta>` ou
+  `AGUARDAR: <dependência ou conclusão>`. Espera explícita ou ciclo sem
+  novo commit suspende chamadas até a coordenação registrar uma nova
+  tarefa ou evidência e remover o arquivo de estado daquele agente
+  (`bruno.schedule` ou `carlos.schedule` no diretório do bloqueio de cota).
 - Antes de chamar o Codex, o executor deve verificar localmente o bloqueio
   de cota compartilhado. Se qualquer agente receber `usage limit`, bloquear
   novas chamadas dos dois. Retomar manualmente após confirmar a renovação

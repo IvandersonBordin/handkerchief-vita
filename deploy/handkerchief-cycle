@@ -11,6 +11,28 @@ if [[ -e "$marker" ]]; then
     exit 0
 fi
 
+worktree="$HOME/Projetos/handkerchief-vita-$agent"
+schedule="$state/$agent.schedule"
+mode=normal
+due=0
+if [[ -f "$schedule" ]]; then
+    read -r mode due < "$schedule"
+fi
+if [[ "$mode" == espera ]] || (( $(date +%s) < due )); then
+    exit 0
+fi
+
+set_schedule() {
+    printf '%s %s\n' "$1" "$2" > "$schedule.tmp"
+    mv "$schedule.tmp" "$schedule"
+}
+
+# Evita repetir imediatamente uma chamada que falhou.
+set_schedule normal "$(( $(date +%s) + 1200 ))"
+before=$(git -C "$worktree" rev-parse HEAD)
+decision=$(mktemp "$state/$agent.decision.XXXXXX")
+trap 'unlink "$decision"' EXIT
+export HANDKERCHIEF_CYCLE_HINT="Encerre a resposta com uma linha CONTINUAR: seguida da próxima ação concreta já autorizada, ou AGUARDAR: seguida do bloqueio ou conclusão. Só peça continuação se a tarefa puder avançar agora."
 "$HOME/.local/bin/handkerchief-agent" "$agent" 2>&1 |
     while IFS= read -r line || [[ -n "$line" ]]; do
         case "${line,,}" in
@@ -18,7 +40,21 @@ fi
                 printf '%s\n' "$line" > "$marker"
                 ;;
         esac
+        case "$line" in
+            "CONTINUAR: "?*) printf '%s\n' "$line" > "$decision" ;;
+            "AGUARDAR: "?*) printf '%s\n' "$line" > "$decision" ;;
+        esac
         printf '%s\n' "$line"
     done
 [[ ! -e "$marker" ]] || exit 0
 "$HOME/.local/bin/handkerchief-publish" "$agent"
+after=$(git -C "$worktree" rev-parse HEAD)
+next=$(cat "$decision")
+if [[ "$next" == AGUARDAR:* || "$before" == "$after" ]]; then
+    set_schedule espera 0
+elif [[ "$mode" == normal && "$next" == CONTINUAR:* ]] &&
+     ! git -C "$worktree" diff --quiet "$before" "$after" -- . ':(exclude)docs/agent-progress.md'; then
+    set_schedule extra 0
+else
+    set_schedule normal "$(( $(date +%s) + 1200 ))"
+fi

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
 
 agent=${1:?Informe bruno ou carlos}
 case "$agent" in bruno|carlos) ;; *) exit 2 ;; esac
@@ -27,30 +27,61 @@ set_schedule() {
     mv "$schedule.tmp" "$schedule"
 }
 
-# Evita repetir imediatamente uma chamada que falhou.
-set_schedule normal "$(( $(date +%s) + 1200 ))"
+# Se houver interrupção ou erro parcial, a próxima sondagem aguarda revisão.
+set_schedule espera 0
+phase=inicio
+trap 'echo "Falha em $phase (linha $LINENO, código $?). $agent em espera para revisão." >&2' ERR
 before=$(git -C "$worktree" rev-parse HEAD)
 decision=$(mktemp "$state/$agent.decision.XXXXXX")
 trap 'unlink "$decision"' EXIT
 export HANDKERCHIEF_CYCLE_HINT="Encerre a resposta com uma linha CONTINUAR: seguida da próxima ação concreta já autorizada, ou AGUARDAR: seguida do bloqueio ou conclusão. Só peça continuação se a tarefa puder avançar agora."
-"$HOME/.local/bin/handkerchief-agent" "$agent" 2>&1 |
+phase=agente
+agent_status=0
+{
+    "$HOME/.local/bin/handkerchief-agent" "$agent" |
+        while IFS= read -r line || [[ -n "$line" ]]; do
+            printf '%s\n' "$line"
+            # Codex escreve a resposta final em stdout e a transcrição em stderr.
+            # O launcher acrescenta seu rodapé e a data após a resposta.
+            if [[ "$line" == "=== FINALIZADO $agent ===" ]]; then
+                cat
+                break
+            fi
+            case "$line" in
+                "CONTINUAR: "?*|"AGUARDAR: "?*) printf '%s\n' "$line" > "$decision" ;;
+                ?*) : > "$decision" ;;
+            esac
+        done
+} 2>&1 |
     while IFS= read -r line || [[ -n "$line" ]]; do
         case "${line,,}" in
             error:*usage\ limit*|error:*usage_limit_reached*|error:*out\ of\ codex\ messages*)
                 printf '%s\n' "$line" > "$marker"
                 ;;
         esac
-        case "$line" in
-            "CONTINUAR: "?*) printf '%s\n' "$line" > "$decision" ;;
-            "AGUARDAR: "?*) printf '%s\n' "$line" > "$decision" ;;
-        esac
         printf '%s\n' "$line"
-    done
-[[ ! -e "$marker" ]] || exit 0
+    done || agent_status=$?
+if [[ -e "$marker" ]]; then
+    # A liberação manual do marcador compartilhado deve permitir retomar.
+    set_schedule normal 0
+    exit 0
+fi
+if (( agent_status != 0 )); then
+    echo "Falha em $phase (código $agent_status). $agent em espera para revisão." >&2
+    exit "$agent_status"
+fi
+
+phase=verificacao
+changes=$(git -C "$worktree" status --porcelain --untracked-files=all -- . ':(exclude)docs/agent-progress.md')
+if [[ -z "$changes" ]]; then
+    echo "Sem alteração além do diário. Trabalho preservado localmente; $agent em espera."
+    exit 0
+fi
+phase=publicacao
 "$HOME/.local/bin/handkerchief-publish" "$agent"
 after=$(git -C "$worktree" rev-parse HEAD)
 next=$(cat "$decision")
-if [[ "$next" == AGUARDAR:* || "$before" == "$after" ]]; then
+if [[ "$next" != CONTINUAR:* || "$before" == "$after" ]]; then
     set_schedule espera 0
 elif [[ "$mode" == normal && "$next" == CONTINUAR:* ]] &&
      ! git -C "$worktree" diff --quiet "$before" "$after" -- . ':(exclude)docs/agent-progress.md'; then

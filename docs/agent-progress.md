@@ -14,10 +14,43 @@ START retornou à LiveArea com “Iniciar” e a reabertura restaurou o
 estado inicial. A listagem de processos e a saída em `tty0:`
 não foram observadas.
 
-C04 — EM ANDAMENTO. A demo `71ed7a2` tem revisão local aprovada e
-confirmação física da animação branco/magenta, do deslocamento para
-a direita e da pausa e retomada da animação. Faltam esquerda, cima,
-baixo e os limites da tela no console.
+C04 — CONCLUIDA pelo aceite funcional da issue #4. No PS Vita, a
+versão instrumentada HKTS00001 baseada em `71ed7a2` registrou 552
+posições após submissão de quadro e passou por (0,264), (0,0), (944,0)
+e (944,528), com saída 0 do loop por START. A telemetria confirma os
+limites. A recomposição do fundo foi verificada por pixels no Linux.
+[Aceite de C04](https://github.com/IvandersonBordin/handkerchief-vita/issues/4#issuecomment-6997481985)
+
+C05 — aguarda os insumos B02 e B03 para a movimentação e as colisões
+do jogo. A rodada sintética independente foi autorizada na issue #4.
+
+## Rodada sintética — lógica independente
+
+- `demo_round.c` e `demo_round.h` implementam uma rodada com passos
+  fixos e geometria provisória. O direcional move o quadrado de 16 pixels,
+  X inicia o salto, o piso e o topo do obstáculo permitem aterrissagem,
+  e um novo toque em X reinicia a rodada após cruzar a saída.
+- O teste Linux passou com avisos como erros e UBSan. Ele verifica o estado
+  inicial, movimento, bloqueio nos dois lados do obstáculo, salto, aterrissagem
+  no obstáculo e no piso, saída e reinício. Segurar X após o salto ou o
+  reinício não dispara um novo salto. Comando a partir da raiz:
+
+  ```sh
+  test_dir=$(mktemp -d build/demo-round-linux.XXXXXX) &&
+    gcc -std=c11 -Wall -Wextra -Werror -pedantic -fsanitize=undefined \
+      -fno-sanitize-recover=all vita-prototype/demo_round.c \
+      vita-prototype/test_demo_round.c -o "$test_dir/test_demo_round" &&
+    "$test_dir/test_demo_round"
+  ```
+
+- O VitaSDK com GCC 15.2.0 compilou o módulo com avisos como erros.
+  `file` identificou um objeto ELF ARM de 32 bits, EABI5. A rodada ainda
+  aguarda integração como alvo separado, empacotamento e teste físico.
+  Referências locais: `530ed50:vita-scenario/main.c` para o passeio e
+  `vita-prototype/` para o smoke test HKSM00001.
+  [Escopo autorizado](https://github.com/IvandersonBordin/handkerchief-vita/issues/4#issuecomment-6997414964)
+- A publicação do resumo na issue #4 exigiu aprovação indisponível
+  nesta sessão. Alterações locais para revisão, sem commit ou push.
 
 ## Ciclo C04 — movimento nas quatro direções no teste Linux
 

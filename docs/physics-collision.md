@@ -236,11 +236,103 @@ em `0x40959B` e `0x40959E` e soma os valores a
 gravações atingem argumentos na pilha da chamada. O método
 `0x412C38` também percorre o vetor de filhos do próprio ator.
 
-Esse caminho identifica outro consumidor da origem. A escrita
-de X/Y no próprio `CCastMK` durante atualização segue em aberto.
-O próximo recorte é seguir o ramo de `0x445EDE` no slot
-`+0x18`, que passa o ator a `0x403D37 → 0x43DD53`,
-e conferir os destinos das gravações após a leitura da origem.
+Esse caminho identifica outro consumidor da origem.
+
+## Cópia da origem para o objeto retornado em 0x43DE7B
+
+No slot `+0x18`, a chamada em `0x445EDE` passa o `CCastMK`
+como argumento de `0x403D37 → 0x43DD53`. A rotina mantém o
+ator em `ESI` e, em `0x43DD6F`, usa a [leitura da origem](#leitura-da-origem)
+para preencher o par local em `[EBP-0x24]`.
+
+O caminho estudado prossegue quando o bit `0x02` de `ator+0x84`
+está limpo e os campos `ator+0x5C` e `ator+0x60` estão zerados
+nos testes iniciais (`0x43DD81–0x43DD8D`). A instrução em
+`0x43DDA2` lê o byte com sinal de `ator+0x89` e a de
+`0x43DDD0` o guarda em `[EBP-0x18]`. Quando o fluxo chega
+a `0x43DE4F`, o teste desse valor desvia para `0x43E0CB`
+se ele for zero. Com valor diferente de zero, o fluxo segue
+para a chamada indireta em `0x43DE7B`. O retorno substitui
+o argumento original na pilha em `0x43DE83`. Para valores de
+`ator+0x8D` fora do intervalo de 1 a 9, o salto em
+`0x43DEB7` leva ao caminho que passa o objeto retornado em
+`ECX` e o endereço do par local na pilha, em `0x43E0C6`.
+
+A cadeia `0x40159B → 0x418C93 → 0x402964 → 0x41D14E`
+desempacota X e Y e grava o par em `+0x18` e `+0x1C`
+do receptor. As escritas ficam em `0x41D15A` e `0x41D160`
+(offsets de arquivo `0x1C55A` e `0x1C560`). Em `0x41D163`,
+`0x401D7F → 0x410E48` recalcula os limites desse receptor.
+A mesma rotina zera outros campos, entre eles `+0xAC` e `+0xB0`.
+No ator de origem, esse caminho grava zero em `+0x5C`
+(`0x43E0BF`), campo distinto da origem.
+
+O fluxo sustenta uma inicialização de coordenadas do objeto
+retornado pela chamada indireta. A classe concreta desse objeto e
+a natureza dos campos zerados seguem em aberto. A integração
+por quadro, a gravidade e o salto permanecem sem evidência.
+
+Para reproduzir este recorte em leitura, use o mesmo `exe` da
+seção abaixo e confira as instruções nestes intervalos.
+
+```bash
+for intervalo in 445ed7:445ee3 403d37:403d3c 43dd53:43dde9 \
+                 43de4f:43dec4 43e0b6:43e0cb 40159b:4015a0 \
+                 418c93:418cb9 402964:402969 41d14e:41d180 \
+                 401d7f:401d84 410e48:410e6e; do
+    objdump -d -Mintel --start-address="0x${intervalo%:*}" \
+        --stop-address="0x${intervalo#*:}" "$exe"
+done
+```
+
+## Experimento de tradução de 0x40963E para C
+
+O trecho `0x409663–0x40969E` processa uma entrada de 12 bytes
+com referência, X e Y. A soma da referência com a base usa 32 bits.
+Os bits 26 a 29 selecionam o banco e os bits 0 a 14 selecionam
+o índice. Em `0x409683` o ponteiro do banco vem de `0x4ABD74`
+com passo de 20 bytes. A entrada do banco tem passo de 8 bytes.
+`0x40968D` e `0x409696` leem largura e altura com extensão de
+sinal de 16 para 32 bits. As somas com X e Y produzem direita
+e inferior com aritmética de 32 bits.
+
+Uma tradução manual temporária em C99 recebeu largura e altura
+diretamente. Com GCC local e `ctypes`, a comparação com
+`resolve_pieces` de `tools/render_cearth.py` passou em 36 casos.
+O teste combinou os índices 0–2, as máscaras
+`0`, `0x8000`, `0x80000000`, `0x80008000` e os pares
+`(0,0)`, `(-12,3)`, `(8,-20)`. A base foi `0x87FFFFFF`,
+a referência foi a máscara combinada com `índice+1` e o
+banco sintético usou dimensões `(4,7)`, `(9,2)`, `(2,6)`.
+A comparação usou banco, índice, X, Y, X+largura e Y+altura.
+Três casos adicionais conferiram o retorno da soma da referência
+a zero, o banco 15 com índice 32767 e dimensões -32768/-1, e
+o retorno da soma de coordenadas aos limites de 32 bits.
+A tradução usou `uint32_t` nas somas. O teste deixou a consulta
+da tabela, a lista terminada por zero e a união fora do recorte.
+
+A rotina completa chama a entrada de importação `0x4AFA34`
+em `0x4096AB`. A tabela PE32 associa essa entrada a
+`USER32!UnionRect`. Uma tradução completa precisaria de uma
+substituição com a mesma convenção de chamada e semântica.
+
+O construtor de `x86rec.py` abre `game/sh3.exe`, aplica patches
+específicos e lê endereços de instruções exportados pelo Ghidra
+em `re/out/functions.json` ou pelo fluxo legado. Também importa
+Capstone, ausente no Python local. A aplicação direta ao
+Handkerchief exigiria adaptar a entrada PE32, remover os patches
+de SH3 para esse alvo e fornecer os metadados do recorte. O
+recompilador ficou sem execução. A tradução manual só usa
+tipos inteiros de largura fixa e foi compilada no host. A
+compilação ARM ficou sem verificação por falta de um compilador
+ARM/Vita encontrado nesta sessão.
+[Código-fonte consultado, blob f51bac97](https://github.com/matfsouza/sh3vita/blob/main/recomp/x86rec.py).
+
+```bash
+exe=/home/ivanderson/Projetos/handkerchief-vita/original-data/HDKWIN.EXE
+objdump -d -Mintel --start-address=0x40963e --stop-address=0x4096c6 "$exe"
+objdump -p "$exe" | rg -i 'user32|unionrect'
+```
 
 ## Reprodução local
 

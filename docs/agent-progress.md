@@ -7,6 +7,23 @@
 - B02 — em andamento. A Etapa 82 foi aprovada e a issue #8 recebeu
   `codex-ready`. A integração de posição e velocidade segue em aberto.
 
+## Ciclo de tradução de um retângulo de entrada — B02 (18/11/2026)
+
+O comentário mais recente da issue #8 priorizou avaliar o método
+de `x86rec.py` em `0x40963E`. Em C99 no host, uma tradução
+manual do cálculo de um retângulo passou em 36 casos sintéticos
+contra `resolve_pieces` e em três casos-limite. A rotina completa
+chama `USER32!UnionRect`. A adaptação de `x86rec.py` exige
+Capstone, outra entrada PE32, revisão dos patches de SH3 e os
+metadados de instruções. A compilação ARM segue sem verificação.
+Os detalhes estão em
+[physics-collision.md](physics-collision.md#experimento-de-tradução-de-0x40963e-para-c).
+
+O recorte local de `CCastMK` foi preservado e a condição de
+entrada do ramo foi detalhada. Os 31 testes locais passaram.
+A política da sessão impediu a aprovação exigida pelo conector
+para publicar o resumo na issue #8.
+
 ## Ciclo de despacho do slot +0x14 — B02 (18/11/2026)
 
 A issue #8 segue aberta com `codex-ready`. A revisão do coordenador
@@ -256,10 +273,11 @@ A suíte local passou com 31 testes
 
 ## Próxima ação
 
-Para B02, seguir a chamada em `0x445EDE` do slot `+0x18` de
-`CCastMK` e verificar os destinos das gravações após a leitura da
-origem em `0x43DD53`. A integração por quadro, a gravidade e o
-salto seguem em aberto.
+Para B02, o ramo já examinado em `0x43DD53` copia a origem
+para o objeto retornado em `0x43DE7B`. Um próximo recorte é
+rastrear o destino das escritas de outro ramo do despacho
+`+0x18` e verificar se ele usa o próprio `CCastMK`.
+A integração por quadro, a gravidade e o salto seguem em aberto.
 
 O conector do GitHub listou as issues abertas. Nenhuma correspondia à
 validação B01 do plano local.

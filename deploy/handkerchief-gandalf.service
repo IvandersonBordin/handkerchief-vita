@@ -1,0 +1,9 @@
+[Unit]
+Description=Revisão técnica das entregas Handkerchief
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 %h/Projetos/handkerchief-vita/deploy/gandalf.py
+Environment=PATH=%h/.local/npm/bin:/usr/local/bin:/usr/bin
+UMask=0077
+TimeoutStartSec=18min

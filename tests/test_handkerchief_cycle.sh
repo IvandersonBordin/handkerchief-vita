@@ -41,13 +41,13 @@ export CHANGE=code REPLY='CONTINUAR: próxima ação' CODE=0 PUBCODE=0
 run() { bash "$cycle" bruno; }
 calls() { wc -l < "$fixture/calls"; }
 run
-test "$(cat "$schedule")" = 'extra 0'
-start=$(date +%s)
+test "$(cat "$schedule")" = 'espera 0'
+test "$(head -1 "$state/bruno.pending")" = "$(git rev-parse HEAD)"
 run
-read -r mode due < "$schedule"
-test "$mode" = normal
-test "$due" -ge "$((start + 1200))"
-test "$due" -le "$(( $(date +%s) + 1200 ))"
+test "$(calls)" = 1
+cp "$state/bruno.pending" "$state/bruno.approved"
+run
+test "$(calls)" = 2
 run
 test "$(calls)" = 2
 echo 'normal 0' > "$schedule"

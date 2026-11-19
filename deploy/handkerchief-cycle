@@ -5,6 +5,10 @@ agent=${1:?Informe bruno ou carlos}
 case "$agent" in bruno|carlos) ;; *) exit 2 ;; esac
 state=${XDG_STATE_HOME:-$HOME/.local/state}/handkerchief
 mkdir -p "$state"
+exec 8>"$state/model.lock"
+flock -sn 8 || exit 0
+exec 9>"$state/$agent.lock"
+flock -n 9 || exit 0
 marker="$state/usage-limit"
 if [[ -e "$marker" ]]; then
     echo "Ciclo em espera por cota. Consulte $marker."
@@ -17,6 +21,20 @@ mode=normal
 due=0
 if [[ -f "$schedule" ]]; then
     read -r mode due < "$schedule"
+fi
+head=$(git -C "$worktree" rev-parse HEAD)
+approved="$state/$agent.approved"
+handoff=""
+if [[ -s "$approved" ]]; then
+    { read -r reviewed; IFS= read -r handoff; } < "$approved"
+    if [[ "$reviewed" != "$head" || "$mode" != espera ]]; then
+        echo "Aprovação obsoleta para $agent." >&2
+        mv "$approved" "$approved.stale"
+        exit 0
+    fi
+    mv "$approved" "$approved.consumed"
+    mode=normal
+    due=0
 fi
 if [[ "$mode" == espera ]] || (( $(date +%s) < due )); then
     exit 0
@@ -35,6 +53,8 @@ before=$(git -C "$worktree" rev-parse HEAD)
 decision=$(mktemp "$state/$agent.decision.XXXXXX")
 trap 'unlink "$decision"' EXIT
 export HANDKERCHIEF_CYCLE_HINT="Encerre a resposta com uma linha CONTINUAR: seguida da próxima ação concreta já autorizada, ou AGUARDAR: seguida do bloqueio ou conclusão. Só peça continuação se a tarefa puder avançar agora."
+export HANDKERCHIEF_CYCLE_HINT="$HANDKERCHIEF_CYCLE_HINT
+Continuação aprovada para este commit: $handoff"
 phase=agente
 agent_status=0
 {
@@ -63,7 +83,11 @@ agent_status=0
     done || agent_status=$?
 if [[ -e "$marker" ]]; then
     # A liberação manual do marcador compartilhado deve permitir retomar.
-    set_schedule normal 0
+    if [[ -n "$handoff" ]]; then
+        mv "$approved.consumed" "$approved"
+    else
+        set_schedule normal 0
+    fi
     exit 0
 fi
 if (( agent_status != 0 )); then
@@ -81,11 +105,7 @@ phase=publicacao
 "$HOME/.local/bin/handkerchief-publish" "$agent"
 after=$(git -C "$worktree" rev-parse HEAD)
 next=$(cat "$decision")
-if [[ "$next" != CONTINUAR:* || "$before" == "$after" ]]; then
-    set_schedule espera 0
-elif [[ "$mode" == normal && "$next" == CONTINUAR:* ]] &&
-     ! git -C "$worktree" diff --quiet "$before" "$after" -- . ':(exclude)docs/agent-progress.md'; then
-    set_schedule extra 0
-else
-    set_schedule normal "$(( $(date +%s) + 1200 ))"
+if [[ "$before" != "$after" && "$next" == "CONTINUAR: "?* ]]; then
+    printf '%s\n%s\n' "$after" "${next#CONTINUAR: }" > "$state/$agent.pending.tmp"
+    mv "$state/$agent.pending.tmp" "$state/$agent.pending"
 fi

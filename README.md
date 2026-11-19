@@ -33,4 +33,5 @@ Os originais e as imagens geradas ficam fora do Git.
 
 - [Formato HDK](docs/hdk-format.md)
 - [Mapa técnico do motor](docs/engine-map.md)
+- [Catálogo técnico e plano de recompilação](docs/plano-recompilacao.md#b-matriz-de-ferramentas)
 - [Validação e publicação](AGENTS.md#validação-e-publicação-automática)

@@ -44,26 +44,98 @@ declarações de funcionamento ainda exigem reprodução antes de qualquer
 adoção. Licença pendente significa que a revisão inicial não confirmou
 uma licença para o componente pretendido.
 
+**Última verificação das fontes desta ampliação** 19/11/2026. As
+entradas preservadas mantêm as conclusões da auditoria da mesma data.
+Os links apontam para os autores. Quando o estado de manutenção não
+está explícito, permanece em aberto. Xita declara encerramento no
+repositório, e Murk se apresenta como preservação de código histórico.
+
+**CONFIRMADO** indica evidência no código ou na documentação de origem.
+**HIPÓTESE** indica aplicação ao Handkerchief ainda por demonstrar.
+**TESTADO** exige reprodução local com evidência registrada.
+**NÃO APLICÁVEL** indica que a referência está fora do escopo atual.
+Nesta rodada, a leitura das fontes confirma o conteúdo pesquisado. O
+VitaSDK tem uso local documentado e os novos componentes não passaram
+por execução local.
+
+**Consulta por agente**
+
+- **Bruno** consulta as seções de PE32/C++ e física, com prioridade a PCRecomp,
+  I.G.I., SH4, SH3, Ghidra e Murk. Os resultados sobre HDK continuam no
+  [formato HDK](hdk-format.md) e no [mapa do motor](engine-map.md).
+- **Carlos** consulta DirectDraw, renderização e VitaSDK. Prioriza GTA Recomp
+  para superfícies e paletas e o fluxo atual de testes para evidência local.
+- **Gandalf** consulta todas as seções para comparar evidências, licenças e
+  dependências antes de propor uma ação. Registrar novas verificações nesta
+  matriz, reaproveitando a entrada quando o repositório já estiver catalogado.
+
+Os cinco projetos individuais de [WolffsRoom](https://github.com/WolffsRoom)
+continuam em suas próprias entradas. O perfil e a organização VitaSDK são
+fontes de navegação. As notas históricas, a documentação de ferramentas em
+`.agents` e os resultados técnicos mantêm suas fontes e escopos originais.
+
+### Recompilação estática x86 → C e engenharia reversa PE32/C++
+
 | Fonte | Componente, dependências e licença | Compatibilidade, limite e decisão |
 |---|---|---|
-| [I.G.I.](https://github.com/HenryKun55/igi-recomp) | `tools/recomp` usa Python e Capstone. `runtime` usa memória convidada de 32 bits e modelo x87. `shim` cobre Win32, DirectDraw/D3D7, DirectSound e DirectInput. MIT na base, exceções LGPL nos patches vitaGL e bibliotecas associadas. Build com CMake/Ninja e VitaSDK no alvo. | Primeira opção para avaliar o tradutor isolado e seus testes entre rotinas nativas e recompiladas. A descrição upstream cobre registradores, memória e x87 em níveis diferentes dos detalhes necessários ao recorte. Isso exige revisão do emissor e dos testes na revisão fixada. Shims e ganchos devem ser tratados como específicos até prova de reutilização. |
-| [Silent Hill 4](https://github.com/vallfrr/sh4vita) | Python/Capstone, Ghidra 12/JDK 21 no fluxo de exportação, CMake/VitaSDK e vitaGL. GPL-3.0. | `x86rec.py` abre o PE32 de SH4 e trabalha com um catálogo de endereços e thunks. Emite uma função C por função convidada, preserva a pilha x86 em CALL/RET e modela x87 em oito doubles. CPU e emissão são referências. Lista de funções, IAT, despachos e runtime precisam dos dados da versão GOG v5. Avaliar seu método diferencial antes de copiar qualquer código. [Emissor](https://raw.githubusercontent.com/vallfrr/sh4vita/main/recomp/x86rec.py) |
-| [Silent Hill 3](https://github.com/matfsouza/sh3vita) | `recomp/x86rec.py`, exportação Ghidra e implementação do runtime em `port/`. Python/Capstone, VitaSDK e vitaGL. GPL-3.0. | C por função PE32 e fronteira entre CPU convidada e chamadas externas. Bruno já identificou caminho fixo e patches específicos no emissor. Usar como contraste para imports, ponteiros, vtables e x87. Reaproveitamento de código depende de revisão da licença e das amarras ao executável. |
-| [Recomp Toolkit](https://github.com/wraitii/recomp-toolkit) | Tradutor, configuração por jogo e runtime gráfico D3D7–9. A distribuição pede macOS 14 e Command Line Tools. Licença do componente exato pendente. | Apple Silicon é o alvo principal. A lista de jogos exige versões determinadas. Usar como referência para separar descoberta de funções, perfil de versão e substituições nativas. VitaSDK e adequação de Metal/Vulkan ao Vita sem demonstração. [Arquitetura](https://github.com/wraitii/recomp-toolkit/blob/main/docs/architecture.md) |
-| [WindowsRecompTool](https://github.com/Zippingrocks/WindowsRecompTool) | PE32/i386, Zydis, emissão C++, CMake e Unicorn opcional para conformidade. MIT. | Referência secundária para rejeitar instruções, imports e saltos indiretos sem suporte, vincular o alvo ao hash e comparar registradores, flags e pilha com referência independente. Saída C++ e Vita sem validação. |
-| [Xita](https://github.com/Xita-Project/xita) | `recompiler/`, ferramentas Python para XBE e runtime de Xbox com D3D8 e DirectSound. GPL-3.0. | Referência conceitual para tradução por função, substituições e validação. O formato XBE e a interface de kernel do Xbox exigem um carregador distinto de PE32/Win32. |
-| [DeltaruneVita](https://github.com/WolffsRoom/DeltaruneVita) | Butterscotch/vitaGL e adaptação dos recursos GameMaker. MPL-2.0 para arquivos cobertos. | Consultar repacotamento e cache condicionado à versão dos recursos. O formato GameMaker demanda outro leitor. |
-| [UndertaleYellowVita](https://github.com/WolffsRoom/UndertaleYellowVita) | Butterscotch, VitaGL e build com Docker/VitaSDK. Licença do port pendente. | Referência para formatos de textura, telemetria, escala e remapeamento. Adiar até medir custo no protótipo. |
-| [VoidStrangerVita](https://github.com/WolffsRoom/VoidStrangerVita) | Butterscotch, VitaGL/OpenAL, dados GameMaker de versão própria, cache PVR. Licença do port pendente. | Ideia reutilizável de invalidar cache pela impressão digital do arquivo de origem. O cache PVR e os plugins são específicos do fluxo upstream. |
-| [GoldenIdol-PSVita](https://github.com/WolffsRoom/GoldenIdol-PSVita) | Patcher para PCK de Steam, GDRE Tools e Godot Vita. Licença do patcher pendente. | Referência para preparar dados locais em desktop e adaptar controles, sem migração do motor do projeto. |
-| [godot4-psvita](https://github.com/WolffsRoom/godot4-psvita) | Fork do Godot, VitaSDK e ferramentas do build do motor. MIT no motor e nas adições, terceiros com licenças próprias. | Referência de backend e diagnóstico. Sem proposta de adoção de Godot. |
-| [VitaSDK](https://github.com/vitasdk) | Toolchain ARM, bibliotecas, stubs e ferramentas VPK. Licenças por componente. | Manter como toolchain principal. Registrar versão e opções ao validar cada build. |
-| [vitaGL](https://github.com/Rinnegatamante/vitaGL) | Camada OpenGL sobre GXM, VitaSDK e requisitos de shader conforme configuração. Repositório exibe LGPL-3.0/GPL-3.0. | Avaliar se o caminho gráfico medido justificar OpenGL. Revisar a licença dos arquivos e das bibliotecas efetivamente ligados. |
-| [psp2-tooling](https://github.com/Grarak/psp2-tooling) | Perfil de CPU/GPU, breakpoints e dumps. GPL-3.0. A rota retail documentada requer firmware 3.65, plugin e módulos Sony de DevKit. | Priorizar análise offline de logs e dumps disponíveis. O modo de depuração que muda configuração do aparelho fica fora desta rodada. |
-| [vita-agent-use](https://github.com/shoui520/vita-agent-use) | CLI Python/JSON, `cryptography`, plugin de kernel e Shell, firmware 3.65 e VitaShell. Build com VitaSDK, CMake e Mbed TLS 3.6.7. GPL-3.0. | Avaliação independente abaixo. A integração seria pela CLI, com compatibilidade local e MCP por verificar. |
-| [DMR](https://github.com/GrapheneCt/DMR) | Plugin de kernel para orçamento de RAM, testado pelo autor em 3.65. Licença pendente. | Reavaliar após medir pressão de memória no hardware. |
-| [CapUnlocker](https://github.com/GrapheneCt/CapUnlocker) | Plugin de kernel, VitaSDK/CMake, MIT. Habilita capacidades como o quarto núcleo. | Reavaliar após medir saturação de CPU e quantificar benefício. |
-| [vkvita](https://github.com/DrDecki/vkvita) | Interface experimental semelhante a Vulkan sobre GXM, VitaSDK, GPL-3.0. | Baixa prioridade. O executável original importa DirectDraw. |
+| [PCRecomp](https://github.com/sp00nznet/pcrecomp) | Toolbox MIT de sp00nznet. Python nas ferramentas, também C e Java. `tools/pe/` lê PE e imports, `tools/disasm/` descobre funções, `tools/lift/` emite C, `tools/cpp/` recupera RTTI e vtables. `runtime/recomp32/` usa registradores globais, `runtime/recomp32_cpu/` explicita o estado da CPU e `runtime/win32hle/` usa libc/POSIX/SDL2 para Win32, COM, DirectDraw e DirectSound. Unicorn é opção de teste diferencial. | **Bruno · muito alta · CONFIRMADO** para componentes descritos. **HIPÓTESE** para a função candidata de HDKWIN e os slots de CCastMK. Começar pelo emissor e pelo teste isolado. Conferir a revisão e o NOTICE antes de reutilizar código. Suporte a Vita por demonstrar. |
+| [I.G.I.](https://github.com/HenryKun55/igi-recomp) | `tools/recomp` usa Python e Capstone. `runtime` usa memória convidada de 32 bits e modelo x87. `shim` cobre Win32, DirectDraw/D3D7, DirectSound e DirectInput. MIT na base, exceções LGPL nos patches vitaGL e bibliotecas associadas. Build com CMake/Ninja e VitaSDK no alvo. | **Bruno · alta · CONFIRMADO**. Comparador prioritário de PCRecomp para o tradutor isolado e seus testes entre rotinas nativas e recompiladas. A descrição upstream cobre registradores, memória e x87 em níveis diferentes dos detalhes necessários ao recorte. Isso exige revisão do emissor e dos testes na revisão fixada. Shims e ganchos devem ser tratados como específicos até prova de reutilização. |
+| [Silent Hill 4](https://github.com/vallfrr/sh4vita) | Python/Capstone, Ghidra 12/JDK 21 no fluxo de exportação, CMake/VitaSDK e vitaGL. GPL-3.0. | **Bruno · alta · CONFIRMADO**. `x86rec.py` abre o PE32 de SH4 e trabalha com um catálogo de endereços e thunks. Emite uma função C por função convidada, preserva a pilha x86 em CALL/RET e modela x87 em oito doubles. CPU e emissão são referências. Lista de funções, IAT, despachos e runtime precisam dos dados da versão GOG v5. Avaliar seu método diferencial antes de copiar qualquer código. [Emissor](https://raw.githubusercontent.com/vallfrr/sh4vita/main/recomp/x86rec.py) |
+| [Silent Hill 3](https://github.com/matfsouza/sh3vita) | `recomp/x86rec.py`, exportação Ghidra e implementação do runtime em `port/`. Python/Capstone, VitaSDK e vitaGL. GPL-3.0. | **Bruno · média · CONFIRMADO**. C por função PE32 e fronteira entre CPU convidada e chamadas externas. Bruno já identificou caminho fixo e patches específicos no emissor. Usar como contraste para imports, ponteiros, vtables e x87. Reaproveitamento de código depende de revisão da licença e das amarras ao executável. |
+| [Recomp Toolkit](https://github.com/wraitii/recomp-toolkit) | Tradutor, configuração por jogo e runtime gráfico D3D7–9. A distribuição pede macOS 14 e Command Line Tools. Licença do componente exato pendente. | **Bruno · média · CONFIRMADO**. Apple Silicon é o alvo principal. A lista de jogos exige versões determinadas. Usar como referência para separar descoberta de funções, perfil de versão e substituições nativas. VitaSDK e adequação de Metal/Vulkan ao Vita sem demonstração. [Arquitetura](https://github.com/wraitii/recomp-toolkit/blob/main/docs/architecture.md) |
+| [WindowsRecompTool](https://github.com/Zippingrocks/WindowsRecompTool) | PE32/i386, Zydis, emissão C++, CMake e Unicorn opcional para conformidade. MIT. | **Bruno · média · CONFIRMADO**. Referência secundária para rejeitar instruções, imports e saltos indiretos sem suporte, vincular o alvo ao hash e comparar registradores, flags e pilha com referência independente. Saída C++ e Vita sem validação. |
+| [Xita](https://github.com/Xita-Project/xita) | `recompiler/`, ferramentas Python para XBE e runtime de Xbox com D3D8 e DirectSound. GPL-3.0. | **Bruno · baixa · CONFIRMADO**. Referência conceitual para tradução por função, substituições e validação. O formato XBE e a interface de kernel do Xbox exigem um carregador distinto de PE32/Win32. |
+| [GameReComp](https://github.com/heaven-hm/GameReComp) | heaven-hm, MIT. Pipeline de recuperação e geração de C com matriz de alvos e resultados upstream, incluindo PE32 i386 em macOS ARM64. | **Bruno · média · CONFIRMADO** como referência de avaliação. Distinguir recuperação de funções, execução e equivalência com referência. |
+| [Ghidra](https://github.com/NationalSecurityAgency/ghidra) | NSA, Apache-2.0. Framework Java de análise de binários, desmontagem e decompilação. Os ports SH3 e SH4 exemplificam exportação automatizada de funções. | **Bruno · alta · CONFIRMADO** como ferramenta de análise estática. Conferir fronteiras, convenções de chamada e destinos indiretos contra a desmontagem. |
+
+### Física, colisões, lógica e formatos de recursos
+
+| Fonte | Componente, dependências e licença | Compatibilidade, limite e decisão |
+|---|---|---|
+| [Murk](https://github.com/moonwho101/Murk) | Jogo isométrico de Mark Longo, 1998, preservado por moonwho101. Código C++ MIT em `src/`, solução `src/Murk.sln` para Visual Studio 2022, Win32 e MFC. Usa DirectDraw, DirectSound/MIDI e código de rede da época do DirectPlay. | **Bruno · alta · CONFIRMADO** como fonte histórica. **HIPÓTESE** para padrões de ciclo de atualização, entrada, objetos, colisão, desenho e áudio comparáveis. Priorizar rastrear um objeto do input ao desenho. Vincular campos de Handkerchief a consumidores próprios antes de atribuir semântica. |
+| [SpaceCadetPinball](https://github.com/k4zmu2a/SpaceCadetPinball) | k4zmu2a, MIT. Decompilação C++ do 3D Pinball de Windows com SDL. | **Bruno · média · CONFIRMADO** como referência de separação entre recursos, simulação e funções da plataforma. A física do pinball é específica. |
+| [isle](https://github.com/isledecomp/isle) | isledecomp, LGPL-3.0. Decompilação C++ de LEGO Island (Windows, 1997). | **Bruno · média · CONFIRMADO** como referência de recuperação de classes e confronto com o binário da época. Classes e recursos pertencem ao jogo. |
+| [OpenNox](https://github.com/opennox/opennox) | Repositório principal da equipe OpenNox. Motor de Nox em Go/C com SDL2, OpenAL e GCC segundo o projeto. GPL-3.0. | **Bruno · baixa · CONFIRMADO** como referência de migração incremental. O endereço histórico deu timeout nesta consulta. [Endereço anterior](https://github.com/noxworld-dev/opennox) |
+| [fheroes2](https://github.com/ihhub/fheroes2) | ihhub e equipe, reconstrução C++/SDL de Heroes of Might and Magic II. GPL-2.0 e CC-BY-SA-4.0 aparecem no repositório. | **Bruno · média · CONFIRMADO** como referência de separação entre leitor e motor. Conferir escopo de licença por arquivo. |
+| [OpenCMR2](https://github.com/pablocpas/OpenCMR2) | pablocpas, GPL-3.0. Port de Colin McRae Rally 2.0 sobre CMR2Decomp, com SDL3 e dados fornecidos pelo usuário. | **Carlos · média · CONFIRMADO** como precedente de adaptação de plataforma. Compatibilidade Vita e formatos HDK sem demonstração. |
+
+### DirectDraw, DirectSound e Win32
+
+| Fonte | Componente, dependências e licença | Compatibilidade, limite e decisão |
+|---|---|---|
+| [GTA Recomp](https://github.com/sp00nznet/gta) | sp00nznet, MIT no código do projeto. GTA 1997, London 1969/1961 e GTA 2 para Windows x86-64. `src/common/` inclui memória convidada, `src/engine/` cobre carregador e pontes de imports, `src/video/` implementa DirectDraw. `src/sound/` adapta Miles para waveOut. O README descreve slots COM, superfícies, Lock/Unlock, Blt/BltFast, Flip e paletas. | **Carlos · alta · CONFIRMADO** como precedente Windows 2D. **HIPÓTESE** para extrair contratos de superfície e de chamadas COM úteis ao HDKWIN. Conferir pitch, formato de pixels, vida útil e paletas. O upstream marca partes como stubs e não demonstra execução ARM/Vita. |
+| [cnc-ddraw](https://github.com/FunkyFr3sh/cnc-ddraw) | FunkyFr3sh, MIT. Reimplementação DirectDraw em C com GDI, OpenGL e D3D9, voltada a Windows e Wine. | **Carlos · média · CONFIRMADO** para comparação de superfícies e escalonamento 2D. Backends e integração Win32 são específicos. |
+| [ddraw_emu](https://github.com/dev-zetta/ddraw_emu) | dev-zetta, MIT. Camada DirectDraw 7 para Windows com OpenGL ou Direct3D 9. | **Carlos · média · CONFIRMADO** como referência adicional de tradução de operações gráficas. Adaptar somente contratos identificados no jogo e medir custo. |
+
+### Renderização e otimização no PS Vita
+
+| Fonte | Componente, dependências e licença | Compatibilidade, limite e decisão |
+|---|---|---|
+| [DeltaruneVita](https://github.com/WolffsRoom/DeltaruneVita) | Butterscotch/vitaGL e adaptação dos recursos GameMaker. MPL-2.0 para arquivos cobertos. | **Carlos · média · CONFIRMADO**. Consultar repacotamento e cache condicionado à versão dos recursos. O formato GameMaker demanda outro leitor. |
+| [UndertaleYellowVita](https://github.com/WolffsRoom/UndertaleYellowVita) | Butterscotch, VitaGL e build com Docker/VitaSDK. Licença do port pendente. | **Carlos · média · CONFIRMADO**. Referência para formatos de textura, telemetria, escala e remapeamento. Adiar até medir custo no protótipo. |
+| [VoidStrangerVita](https://github.com/WolffsRoom/VoidStrangerVita) | Butterscotch, VitaGL/OpenAL, dados GameMaker de versão própria, cache PVR. Licença do port pendente. | **Carlos · média · CONFIRMADO**. Ideia reutilizável de invalidar cache pela impressão digital do arquivo de origem. O cache PVR e os plugins são específicos do fluxo upstream. |
+| [GoldenIdol-PSVita](https://github.com/WolffsRoom/GoldenIdol-PSVita) | Patcher para PCK de Steam, GDRE Tools e Godot Vita. Licença do patcher pendente. | **Carlos · média · CONFIRMADO**. Referência para preparar dados locais em desktop e adaptar controles, sem migração do motor do projeto. |
+| [godot4-psvita](https://github.com/WolffsRoom/godot4-psvita) | Fork do Godot, VitaSDK e ferramentas do build do motor. MIT no motor e nas adições, terceiros com licenças próprias. | **Carlos · média · CONFIRMADO**. Referência de backend e diagnóstico. Sem proposta de adoção de Godot. |
+| [vitaGL](https://github.com/Rinnegatamante/vitaGL) | Camada OpenGL sobre GXM, VitaSDK e requisitos de shader conforme configuração. Repositório exibe LGPL-3.0/GPL-3.0. | **Carlos · média · CONFIRMADO**. Avaliar se o caminho gráfico medido justificar OpenGL. Revisar a licença dos arquivos e das bibliotecas efetivamente ligados. |
+| [DMR](https://github.com/GrapheneCt/DMR) | Plugin de kernel para orçamento de RAM, testado pelo autor em 3.65. Licença pendente. | **Gandalf · baixa · CONFIRMADO**. Reavaliar após medir pressão de memória no hardware. |
+| [CapUnlocker](https://github.com/GrapheneCt/CapUnlocker) | Plugin de kernel, VitaSDK/CMake, MIT. Habilita capacidades como o quarto núcleo. | **Gandalf · baixa · CONFIRMADO**. Reavaliar após medir saturação de CPU e quantificar benefício. |
+| [vkvita](https://github.com/DrDecki/vkvita) | Interface experimental semelhante a Vulkan sobre GXM, VitaSDK, GPL-3.0. | **Carlos · baixa · CONFIRMADO**. Baixa prioridade. O executável original importa DirectDraw. |
+
+### Desenvolvimento com VitaSDK, testes, depuração e automação
+
+| Fonte | Componente, dependências e licença | Compatibilidade, limite e decisão |
+|---|---|---|
+| [VitaSDK](https://github.com/vitasdk) | Toolchain ARM, bibliotecas, stubs e ferramentas VPK. Licenças por componente. | **Carlos · alta · TESTADO**. Manter como toolchain principal. Registrar versão e opções ao validar cada build. |
+| [psp2-tooling](https://github.com/Grarak/psp2-tooling) | Perfil de CPU/GPU, breakpoints e dumps. GPL-3.0. A rota retail documentada requer firmware 3.65, plugin e módulos Sony de DevKit. | **Gandalf · média · CONFIRMADO**. Priorizar análise offline de logs e dumps disponíveis. O modo de depuração que muda configuração do aparelho fica fora desta rodada. |
+| [vita-agent-use](https://github.com/shoui520/vita-agent-use) | CLI Python/JSON, `cryptography`, plugin de kernel e Shell, firmware 3.65 e VitaShell. Build com VitaSDK, CMake e Mbed TLS 3.6.7. GPL-3.0. | **Gandalf · alta · CONFIRMADO**. Avaliação independente abaixo. A integração seria pela CLI, com compatibilidade local e MCP por verificar. |
+| [vita-port-skill](https://github.com/Yannis100/vita-port-skill) | Yannis100, MIT. Guias Markdown, scripts e modelos para VitaSDK, vitaGL, recompilação estática e testes. | **Gandalf · alta · CONFIRMADO** como origem da skill já presente. A revisão importada fica em `.agents/skills/vita-port/UPSTREAM.md`. |
+| [psvita-elfs](https://github.com/LiEnby/psvita-elfs) | LiEnby. Coleção de ELFs de firmware Vita para análise. Licença de redistribuição dos binários não identificada. | **Gandalf · baixa · NÃO APLICÁVEL** ao experimento atual. Registro bibliográfico. |
+
+### Referências históricas e conceituais
+
+| Fonte | Componente, dependências e licença | Compatibilidade, limite e decisão |
+|---|---|---|
+| [Reverse Engineering Atlas](https://github.com/jammyfu/reverse-engineering-atlas) | jammyfu, catálogo CC0-1.0 de decompilações, reconstruções, firmware e ferramentas. | **Gandalf · média · CONFIRMADO** como índice de descoberta. Verificar cada achado na fonte original e registrar a licença do projeto específico. |
 
 ### Avaliação separada de vita-agent-use
 
@@ -147,8 +219,11 @@ Exercitar as bordas do passo e os limites de câmera usando contexto e
 alvo sintéticos. A candidata alternativa é a rotina `0x411C60`, após
 mapear os mesmos requisitos.
 
-Para a tradução, testar primeiro a adaptação mínima do emissor de
-I.G.I. e usar o modelo de teste de SH4 como comparação metodológica.
+Para a tradução, comparar primeiro os emissores de PCRecomp e I.G.I.
+na mesma candidata e o modelo de SH4 como referência metodológica.
+Medir cobertura das instruções, dependências e esforço de adaptação
+antes de escolher o emissor. Em paralelo, confrontar a leitura de
+RTTI e vtables de PCRecomp com os slots já documentados por Bruno.
 Gerar e compilar o C em Linux, guardar no build local as versões,
 comandos, vetores e diferenças. Falhar explicitamente em instruções e
 chamadas não suportadas. O Python desta sessão não encontrou Capstone

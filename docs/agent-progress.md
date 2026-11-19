@@ -7,6 +7,25 @@
 - B02 — em andamento. A Etapa 82 foi aprovada e a issue #8 recebeu
   `codex-ready`. A integração de posição e velocidade segue em aberto.
 
+## Ciclo de identificação de CRobot0 — B02 (18/11/2026)
+
+A issue #8 segue aberta com `codex-ready`. Para `CCastMK+0x8C = 1`,
+a chamada em `0x43DE28` seleciona o primeiro slot do descritor
+de `CRobot0`. Com alocação bem-sucedida e `+0x89 = 0`, a
+origem do ator é copiada para o novo `CRobot0`. A cadeia
+condicional e os comandos de reprodução estão em
+[physics-collision.md](physics-collision.md#receptor-quando-o-campo-0x8c-vale-1).
+
+A checagem direta do PE32 confirmou o SHA-256, um offset de
+arquivo, quatro registros de dados, 11 transferências relativas
+e sete trechos de instruções. Os 31 testes locais e
+`git diff --check` passaram. A publicação na issue #8 exigiu
+aprovação indisponível pela política da sessão.
+
+B02 segue em andamento. O próximo recorte é verificar se o
+slot `+0x14` de `CCastMK` pode alcançar uma escrita nos
+campos `+0x18` e `+0x1C` do próprio ator.
+
 ## Ciclo de rastreamento do receptor no ramo zero — B02 (18/11/2026)
 
 A issue #8 segue aberta com `codex-ready`. O experimento de

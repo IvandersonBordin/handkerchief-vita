@@ -307,9 +307,8 @@ diferente de zero antes de passar o par local à chamada em
 A cadeia já identificada, `0x40159B → 0x418C93 → 0x402964
 → 0x41D14E`, grava X e Y em `+0x18` e `+0x1C` do
 receptor em `0x41D15A` e `0x41D160`. Nesse caminho a
-escrita tem como destino o ponteiro guardado em `ator+0x60`,
-cuja classe e eventual identidade com o próprio ator ainda
-dependem de resolver a chamada indireta em `0x43DE28`.
+escrita tem como destino o ponteiro guardado em `ator+0x60`.
+O recorte abaixo identifica esse receptor para `ator+0x8C = 1`.
 O valor gravado vem da leitura da origem, sem integração
 demonstrada. Gravidade, salto e resposta à sobreposição seguem
 em aberto.
@@ -321,6 +320,55 @@ Para reproduzir o recorte, use o mesmo `exe` da seção
 for intervalo in 43dd53:43de59 43e0cb:43e0ee 40159b:4015a0 \
                  418c93:418cb9 402964:402969 41d14e:41d180; do
     objdump -d -Mintel --start-address="0x${intervalo%:*}" \
+        --stop-address="0x${intervalo#*:}" "$exe"
+done
+```
+
+### Receptor quando o campo +0x8C vale 1
+
+Em `0x43DE01`, o byte em `CCastMK+0x8C` é estendido com
+sinal e passado com a tabela `0x4831B0` a
+`0x401307 → 0x408594`. A busca percorre pares de 32 bits
+(chave, ponteiro) até um ponteiro nulo. O par em `0x4831B8`
+liga a chave 1 ao nome `CRobot0` em `0x485980`.
+
+Com o nome retornado, `0x43DE1C` chama
+`0x402BFD → 0x409F9D`, que procura o descritor na lista
+cuja cabeça está em `0x4AC00C`. O registro em `0x43E3C4`
+passa o par nome/tamanho em `0x46FD08` a
+`0x4035C1 → 0x409F75`, encadeia o descritor de
+`CRobot0` em `0x4ACCE8` e instala nele a tabela `0x471150`
+em `0x43E3D3`.
+
+Quando a busca retorna esse descritor, a chamada em `0x43DE28`
+(offset de arquivo `0x3D228`) usa o primeiro slot,
+`0x40143D → 0x43E3E4`, com `[EBX+0x04]` como argumento.
+Em `0x43E3FE`, o slot pede `0x124` bytes ao alocador
+`0x4029F0 → 0x409D2D`. Com alocação bem-sucedida,
+`0x43E414` chama `0x403CB5 → 0x43E2FB` com o bloco
+em `ECX`. O inicializador instala a tabela `0x4710E0`
+em `0x43E310` e devolve o mesmo ponteiro em `0x43E316`.
+
+Sob essas condições e com `CCastMK+0x89` igual a zero, as
+escritas em `0x41D15A` e `0x41D160` copiam a origem
+do `CCastMK` para o `CRobot0` recém-criado. A análise
+é condicional à seleção do descritor e ao sucesso da alocação.
+Os demais valores de `+0x8C` e um escritor da origem do
+próprio `CCastMK` durante atualização seguem em aberto.
+
+Com o mesmo `exe` da seção [Reprodução local](#reprodução-local):
+
+```bash
+for intervalo in 43dde9:43de59 401307:40130c 408594:4085b2 \
+                 402bfd:402c02 409f9d:409fc9 43e3c4:43e41f \
+                 4035c1:4035c6 409f75:409f95 40143d:401442 \
+                 4029f0:4029f5 409d2d:409dcb 403cb5:403cba \
+                 43e2fb:43e31c; do
+    objdump -d -Mintel --start-address="0x${intervalo%:*}" \
+        --stop-address="0x${intervalo#*:}" "$exe"
+done
+for intervalo in 4831b8:4831c0 485980:485988 46fd08:46fd10 471150:471154; do
+    objdump -s --start-address="0x${intervalo%:*}" \
         --stop-address="0x${intervalo#*:}" "$exe"
 done
 ```

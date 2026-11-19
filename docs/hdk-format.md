@@ -388,6 +388,33 @@ for intervalo in 451300:451327 404421:404426 452514:452548 \
 done
 ```
 
+#### Slots das duas primeiras inserções no contêiner
+
+A primeira inserção em `0x45284F` recebe o ponteiro de
+`[ESI+0x48]`, gravado em `0x45282C`. No caminho de alocação
+bem-sucedida, a chamada em `0x45281F` chega a `0x435DE0`
+via `0x4043B3`. O construtor instala a tabela `0x46FBB0`
+em `0x435E1D` e devolve o receptor em `0x435E2E`.
+A chamada em `0x452840` usa esse objeto antes da inserção.
+
+A segunda inserção em `0x4528CB` recebe EDI. No caminho de sucesso,
+esse registrador guarda a alocação em `0x452879`. A escrita em
+`0x4528AF` instala a tabela `0x46E218` antes da chamada em
+`0x4528B5`. Em caso de falha, `0x4528C2` zera EDI.
+
+| Inserção | Tabela instalada | Slot +0x08 | Slot +0x04 |
+| --- | --- | --- | --- |
+| `0x45284F` | `0x46FBB0` | `0x403B52 → 0x436171` | `0x40178A → 0x435EF4` |
+| `0x4528CB` | `0x46E218` | `0x404246 → 0x4135E8` | `0x4023B5 → 0x413DBF` |
+
+Esses destinos se aplicam se o vetor ainda contiver essas entradas
+com as tabelas indicadas no momento do despacho. Falta identificar
+qual entrada alcança o desenho de `STAGE_0` em A0.
+Para conferir os ponteiros, na cópia identificada acima, use
+`objdump -s --start-address=0x46fbb0 --stop-address=0x46fbbc "$exe"`
+e repita com o intervalo `0x46e218` a `0x46e224`. Os endereços
+da tabela estão em ordem little-endian.
+
 #### Origem do seletor em 0x4ABFD8
 
 O receptor da chamada em `0x440C19` é o subobjeto embutido em

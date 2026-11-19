@@ -503,3 +503,15 @@ A integração por quadro, a gravidade e o salto seguem em aberto.
 
 O conector do GitHub listou as issues abertas. Nenhuma correspondia à
 validação B01 do plano local.
+
+## Ciclo das duas primeiras entradas do contêiner — issue #6
+
+O rastreio anterior de EDI e do campo `+0x38` já constava no histórico.
+Este ciclo identificou as tabelas instaladas nas entradas inseridas em
+`0x45284F` e `0x4528CB`. A leitura estática com GNU objdump conferiu
+as origens, os quatro ponteiros e seus saltos. Os destinos condicionais
+e a lacuna até o desenho estão em
+[hdk-format.md](hdk-format.md#slots-das-duas-primeiras-inserções-no-contêiner).
+Os 31 testes locais passaram. A próxima verificação é seguir o slot
+`+0x04` da primeira entrada a partir de `0x435EF4` e procurar um elo
+com o desenho de A0.

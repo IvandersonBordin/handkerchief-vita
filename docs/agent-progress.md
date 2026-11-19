@@ -24,6 +24,18 @@ limites. A recomposição do fundo foi verificada por pixels no Linux.
 C05 — aguarda os insumos B02 e B03 para a movimentação e as colisões
 do jogo. A rodada sintética independente foi autorizada na issue #4.
 
+## Rodada sintética — quadro inicial após reinício
+
+- O teste Linux agora compara os 256 pixels da área do robô no início
+  e após concluir a rodada e pressionar X. A comparação confirmou o
+  retorno à pose inicial com o cenário gerado pelo próprio teste.
+- Os testes da cena e da lógica passaram com GCC, avisos como erros e
+  UBSan. Em uma cópia temporária que ativava a pose de caminhada no
+  reinício, a nova comparação de pixels falhou como esperado.
+- A validação deste ciclo foi no Linux. As alterações ficaram no
+  worktree para revisão. O conector exigiu aprovação para comentar na
+  issue #4, e a política da sessão impediu a publicação.
+
 ## Rodada sintética — camada opcional VISTA_0
 
 - `HKRD00001` lê opcionalmente `ux0:data/HKVW00001/vista0.rgba`, o

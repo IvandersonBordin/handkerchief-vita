@@ -37,6 +37,12 @@ int main(int argc, char **argv)
     assert(PIXEL(DEMO_FLOOR_Y - 16, DEMO_START_X) == row[DEMO_START_X]);
     assert(PIXEL(DEMO_FLOOR_Y - 11, DEMO_START_X + 6) == 0xffffff80);
     assert(PIXEL(ROUND_SCENE_TOP, 0) == row[0]);
+    uint32_t initial_robot[DEMO_PLAYER_SIZE][DEMO_PLAYER_SIZE];
+    for (int y = 0; y < DEMO_PLAYER_SIZE; ++y)
+        for (int x = 0; x < DEMO_PLAYER_SIZE; ++x)
+            initial_robot[y][x] = PIXEL(DEMO_FLOOR_Y - DEMO_PLAYER_SIZE + y,
+                                       DEMO_START_X + x);
+
     demo_round_step(&round, false, true, false);
     round_scene_draw(pixels, &round);
     assert(PIXEL(ROUND_SCENE_TOP, 0) == row[4]);
@@ -71,6 +77,10 @@ int main(int argc, char **argv)
     assert(round.x == DEMO_START_X && !round.finished);
     assert(PIXEL(0, 0) == 0xff281b14);
     assert(PIXEL(ROUND_SCENE_TOP, 0) == row[0]);
+    for (int y = 0; y < DEMO_PLAYER_SIZE; ++y)
+        for (int x = 0; x < DEMO_PLAYER_SIZE; ++x)
+            assert(PIXEL(DEMO_FLOOR_Y - DEMO_PLAYER_SIZE + y, DEMO_START_X + x)
+                   == initial_robot[y][x]);
 
     file = fopen(argv[1], "ab");
     assert(file);

@@ -22,6 +22,8 @@ graphics API, or asset formats.
 - The user is a programming beginner.
 - Explain commands before executing them.
 - Prefer small, verifiable steps.
+- Continue autonomamente nas etapas já autorizadas. Acione Ivan quando
+  for necessária uma decisão, autorização ou verificação que dependa dele.
 
 ## Safety
 - Do not run sudo or install packages without approval.

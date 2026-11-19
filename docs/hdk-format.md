@@ -415,6 +415,33 @@ Para conferir os ponteiros, na cópia identificada acima, use
 e repita com o intervalo `0x46e218` a `0x46e224`. Os endereços
 da tabela estão em ordem little-endian.
 
+#### Caminho da primeira entrada pelo slot +0x04
+
+Em `0x435EFC`, ESI recebe o objeto passado em ECX. Se o campo
+`[ESI+0x34]` for zero, o salto em `0x435F03` vai direto à saída.
+Caso contrário, EDI recebe o primeiro argumento em `0x435F0C`.
+Nesse ponto, EDI designa o argumento do método. O receptor continua
+em ESI. A chamada em `0x435F13` passa os três argumentos a
+`0x4025B3 → 0x4135A0`, que despacha o slot `+0x04` das entradas
+filhas antes de a rotina consultar suas próprias referências.
+
+| Chamada a `0x4014EC → 0x408B7B` | Condição adicional no receptor |
+| --- | --- |
+| `0x435F4A` | O inteiro com sinal em `+0x40` é maior ou igual a zero. |
+| `0x435FCC` | A referência em `+0x28` é diferente de zero. |
+| `0x436034` | A referência em `+0x2C` é diferente de zero e, se `+0x38` for diferente de zero, a máscara `0x08` está ativa no byte em `0x4ABEC0`. |
+| `0x43608D` | A referência em `+0x30` é diferente de zero. |
+
+Nos três últimos casos, os bits 26 a 29 selecionam o banco e os
+15 bits inferiores selecionam um registro de oito bytes. O teste de
+`+0x38` em `0x435FD4` pertence à **entrada**. A escrita em
+`0x452628` pertence ao objeto que guarda o **contêiner**.
+Esses acessos e as chamadas acima ainda não identificam uma referência
+proveniente de um registro de `STAGE_0` de A0.
+
+Para reproduzir, use `objdump -d -Mintel --start-address=0x435ef4 --stop-address=0x43609c "$exe"`
+e confira o salto no intervalo de `0x4014EC` a `0x4014F1` (fim exclusivo).
+
 #### Origem do seletor em 0x4ABFD8
 
 O receptor da chamada em `0x440C19` é o subobjeto embutido em

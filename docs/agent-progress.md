@@ -515,3 +515,14 @@ e a lacuna até o desenho estão em
 Os 31 testes locais passaram. A próxima verificação é seguir o slot
 `+0x04` da primeira entrada a partir de `0x435EF4` e procurar um elo
 com o desenho de A0.
+
+## Ciclo do slot +0x04 da primeira entrada — issue #6
+
+A leitura estática de `0x435EF4` confirmou um despacho às entradas
+filhas em `0x435F13` e quatro chamadas condicionais a `0x408B7B`.
+O [rastreio do slot](hdk-format.md#caminho-da-primeira-entrada-pelo-slot-0x04)
+distingue o receptor em ESI do argumento em EDI. Permanece em aberto
+quem fornece as referências usadas nessa entrada no ramo de A0.
+Os 31 testes locais passaram. O próximo rastreio é verificar se
+a inicialização chamada em `0x452840` grava os campos `+0x28`,
+`+0x2C` ou `+0x30` lidos pelo slot.

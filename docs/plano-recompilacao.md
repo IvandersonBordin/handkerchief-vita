@@ -514,3 +514,24 @@ e ainda não são consumidos para desenho nem para colisões.
 O VPK experimental local está em `build/recomp-a0/out/recomp_a0.vpk`,
 fora do Git. Passou em `unzip -tq` e no verificador da skill.
 SHA-256 `2b20d360794c538ab89e4390215560aa914e6b71985654f55d03cf69595c8aa3`.
+
+### Contornos gráficos calculados durante o passeio
+
+A variante local `HKRC00006` usa os seis limites recompilados para
+desenhar contornos amarelos sobre o fundo. Para cada objeto, soma a
+origem do objeto e subtrai a origem da imagem `(52, 232)`. O desenho
+aplica o mesmo deslocamento horizontal da câmera que a imagem e
+recorta as linhas às bordas da tela. Os contornos representam limites
+gráficos, sem participação na simulação de colisões.
+
+No PC, os seis limites coincidiram com os recortes resolvidos pelo
+leitor HDK. Os pixels do contorno em sete posições de câmera
+coincidiram com uma referência independente, incluindo as extremidades
+do passeio. O VPK passou nas verificações ZIP e LiveArea.
+SHA-256 `ce09415a7618be30e185c37db861a1ddad042a25e11d3d1eca71fdd9a75dd3f4`.
+
+O pacote e o arquivo complementar de A0 foram enviados por FTP e
+comparados byte a byte. O console ainda tem `HKRC00003`, `HKRC00004`
+e `HKRC00005` instalados. A instalação de `HKRC00006` aguarda a
+remoção de `HKRC00003` pela LiveArea para respeitar a retenção de
+três versões. A pasta de dados `ux0:data/HKRC00004` é compartilhada.

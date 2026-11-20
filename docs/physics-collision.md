@@ -926,3 +926,32 @@ dos ramos foram 4, 4, 0 e 2. O ensaio cobre apenas a seleção inicial.
 O registro ROCK_0/CRock em A0.HDK (0x5D) e a figura sobre os degraus
 em 01:00 da abertura situam a comparação. A ligação entre esse registro,
 o receptor em ESI e a coordenada Y da figura permanece sem evidência.
+
+### A0 — valor devolvido ao consumidor em 0x41902B
+
+Se o despacho em 0x419028 selecionar 0x419926, há dois caminhos de
+retorno normal. ESI conserva o receptor desse método e EDI recebe
+o argumento quando necessário. Com [esi+0x8C] diferente de zero,
+0x419952 zera EAX. O mesmo ocorre se o bit 0x02 de [esi+0x80]
+estiver ligado e o argumento for nulo ou seu byte +0x81 tiver o
+bit 0 desligado. Nos demais casos, se as chamadas internas retornarem
+normalmente, 0x419A60–0x419A62 coloca 1 em EAX imediatamente antes
+do epílogo. Esse valor independe do retorno de 0x403FE9.
+
+No chamador, 1 leva à cópia do argumento para a variável local
+[ebp-4] e ao salto para 0x419146. Só o retorno 0 alcança o teste
+de [esi+0x109] com 0x03 em 0x41903A, já no contexto do chamador.
+Se ambos os bits estiverem desligados, segue para 0x419073.
+A leitura de Y em 0x419A25 e a cópia na pilha identificadas acima
+não estabelecem escrita em Y do protagonista. Permanece em aberto
+qual tabela a instância dos degraus usa.
+
+Para conferir os dois retornos e o consumidor, use objdump -d -Mintel
+nos intervalos de fim exclusivo 0x419926–0x419A6A e
+0x419028–0x419043. No ensaio sintético x86-64, o par (retorno, flags)
+recebeu todas as combinações de {0,1} e {0,1,2,3,4,255}. Para
+retorno zero, os indicadores de máscara ativa foram 0,1,1,1,0,1.
+Para retorno um, todos os casos seguiram pelo desvio anterior à máscara.
+O ensaio verifica a seleção do chamador. O quadro de 01:00 mostra
+uma figura na escada e o HDK contém ROCK_0/CRock em 0x5D. Nenhuma
+dessas referências permite observar o valor de EAX.

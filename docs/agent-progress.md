@@ -723,3 +723,14 @@ remotas ficaram indisponíveis (gh sem autenticação e falha de DNS).
 Próxima ação: seguir o fluxo de 0x41996D até o retorno do método
 candidato para localizar a origem do valor testado após 0x419028 e
 verificar se esse trecho grava Y.
+
+## B02 — retorno do método candidato em 0x419028
+
+Em andamento na issue #8. Documentadas as duas origens de EAX no
+método 0x419926 e a condição de entrada no teste da máscara 0x03
+em docs/physics-collision.md. Conferidos A0.HDK em 0x5D e a abertura
+em 01:00. Passaram 12 casos sintéticos x86 e os 31 testes locais.
+Issue indisponível para consulta e atualização (gh sem autenticação,
+API pública sem DNS). Próxima ação: seguir o valor local [ebp-4]
+a partir de 0x419146 no caminho de retorno 1 e verificar se o
+consumidor o usa para alterar Y.

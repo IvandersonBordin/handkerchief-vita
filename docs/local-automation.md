@@ -104,3 +104,13 @@ journalctl --user -u handkerchief-worker.service -n 100 --no-pager
 - Se houver divergência Git, falha de Codex CLI, problema de autenticação,
   erro de validação ou push rejeitado, o processo para e registra bloqueio.
   Não faz force push nem reset de histórico.
+
+### Gravação de referência dentro dos executores locais
+
+O launcher instalado disponibiliza o MP4 fornecido pelo usuário
+em `/opt/handkerchief-reference/gameplay.mp4` para Bruno e Carlos
+quando o arquivo está presente em Downloads. Somente esse arquivo
+é montado, em modo leitura. A configuração foi verificada com
+`bash -n` e com um teste da montagem no Bubblewrap. O vídeo e os
+quadros extraídos ficam fora do Git. A gravação orienta tarefas
+autorizadas e não altera a agenda nem os limites de execução.

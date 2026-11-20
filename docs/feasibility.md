@@ -174,3 +174,30 @@ completo até evidências de necessidade. O próximo trabalho dos
 executores segue os recibos existentes. Dependências novas, prova
 externa, mudança arquitetural e acesso ao Vita exigem as autorizações
 correspondentes. [Matriz de ferramentas](plano-recompilacao.md#b-matriz-de-ferramentas).
+
+## Decisão de implementação após as provas físicas
+
+O projeto adota **C — abordagem híbrida** para a próxima fatia
+jogável. A decisão anterior de manter B como base provisória fica
+no histórico. A engenharia reversa identifica as estruturas e
+rotinas responsáveis pelo comportamento. O PCRecomp reaproveita as
+rotinas que passam na comparação com x86. A base nativa mantém
+controles, apresentação e serviços de plataforma já validados.
+
+A escolha se apoia em três provas físicas: sobreposição de
+retângulos, acesso a dados deslocados com um import modelado e
+despacho indireto entre rotinas originais. O protótipo também
+carregou seis objetos reais de A0 no Vita e desenhou os limites
+calculados durante a rolagem. A reconstrução nativa permanece
+adequada para a plataforma. Traduzir o executável inteiro ainda
+exigiria demonstrar cobertura de imports, memória e lógica de
+fase. [Resultados das provas](plano-recompilacao.md#resultado-da-prova-com-pcrecomp).
+
+Para a próxima fatia, Bruno compara o terreno e as animações
+visíveis na gravação com o HDK e o executável. Carlos mantém a
+rodada e prepara comparações repetíveis de câmera, apresentação
+e controles dentro das tarefas liberadas. O primeiro critério
+para ampliar a recompilação é reproduzir uma consulta original
+ao terreno de A0 com dados reais e verificar seu efeito no
+movimento. A gravação indica situações de teste. As regras e as
+coordenadas vêm dos dados e das rotinas do jogo.

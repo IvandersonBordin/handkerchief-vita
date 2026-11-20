@@ -452,3 +452,33 @@ Os objetos e a tabela de métodos foram montados para o recorte.
 O resultado sustenta uma prova híbrida com dados reais de A0.
 A relação do chamador com a execução normal de A0, as demais
 ramificações de `0x412D29` e a resposta física continuam em aberto.
+
+### Primeira prova híbrida com dados reais de A0
+
+No Linux, `read_vista_objects` leu os seis objetos `CEarth` de
+`VISTA_0` em `A0.HDK`, com 32 elementos. `read_bank` leu a tabela
+de retângulos do banco 2 do PE32. Todas as referências efetivas
+selecionaram esse banco e índices válidos. Os dados originais ficaram
+em leitura e os artefatos da comparação foram gravados somente em
+`build/recomp-a0/`.
+
+A prova montou para cada objeto a lista terminada por zero, o descritor
+de banco e o destino de saída em uma arena de 24 KiB. Com as mesmas
+entradas, comparou a execução x86 em Unicorn e o C emitido por PCRecomp
+para `0x40963E`. Houve **6/6 resultados equivalentes** nos oito
+registradores de uso geral e em todos os bytes da arena. As 32
+chamadas ao adaptador `UnionRect` coincidiram em contagem. Os seis
+retângulos também coincidiram com o cálculo independente em Python
+a partir das coordenadas locais e dimensões originais.
+
+As listas, referências e dimensões vêm do jogo. A arena, o contrato
+de `UnionRect` e a entrada da função foram montados no diagnóstico.
+A prova mede limites locais dos objetos de fundo. A translação para
+o mundo, o ajuste gráfico, a renderização e a ligação com terreno
+sólido permanecem fora desse recorte. A rotina já passou no Vita com
+vetores sintéticos. Esta comparação com A0 foi executada no Linux.
+
+O próximo recorte útil é ligar essa função ao leitor e à apresentação
+nativa, mantendo os dados originais como entrada local separada do VPK.
+O critério de integração é preservar as prévias de A0 e demonstrar
+os mesmos seis limites com dados carregados pelo aplicativo.

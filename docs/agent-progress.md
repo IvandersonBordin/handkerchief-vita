@@ -640,3 +640,13 @@ em 01:00 estão em [physics-collision.md](physics-collision.md#a0--destino-de-y-
 Conferidos o SHA-256 do PE32 e os 31 testes locais. Próximo passo de B02:
 seguir o terceiro argumento de 0x4268FC até seu primeiro uso e identificar
 o objeto de destino de uma eventual escrita.
+
+## B02 — primeiro uso aritmético de Y após 0x4268FC
+
+O retorno em 0x45D237 conserva X e Y na pilha para 0x426A11.
+Em 0x426A5B o caminho calcula Y menos o campo +0x1C do objeto em
+EDI. A diferença fica em ECX. Condições e reprodução constam em
+[physics-collision.md](physics-collision.md#a0--primeiro-cálculo-com-a-cópia-de-y).
+Quadro de 01:00 conferido e 31 testes locais aprovados. B02 segue
+aberta. Próxima ação: seguir ECX de 0x426A5B até seu consumidor e
+verificar se alguma escrita posterior alcança o Y da instância de A0.

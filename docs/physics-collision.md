@@ -794,3 +794,37 @@ for intervalo in 419a19:419a6a 41d861:41d8b3 41d988:41d9c9 403fe9:403fee; do
 done
 objdump -s --start-address=0x41da6b --stop-address=0x41da6f "$exe"
 ```
+
+### A0 — primeiro cálculo com a cópia de Y
+
+Em `0x4268FF–0x42690F`, o caminho prossegue quando o primeiro argumento
+difere de -1 e a chamada a `0x4036B1` retorna um valor diferente de zero.
+Em `0x42691C`, `push [ebp+0x10]` copia Y para a pilha. Depois dos oito
+`push`, a ordem a partir do topo é: seletor, argumento 4, zero, zero,
+X, Y, argumento 6, argumento 5 (numeração da entrada de `0x4268FC`).
+
+O salto em `0x40370B` leva a `0x45D1F6`. O `ret 0x10` em
+`0x45D237` retira quatro argumentos. Assim, ao empilhar EAX em
+`0x426931`, a chamada seguinte recebe (retorno, X, Y, argumento 6,
+argumento 5). ECX volta a conter o receptor vindo de `[esi+0x48]` do
+chamador original. O salto em `0x403D14` leva a `0x426A11`.
+
+Se o primeiro argumento e o retorno de `0x4036B1` forem diferentes
+de zero e a comparação em `0x426A41` indicar igualdade, EDI contém
+o ponteiro devolvido pela chamada em `0x426A33`. Em `0x426A50`,
+EDX recebe `[edi+0x1C]`. Em `0x426A55–0x426A5B`, ECX recebe o Y
+empilhado e a subtração produz **Y − [edi+0x1C]** em ECX. A escrita
+em `0x426A58` atualiza a cópia de X na pilha. Até essa subtração
+não se demonstrou uma escrita em Y do protagonista. A identidade de
+EDI continua aberta. O quadro de 01:00 confirma a escada ascendente
+à direita, mas não permite identificar o objeto usado na subtração.
+
+Reprodução a partir da variável `exe` definida acima:
+
+```bash
+for intervalo in 4268fc:426942 40370b:403710 45d1f6:45d23a \
+                 403d14:403d19 426a11:426a5d; do
+    objdump -d -Mintel --start-address="0x${intervalo%:*}" \
+        --stop-address="0x${intervalo#*:}" "$exe"
+done
+```

@@ -288,3 +288,36 @@ zero. Isso fornece um ponto de entrada para comparar o perfil
 com as inclinações visíveis na gravação de gameplay.
 A escala na tela, o significado das marcas e a ligação com a
 resposta de colisão do personagem seguem em aberto.
+
+#### Perfil por coluna e consulta vertical de CRock
+
+O corpo x86 de `0x40C4F2–0x40C57D` recebeu as grades reais de
+A0, B0 e A0_A em Unicorn. Somente o alocador em `0x4029F0` foi
+modelado. A região de saída foi preenchida antes da execução
+com um valor sentinela. A comparação independente procurou,
+em cada coluna, a primeira sequência de cinco células não nulas.
+O resultado coincidiu em todas as 4240 colunas das três grades.
+Em uma grade sintética de três colunas, as duas com uma sequência
+válida receberam a coordenada inicial e a terceira preservou o
+sentinela. O perfil de A0 tem valores de 0 a 150 em unidades de
+célula.
+
+Há uma consulta independente em `0x40BB19–0x40BB77` que divide
+X e Y por quatro via deslocamento aritmético e lê a grade em
+`CRock+0x08`. O quarto argumento fornece uma máscara de bits.
+Se a célula inicial atende à máscara, a função procura para
+cima até a primeira célula que não atende e retorna a borda.
+Se a célula inicial não atende, procura para baixo a primeira
+célula correspondente. Sem transição, preserva Y. O resultado
+sempre preserva X. A prova em Unicorn, com os dados de A0,
+coincidiu com o modelo independente nas 432 combinações de
+nove valores X, oito valores Y e seis máscaras.
+
+O chamador `0x42D856` lê a máscara em `[objeto+0x54]+0x04`.
+Em `0x42D86B`, obtém a grade de `[[objeto+0x48]+0x3C]+0x6C`
+e chama a consulta pelo salto `0x404089`. A prova confirma uma
+consulta de geometria, em coordenadas de quatro unidades por
+célula. A associação com o protagonista, a máscara de piso em
+uso e a consequência durante a atualização de Y ainda precisam
+ser rastreadas. A gravação de gameplay serve para escolher
+trechos com transições e inclinações para essa comparação.

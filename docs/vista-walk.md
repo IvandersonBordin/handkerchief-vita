@@ -20,3 +20,15 @@ cc -std=c11 -Wall -Wextra -Werror -ffunction-sections -fdata-sections -Wl,--gc-s
   -idirafter "$VITASDK/arm-vita-eabi/include" vita-scenario/test_camera.c -o /tmp/hkvw-camera
 /tmp/hkvw-camera
 ```
+
+## Encerramento e versões no console de teste
+
+Após capturar o resultado de cada teste físico, encerrar o aplicativo
+pelo identificador do título e conferir a confirmação. Com VitaCompanion,
+usar `quit <TITLE_ID>`. Preservar os outros aplicativos abertos.
+
+Manter somente as três instalações mais recentes do Handkerchief,
+usando a data de instalação registrada nos testes para ordenar
+versões de séries diferentes. Desinstalar versões antigas pela
+LiveArea. O FTP do VitaCompanion serve para inventariar instalações.
+Preservar arquivos de dados compartilhados pelas versões mantidas.

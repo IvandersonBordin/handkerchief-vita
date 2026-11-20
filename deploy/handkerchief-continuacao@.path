@@ -1,0 +1,9 @@
+[Unit]
+Description=Verifica continuações autorizadas para %i
+
+[Path]
+PathChanged=%S/handkerchief/gandalf.json
+Unit=handkerchief-%i.service
+
+[Install]
+WantedBy=default.target

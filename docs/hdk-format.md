@@ -358,3 +358,13 @@ Reproduzir com `objdump -d -Mintel` no `HDKWIN.EXE` local,
 nos intervalos `0x419C4F–0x419C65`, `0x41A0B0–0x41A0E4`,
 `0x41A469–0x41A50F`, `0x41A84A–0x41A85C` e
 `0x42D268–0x42D31D`.
+
+O rastreio posterior identificou o registro de origem das escritas
+em `0x41A0D8` e `0x41A0DD`. Em `0x419FBE–0x419FE9`, EDI
+recebe o primeiro argumento da rotina e ESI aponta para
+`[EDI+0xDC] + 20 × [EDI+0xE8]`. O chamador em `0x418EA5`
+passa EDI a `0x4043C7 → 0x419C4F`. O teste do bit 1 em
+`[ESI+0x08]` em `0x419FFE` pode selecionar a cópia direta.
+Falta determinar quem preenche esse vetor e confirmar o tipo
+em execução. Esse caminho evidencia uma cópia de um registro
+selecionado, com origem independente do retorno da consulta CRock.

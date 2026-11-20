@@ -26,3 +26,11 @@ A validação local da alteração passou em dez testes Python e na suíte Bash 
 - Suspender novas sondagens com `systemctl --user disable --now handkerchief-gandalf.timer`. Uma revisão em andamento pode terminar. Para interrompê-la também, use `systemctl --user stop handkerchief-gandalf.service`. Uma revisão interrompida após a reserva requer inspeção antes de repetir.
 - Retomar com `systemctl --user enable --now handkerchief-gandalf.timer`. Os timers dos agentes permanecem independentes. A execução depende de o gerenciador systemd do usuário estar em funcionamento.
 - Reproduzir os testes com `python3 -B -m unittest discover -s tests -p test_gandalf.py` e `bash tests/test_handkerchief_cycle.sh`. As duas suítes usam repositórios temporários e dispensam acesso ao Codex e ao Vita.
+
+## Alternancia de tarefas autorizadas
+
+O catalogo inclui a investigacao estatica b04-indices (enderecos 0x4AD16C e 0x4AD228) para Bruno e os testes Linux de controles-a0 para Carlos. Ambas as tarefas sao limitadas ao escopo tecnico e nao autorizam testes no hardware, instalacoes ou uso de dados proprietarios no Git.
+
+Quando as tres ultimas concessoes de um agente sao da mesma acao, Gandalf remove temporariamente essa acao das opcoes da revisao seguinte. O modelo escolhe entre as outras tarefas previamente autorizadas ou hold. O historico e os recibos antigos permanecem intactos. A regra nao gera novas revisoes sem entrega, nao reabre eventos reservados e nao contorna o intervalo de 20 minutos nem a cota.
+
+Depois de atualizar o checkout local, valide com `python3 -B -m unittest discover -s tests -p test_gandalf.py` antes de reiniciar os servicos. O codigo publicado no GitHub nao atualiza automaticamente o processo systemd local.

@@ -24,6 +24,61 @@ limites. A recomposição do fundo foi verificada por pixels no Linux.
 C05 — aguarda os insumos B02 e B03 para a movimentação e as colisões
 do jogo. A rodada sintética independente foi autorizada na issue #4.
 
+## Ciclo C05 — consulta vertical CRock no Linux
+
+- `vita-prototype/test_crock.c` exercita um modelo isolado da consulta
+  vertical descrita em `docs/hdk-format.md` na `main` (`dc40d8d`).
+  São 15 casos com uma grade sintética em ordem por linhas, células de
+  quatro unidades, máscara de bits, transições para cima e para baixo,
+  bordas e ausência de transição. Todos verificam que X é preservado.
+  Para entradas fora da grade, o modelo devolve o ponto recebido como
+  proteção local. Esse comportamento ainda carece de evidência no original.
+- O teste CRock e os testes existentes da lógica e da cena da rodada
+  passaram com GCC, avisos como erros e UBSan. Uma cópia temporária que
+  trocou a checagem inicial da máscara por igualdade falhou no caso da
+  máscara zero. Para reproduzir o teste CRock a partir da raiz:
+
+  ```sh
+  dest=$(mktemp -d /tmp/handkerchief-crock.XXXXXX) &&
+    gcc -std=c11 -Wall -Wextra -Werror -pedantic -fsanitize=undefined \
+      -fno-sanitize-recover=all vita-prototype/test_crock.c \
+      -o "$dest/test_crock" &&
+    "$dest/test_crock"
+  ```
+
+- A amostra da gravação local entre 00:20 e 03:50 mostrou o enquadramento
+  inicial em torno da casa (00:20–00:50), avanço lateral até o trecho
+  inclinado (por volta de 01:00) e enquadramentos em alturas distintas
+  perto do desnível e do túnel (por volta de 01:10–01:20). O HUD
+  permanece na faixa inferior. Esses trechos servem como marcos de
+  apresentação para comparar com a câmera horizontal da rodada. Os
+  tempos são aproximados e a amostra ficou em `/tmp`.
+- A issue #4 foi consultada. O teste usa apenas dados sintéticos e roda
+  no Linux. A física da rodada fica como estava. A integração segue
+  pendente da evidência de como o chamador original usa o ponto retornado.
+  O conector exigiu aprovação para publicar o resumo na issue e a
+  política da sessão impediu a publicação.
+
+## Ciclo A0 — verificação dos pré-requisitos do teste Linux
+
+- A rodada híbrida solicitada é `HKRC00007`. O commit `3257a8b`
+  registra em `docs/vista-walk.md` um teste Linux anterior com UBSan
+  para os três obstáculos, os saltos, a chegada e o reinício. O commit
+  acrescenta apenas documentação. A evidência anterior foi consultada,
+  sem reprodução neste ciclo.
+- No worktree de Carlos, o código e os testes Linux em
+  `vita-prototype/` pertencem à rodada `HKRD00001`. A busca no
+  worktree e nas referências Git locais não localizou os fontes ou o
+  teste Linux do `HKRC00007`. O caminho registrado para o pacote,
+  `build/playable-a0/out/recomp_a0.vpk`, também não está neste
+  worktree. O pacote Vita por si só não permite reproduzir o teste
+  nativo Linux.
+- Esquerda, direita, salto, chegada e reinício do A0 seguem sem
+  verificação neste ciclo. Para retomar, disponibilizar neste worktree
+  os fontes do `HKRC00007` e o teste Linux ou as instruções para
+  compilá-lo com dados sintéticos. C05 continua dependente de B02 e B03.
+  Este ciclo foi de inspeção e documentação, sem execução no Vita.
+
 ## Rodada sintética — quadro inicial após reinício
 
 - O teste Linux agora compara os 256 pixels da área do robô no início

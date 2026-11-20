@@ -132,3 +132,14 @@ do índice 0 do banco 8. As folhas estabelecem quais recortes podem
 ser comparados com gameplay ou com uma referência gráfica rastreada
 no motor. A identidade do protagonista e a ordem das poses seguem
 indeterminadas.
+
+
+## Confirmação visual no Vita
+
+Na prévia `HKRC00008`, Ivan reconheceu o protagonista no quarto
+grupo, correspondente ao banco 6, índices 32–44. Descreveu o
+personagem como um policial de roupa roxa e boina, com uma pistola.
+A confirmação estabelece o grupo a priorizar no atlas. A referência
+ao ator controlado, a situação em que essa aparência é usada e a
+ordem e duração das poses ainda precisam ser confirmadas no motor.
+[Controles da prévia](vista-walk.md#prévia-de-personagens-na-rodada).

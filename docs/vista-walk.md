@@ -70,8 +70,10 @@ de quadro e grupo, recorte na borda e ausência de arquivo.
 O pacote passou nos verificadores ZIP e LiveArea. No Vita, os
 seis arquivos instalados coincidiram com o VPK e o diagnóstico
 registrou `HKRC00008 6/6 PASS scene=ready actors=ready`.
-O VitaCompanion confirmou o encerramento. A conferência visual
-dos recortes e da transição de quadros no console está pendente.
+O VitaCompanion confirmou o encerramento. No teste manual, Ivan
+confirmou que a prévia funcionou e reconheceu o protagonista no
+quarto grupo, banco 6, índices 32–44. A associação com as rotinas
+do ator controlado e a ordem original dos quadros seguem em aberto.
 
 O pacote local está em `build/actor-playtest/out/recomp_a0.vpk`,
 fora do Git. SHA-256

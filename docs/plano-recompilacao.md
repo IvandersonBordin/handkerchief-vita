@@ -356,3 +356,27 @@ execução do código ligado. O próximo experimento de maior valor
 é ligar a primeira função a um programa VitaSDK com dados
 sintéticos, medir sua execução no aparelho e verificar o acesso à
 memória antes de integrar código ao protótipo jogável.
+
+### Teste de deslocamento da memória no Linux
+
+A segunda função também passou nos mesmos 128 casos com a arena
+nativa movida de `0x4AB000` para `0x20000000` e `0x31000000`,
+em duas execuções independentes. Em cada uma, `g_image_delta` recebeu
+a nova base menos `0x4AB000`. O código x86 de referência manteve
+o banco e a entrada de importação nos endereços originais, mas
+recebeu os mesmos ponteiros para as estruturas da arena nova.
+Os oito registradores, a contagem de chamadas de `UnionRect`
+modelada e todos os bytes da arena coincidiram nas duas bases.
+
+O resultado elimina a necessidade de usar o endereço original
+dessas duas referências globais no C do recorte testado. O teste
+ainda usa uma arena contígua e ponteiros nativos que cabem em 32
+bits. O alcance de outras referências absolutas, o carregamento
+completo do PE32 e a execução no PS Vita continuam em aberto.
+
+O VPK de diagnóstico `HKRC00001` com os 514 casos da primeira
+função foi compilado com VitaSDK e GCC 15.2.0. O ZIP e o verificador
+de VPK da skill passaram. O pacote local está em
+`build/recomp-diagnostic/hdk_recomp_test.vpk`, fora do Git.
+SHA-256 `a710887a1b8312451dfc35eb8c1a65e43b908edbc2ca7937fb586889c1b6ff66`.
+O teste físico aguarda o console voltar à rede.

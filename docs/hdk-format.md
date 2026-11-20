@@ -368,3 +368,31 @@ passa EDI a `0x4043C7 → 0x419C4F`. O teste do bit 1 em
 Falta determinar quem preenche esse vetor e confirmar o tipo
 em execução. Esse caminho evidencia uma cópia de um registro
 selecionado, com origem independente do retorno da consulta CRock.
+
+#### Origem dos registros de posição de 20 bytes
+
+A inicialização em `0x4180CC–0x4180ED` multiplica a contagem
+em `[descritor+0x10]` por 20, aloca o vetor, guarda o ponteiro
+em `[objeto+0xDC]` e chama `0x403E18 → 0x41D290`.
+A rotina percorre as entradas com passo `0x14` e chama
+`0x402D7E → 0x417E46` para preencher cada uma. O trecho
+`0x418FED–0x419016` usa o mesmo escritor com um índice que
+volta a zero ao atingir o limite.
+
+Em `0x417E46`, o primeiro argumento fornece X/Y nos offsets
+`+0x18/+0x1C`, um valor em `+0x68` e um byte em `+0x70`.
+Esses dados chegam aos offsets `0`, `4`, `0x0C` e `0x10`
+do registro. O campo `+0x08` recebe bits derivados de
+`[origem+0x100]` e `[origem+0x108]`. Se o bit `0x80` de
+`+0x108` estiver presente e houver um segundo objeto com vetor,
+o escritor substitui X/Y pelo par de sua entrada selecionada
+em `[vetor+20×índice]`.
+
+Três vetores sintéticos no x86 isolado em Unicorn confirmaram
+a escrita básica, o caso com os bits ativos sem segundo
+objeto e o caso que copia de uma entrada do outro vetor.
+A prova identifica um registro de estado já existente.
+A rotina que integra a posição inicial do personagem continua
+em investigação. O próximo ponto é seguir o despacho em
+`0x419028` e verificar se seu receptor atualiza X/Y antes
+de a posição ser registrada no ciclo seguinte.

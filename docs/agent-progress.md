@@ -548,3 +548,11 @@ com objdump estão no [rastreio do índice](hdk-format.md#origem-do-índice-das-
 Para associar uma linha a A0, o próximo passo é seguir a chamada
 em `0x44FBC1` e identificar quem preenche o byte selecionado.
 Os 31 testes locais passaram e `git diff --check` passou.
+
+## Ciclo da seleção do byte em 0x44FBC6 — issue #6
+
+A leitura estática delimitou a seleção aos bytes de +0x84 a +0x88 e
+localizou uma escrita candidata em 0x4504F2. O [rastreio da seleção](hdk-format.md#seleção-do-byte-em-0x44fbc6)
+registra a condição de escrita e as duas bases globais. Os 31 testes
+locais passaram. Para vincular essa escrita a A0, o próximo passo é
+comparar as atribuições aos ponteiros em 0x4AD16C e 0x4AD228.

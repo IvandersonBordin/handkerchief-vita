@@ -485,6 +485,27 @@ Para reproduzir, use `objdump -d -Mintel` nos intervalos
 `[0x44FBB8, 0x44FBD0)`. Use `objdump -s --start-address=0x489b70
 --stop-address=0x489bd0` no mesmo PE para conferir as tabelas.
 
+#### Seleção do byte em 0x44FBC6
+
+O salto em `0x401DED` leva a `0x44EDB2`. A rotina compara o argumento
+com quatro valores de 32 bits, em ordem. Como ECX chega com
+`receptor+0x50`, a primeira comparação usa `receptor+0x74` e a última,
+`receptor+0x80`. O retorno é a posição da primeira igualdade (1 a 4)
+ou zero quando nenhuma coincide. Assim, `0x44FBC6` lê um dos bytes
+de `+0x84` a `+0x88`. Esse intervalo limita o endereço lido. O conteúdo
+do byte é que determina a linha das três tabelas.
+
+Há uma escrita candidata em `0x4504F2`. Quando a chamada em
+`0x4504D8` retorna zero, o código lê um byte de `[EBP+0x10]` e o
+grava em `[ponteiro de 0x4AD16C + ESI + 0x84]`. O leitor usa o
+ponteiro de `0x4AD228`. A correspondência entre os dois ponteiros
+e entre ESI e a posição selecionada continua em aberto no caminho de A0.
+
+Para conferir com `objdump -d -Mintel`, use os intervalos
+`[0x401DED, 0x401DF2)`, `[0x44EDB2, 0x44EDCE)` e
+`[0x4504D5, 0x4504F9)`.
+
+
 #### Origem do seletor em 0x4ABFD8
 
 O receptor da chamada em `0x440C19` é o subobjeto embutido em

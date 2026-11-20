@@ -258,3 +258,33 @@ for record, following in zip(records, records[1:]):
                   (left, top, left + w, top + h))
 MAPA
 ```
+
+### Decodificação de ROCK_0
+
+Em `0x40B938`, o leitor consulta o nome `CRock`. No ramo de
+leitura, `0x40B993` e `0x40B99A` leem dois inteiros de 32 bits
+para os campos `+0x0C` e `+0x10`. O produto define o tamanho
+da grade de bytes. A chamada em `0x40B9F3` chega a `0x40A73E`
+por `0x401B04`. Esse caminho lê um marcador zero e chama o
+decodificador em `0x40A775`. A instrução em `0x40C55C` avança
+pela largura ao percorrer uma coluna, confirmando a ordem por linhas.
+
+Em `0x40A824–0x40A8D5`, os cinco bits inferiores de cada comando
+guardam a contagem menos um. Os três superiores selecionam um
+literal, um valor já disponível na tabela local ou a repetição
+com multiplicador de 32. Repetições consecutivas multiplicam
+novamente por 32. O leitor local valida tamanho, truncamento e
+consumo integral da seção para a variante observada.
+
+```sh
+python3 -B tools/inspect_rock.py original-data/SYSTEM/A0.HDK
+```
+
+A0 decodificou em 1600 × 160 células, B0 em 1440 × 200 e A0_A em
+1200 × 240. Em A0, foram encontrados os valores 0, 1, 4, 8 e 16.
+O código em `0x40C531–0x40C578` examina colunas e registra uma
+linha a partir de uma sequência de cinco células diferentes de
+zero. Isso fornece um ponto de entrada para comparar o perfil
+com as inclinações visíveis na gravação de gameplay.
+A escala na tela, o significado das marcas e a ligação com a
+resposta de colisão do personagem seguem em aberto.

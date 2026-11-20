@@ -103,3 +103,23 @@ confirmou o encerramento. A validação visual da sequência segue pendente.
 Pacote experimental local `build/actor-sequence/out/recomp_a0.vpk`,
 SHA-256 `8536d3671afcb27cec9f085797c196877cdaa9e8caab89cd49189f96da580bec`.
 A variante usa os mesmos arquivos locais externos da prévia anterior.
+
+### Referência de gameplay e teste integrado no PC
+
+A gravação fornecida por Ivan foi consultada localmente em 20/11/2026.
+A abertura, aproximadamente entre 00:20 e 03:50, mostra terreno com
+inclinações, passagens entre áreas, mudanças de equipamento e
+interações com outros personagens. A gravação orienta a comparação
+visual. O identificador interno de cada trecho, a geometria sólida
+e as condições de progressão precisam de evidência no executável e
+nos dados do jogo. Quadros extraídos da gravação ficam fora do Git.
+
+Ivan confirmou no Vita que a sequência experimental do personagem
+roxo funcionou. Para a rodada em PC, um teste local com UBSan
+carregou o fundo de A0 e o arquivo de recortes, percorreu os três
+obstáculos sintéticos, chegou ao fim e reiniciou. Duas execuções
+independentes produziram posições e hashes de framebuffer iguais
+nos nove pontos de controle. A imagem inicial e a do reinício
+tiveram hash `84fcb84c`. A prova cobre a rodada experimental e
+a repetibilidade do teste. O terreno e os eventos vistos no vídeo
+continuam fora desse recorte.

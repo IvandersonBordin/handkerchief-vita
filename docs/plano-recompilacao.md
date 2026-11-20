@@ -283,3 +283,30 @@ executor são a referência de regressão.
 - **Pendente de autorização** — prova com dependências externas,
   mudanças no catálogo para sua execução, arquitetura, acesso ou
   configuração do console.
+
+## Prioridade da prova de recompilação
+
+A prova com PCRecomp passa à frente de novos recortes exploratórios
+do desenho de A0. A base nativa continua sendo usada até a comparação.
+Para obter um resultado com menos dependências, começar pela consulta
+de sobreposição `0x4096E8–0x409716` (47 bytes). Ela recebe dois
+ponteiros para retângulos com quatro inteiros de 32 bits com sinal,
+retorna 0 ou 1 em EAX e dispensa imports, tabelas globais e x87.
+
+A referência x86 foi validada no Linux com 514 vetores. O teste usou
+apenas o trecho extraído em leitura com `pefile`, inserido em um ELF
+temporário com `as --32` e `ld -m elf_i386`. Nenhum executável
+Windows foi iniciado. Os resultados coincidiram com as quatro
+comparações documentadas por Bruno. A amostra inclui contato pela
+borda, contenção e 512 combinações com semente 42 e valores extremos
+de inteiros com sinal. Só a referência foi executada. A sandbox padrão
+bloqueou o ELF32 com SIGSYS, e a execução autorizada passou.
+
+Antes de liberar a tarefa pelo supervisor, revisar e fixar a revisão do
+PCRecomp e disponibilizar suas dependências em ambiente isolado.
+O primeiro aceite exige C gerado, compilação Linux e ARMv7 e
+equivalência de retorno nos mesmos vetores. Se passar, repetir em
+`0x40963E`, incluindo o banco de dimensões e a fronteira
+`UnionRect`. A primeira prova mede o custo de traduzir uma rotina
+isolada. A segunda mede parte do custo de integração. Limitar a
+comparação com I.G.I. ou SH4 a um bloqueio concreto do PCRecomp.

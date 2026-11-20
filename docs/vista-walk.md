@@ -93,8 +93,10 @@ SELECT e Triângulo continuam disponíveis para explorar o catálogo.
 Inspirado em comparações por rotina e entradas repetíveis por
 quadro, o teste Linux com UBSan verificou quatro imagens distintas,
 a repetição do ciclo e o retorno à pose de partida. O VPK passou
-nas verificações ZIP e LiveArea. O console estava desligado, então
-a instalação e a validação visual desse pacote seguem pendentes.
+nas verificações ZIP e LiveArea. Em 20/11/2026, os seis arquivos
+instalados no Vita coincidiram com o pacote. O console registrou
+`HKRC00009 6/6 PASS scene=ready actors=ready` e o VitaCompanion
+confirmou o encerramento. A validação visual da sequência segue pendente.
 [I.G.I. Recomp](https://github.com/HenryKun55/igi-recomp),
 [PCRecomp](https://github.com/sp00nznet/pcrecomp).
 

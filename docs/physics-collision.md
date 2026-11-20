@@ -758,3 +758,39 @@ for intervalo in 423157:423161 402bf3:402bf8 412c38:412c63 \
         --stop-address="0x${intervalo#*:}" "$exe"
 done
 ```
+
+## A0 — destino de Y após o despacho em 0x419A23
+
+Para a tabela candidata `0x46E7A8`, EDI conserva o método do slot
+`+0x28` entre as chamadas em `0x419A23` e `0x419A55`. Após a primeira,
+`0x419A25` lê Y de `[esi+0x1C]`, `0x419A32` guarda a cópia em
+`[ebp-4]` e `0x419A4D` a empilha. X vem de `[esi+0x18]` e é
+empilhado em `0x419A50`. Os dois últimos valores empilhados são
+zero e 11. Assim, o método recebe os argumentos explícitos (11, 0).
+Seu `ret 8` consome esses dois argumentos e deixa X e Y na pilha.
+
+Em `0x41D8A4`, 11 menos 9 dá índice 2. A entrada em
+`0x41DA63 + 4*2` aponta para `0x41D988`. O ramo monta pares de
+valores na pilha. O segundo argumento zero escolhe o primeiro par
+(0x49, 0x4A) em `0x41D9B5`. O bit inferior do retorno de
+`0x4033F0` seleciona um deles em `0x41D9BE–0x41D9C1`.
+Esse ramo não grava diretamente em `[esi+0x1C]`.
+
+Em `0x419A57–0x419A5B`, o chamador põe `[esi+0x48]` em ECX,
+empilha o valor selecionado e chama `0x403FE9 → 0x4268FC`. Na
+entrada, os argumentos na pilha começam pelo valor selecionado, X e Y.
+A identidade do objeto em ECX e o uso posterior de Y continuam em aberto.
+Na gravação, em 01:00, vê-se uma figura na escada que sobe à direita.
+O quadro permite comparar o terreno, mas não identifica o objeto em ECX
+nem associa essa chamada ao instante filmado.
+
+Reprodução com o PE32 identificado pelo SHA-256 no início do documento.
+
+```bash
+exe=/home/ivanderson/Projetos/handkerchief-vita/original-data/HDKWIN.EXE
+for intervalo in 419a19:419a6a 41d861:41d8b3 41d988:41d9c9 403fe9:403fee; do
+    objdump -d -Mintel --start-address="0x${intervalo%:*}" \
+        --stop-address="0x${intervalo#*:}" "$exe"
+done
+objdump -s --start-address=0x41da6b --stop-address=0x41da6f "$exe"
+```

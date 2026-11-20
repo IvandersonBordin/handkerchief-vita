@@ -556,3 +556,87 @@ localizou uma escrita candidata em 0x4504F2. O [rastreio da seleção](hdk-forma
 registra a condição de escrita e as duas bases globais. Os 31 testes
 locais passaram. Para vincular essa escrita a A0, o próximo passo é
 comparar as atribuições aos ponteiros em 0x4AD16C e 0x4AD228.
+
+## Ciclo das bases da escrita e da leitura — issue #6
+
+Na desmontagem estática de HDKWIN.EXE com GNU objdump, a escrita candidata
+em `0x4504F2` depende da base guardada em `0x4AD16C`. O código zera essa
+global em `0x45071B`. Em `0x450873`, guarda ESI nela após a comparação
+em `0x450864` encontrar o valor de EBP na global.
+
+A leitura em `0x44FBC6` depende da base guardada em `0x4AD228`.
+As atribuições em `0x4513ED` e `0x45621F` guardam o retorno da chamada
+a `0x401ED3` ou zero, conforme o ramo. Outra atribuição, em `0x451420`,
+guarda EDI. Nos dois primeiros caminhos, o código também passa o endereço
+da própria global em ECX nas chamadas em `0x4513F2` e `0x456224`.
+Ambas chegam a `0x45A8E2` pelo salto em `0x403CFB`.
+
+As atribuições diretas deixam em aberto se as bases apontam para a mesma
+instância no ramo de A0. O próximo passo é rastrear o uso de ECX em
+`0x45A8E2` e verificar se há uma escrita indireta no ponteiro do leitor.
+A suíte local passou nos 31 testes. A conferência dos endereços foi estática.
+
+## Ciclo do uso de ECX em 0x45A8E2 — issue #6
+
+As chamadas em `0x4513F2` e `0x456224` passam o endereço de
+`0x4AD228` em ECX. O salto em `0x403CFB` leva a `0x45A8E2`.
+A rotina guarda o endereço em ESI e lê o ponteiro em `0x45A8E5`.
+Se o ponteiro for nulo, retorna 1. Caso contrário, consulta a
+palavra de 32 bits em `0x4AD22C` e chama `0x45A1E2` (valor diferente
+de zero) ou `0x45B55C` (zero), com o ponteiro lido em ECX.
+
+Se a chamada retornar zero, `0x45A909` relê o ponteiro. O despacho
+em `0x45A916` usa o objeto indicado pelo campo `+0x04` desse ponteiro
+e recebe também o endereço do campo `+0x08`. No corpo inspecionado,
+os acessos por ESI são leituras. Os efeitos internos das chamadas
+permanecem em aberto. Esse trecho não demonstra que a escrita em
+`0x4504F2` e a leitura em `0x44FBC6` alcançam a mesma instância em A0.
+
+Conferência reproduzível com GNU objdump em sintaxe Intel, usando
+`-d -Mintel --start-address=0x45a8e2 --stop-address=0x45a91e` no EXE
+local. Próxima ação: seguir o retorno de `0x44F70A` (destino de
+`0x401ED3`) e procurar uma atribuição da mesma instância a `0x4AD16C`.
+
+## A0 — despacho do movimento em 0x419028
+
+Em `0x418E52`, ESI recebe o ECX de entrada de `0x418E47`. Em
+`0x419020–0x419028`, EDI recebe a tabela apontada por esse objeto,
+ECX volta a receber ESI e o despacho usa a entrada `+0x34` da tabela.
+O argumento na pilha é o segundo argumento da rotina externa
+(`[ebp+0x0C]`). A classe concreta depende da tabela instalada no objeto.
+
+| Condição | Destino observado |
+| --- | --- |
+| EAX diferente de zero após o despacho | Copia o primeiro argumento para a variável local `[ebp-4]` e salta para `0x419146`. |
+| EAX zero e algum dos bits de `[esi+0x109] & 3` ativo | Prepara uma estrutura local e chama a entrada `+0x38` em `0x419056`. |
+| EAX zero e ambos os bits livres | Segue para `0x419073` e consulta a entrada `+0x28`. |
+
+Há outro teste em `0x4190E1`: aplica 3 ao byte **do retorno** de
+`0x4190DE` (entrada `+0x20` do objeto lido em `[ebp-0x10]`).
+Esse caminho depende, entre outras condições, do sucesso da chamada em
+`0x4190A9`. A escrita em `0x419032` seleciona um valor na pilha.
+Para demonstrar ajuste de Y ainda é preciso resolver o destino de
+`+0x34` para a instância de A0 e seguir as escritas desse método.
+
+Conferência local com objdump em sintaxe Intel nos intervalos
+`0x418E47–0x418E63` e `0x41901D–0x419146`. Em A0.HDK, o bloco
+em `0x59` traz ROCK_0 em `0x5D` e CRock em `0x64`. Esses nomes
+identificam o recurso. Na gravação, em 01:00, há degraus subindo à
+direita e uma figura sobre a escada. A imagem não identifica o método
+usado naquele instante nem fornece a coordenada interna Y.
+
+Validação no host: reprodução isolada de TEST e dos desvios x86 com
+EAX em {0, 1, 256, 0xFFFFFFFF} e os 256 valores possíveis do byte
+de flags. Os 1.024 casos concordaram com a tabela. A suíte existente
+passou nos 31 testes com `PYTHONPATH=tools python3 -B -m unittest discover -s tests`.
+
+## B02 — segunda chamada ao slot +0x28 em 0x419A55
+
+Após o ramo (1, 0) da issue #8, o despacho candidato (11, 0)
+seleciona 0x49 ou 0x4A. A cópia de Y fica na pilha para a chamada
+a 0x4268FC. O escritor de Y do protagonista permanece em aberto.
+A desmontagem, a entrada da tabela e o limite da comparação visual
+em 01:00 estão em [physics-collision.md](physics-collision.md#a0--destino-de-y-após-o-despacho-em-0x419a23).
+Conferidos o SHA-256 do PE32 e os 31 testes locais. Próximo passo de B02:
+seguir o terceiro argumento de 0x4268FC até seu primeiro uso e identificar
+o objeto de destino de uma eventual escrita.

@@ -743,3 +743,14 @@ como receptor e chega a 0x41CA5C. Condições, comandos e confronto com
 01:00 estão em docs/physics-collision.md. Passaram 31 testes locais.
 Próxima ação: verificar se 0x41CA5C, com argumento 1, escreve no
 campo Y do receptor ou encaminha essa escrita a outro método.
+
+## B02 — chamadas de 0x41CA5C com argumento 1
+
+Issue #8 em andamento. Conferidos o receptor, os dois testes de entrada,
+a cópia local e os destinos das chamadas em docs/physics-collision.md.
+O corpo não escreve diretamente em Y. Registro ROCK_0/CRock conferido
+em A0.HDK e quadro da escada consultado em 01:00. Passaram 16 casos
+sintéticos x86 e 31 testes locais. A issue ficou sem atualização remota
+(gh sem autenticação e falha de DNS na API pública).
+Próxima ação: seguir 0x40BC5D com a cópia local e 0x40 para identificar
+o objeto e os campos de destino da escrita no caminho comum ativo.

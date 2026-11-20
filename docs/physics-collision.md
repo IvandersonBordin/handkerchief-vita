@@ -983,3 +983,37 @@ done
 
 Em 01:00 da gravação há uma figura sobre os degraus. O quadro não
 identifica ESI nem revela qual ramo atualiza a altura dessa figura.
+
+### A0 — efeitos diretos de 0x41CA5C com argumento 1
+
+No caminho descrito acima, 0x41CA63 preserva em EBX o receptor
+passado em ECX pelo chamador. Seja D o ponteiro lido de [ebx+0x78].
+A rotina retorna por 0x41CB6C sem chamar outro método se o dword
+[D+0x38] tiver o bit 0x0800 desligado ou se o byte [ebx+0x80]
+tiver o bit 0x10 ligado. O primeiro teste usa DH, o segundo byte de EDX.
+
+Quando passa pelos dois testes, 0x41CA86–0x41CA8F copia os quatro
+dwords de +0x30 até +0x3C do receptor para [ebp-0x14] e seguintes.
+Os ajustes de alinhamento e os deslocamentos de quatro unidades
+alteram a cópia local. Com argumento 1, as chamadas seguem esta ordem:
+
+| Condição em [D+0x38] | Instrução de chamada | Destino após o salto |
+| --- | --- | --- |
+| Bit 0x2000 ligado | 0x41CAD1 | 0x40BDDD |
+| Bit 0x4000 ligado | 0x41CB16 | 0x40BDDD |
+| Sempre após passar pelos testes de entrada | 0x41CB4E | 0x40BC5D |
+
+As três chamadas obtêm ECX seguindo, em ordem, os ponteiros nos
+deslocamentos +0x48, +0x3C e +0x6C a partir de EBX. A última recebe
+o endereço da cópia local e 0x40. Até o retorno em 0x41CB70 não há
+escrita direta em Y do receptor nem cópia dos quatro campos de volta.
+Os efeitos dentro dos destinos e a identidade do receptor na cena
+continuam abertos. Em A0.HDK, 0x5D contém ROCK_0 seguido de CRock.
+Em 01:00 há uma figura junto aos degraus. Nenhuma dessas observações
+identifica os bits ativos naquela instância.
+
+Para reproduzir, usar objdump -d -Mintel nos intervalos de fim
+exclusivo 0x41CA5C–0x41CB73, 0x401177–0x40117C e 0x401E24–0x401E29.
+O ensaio independente em x86-64 combinou os três bits 0x0800,
+0x2000 e 0x4000 com o bit 0x10 do receptor (16 casos). Conferiu
+a classificação dos caminhos com argumento 1, sem simular os destinos.

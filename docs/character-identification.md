@@ -169,3 +169,26 @@ Para reproduzir, use `objdump -s` com
 `--start-address=0x49d8f0 --stop-address=0x49d910` e
 `--start-address=0x49da78 --stop-address=0x49dab0`. A leitura
 usa o `HDKWIN.EXE` local em modo somente leitura.
+
+#### Vínculo com o descritor humanoide
+
+O par em `0x47C708` guarda o endereço do descritor `0x4AD268`
+e o nome `cgmHUM1a` em `0x47DB24`. A inicialização em
+`0x45B902–0x45B916` grava `0x472600` no descritor e
+`0x49DB38` no campo seguinte, `0x4AD26C`.
+Na tabela que começa em `0x49DB38`, a entrada em `+0x18`
+aponta para `0x49DB28`. As quatro palavras desse endereço
+apontam para `0x49DA78`, `0x49DA88`, `0x49DA98` e
+`0x49DAA8`. Cada um dos quatro registros guarda `0x49D8F0`
+na segunda palavra, ligando o descritor nomeado à sequência 41–44.
+
+A leitura estabelece uma rota entre o nome interno e os recortes
+reconhecidos no Vita. Falta identificar a rotina que consulta
+o campo em `0x4AD26C` por meio de um ponteiro, e verificar
+qual estado seleciona a entrada `+0x18`. O significado de `1`
+em cada par de quadro continua desconhecido.
+
+Conferir a inicialização com `objdump -d -Mintel` no intervalo
+`0x45B902–0x45B917` e os ponteiros com `objdump -s` nos
+intervalos `0x47C708–0x47C710`, `0x47DB24–0x47DB2D` e
+`0x49DB28–0x49DB58`, sempre em `HDKWIN.EXE` local.

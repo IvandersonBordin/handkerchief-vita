@@ -828,3 +828,38 @@ for intervalo in 4268fc:426942 40370b:403710 45d1f6:45d23a \
         --stop-address="0x${intervalo#*:}" "$exe"
 done
 ```
+
+### A0 — retorno antecipado do método candidato em 0x419028
+
+Se a tabela do receptor for 0x46E7A8, a entrada +0x34 fica em
+0x46E7DC. Seus quatro bytes, lidos em little-endian, dão 0x404386.
+O salto nesse endereço leva a 0x419926. Em 0x41992D, ESI recebe o
+receptor de ECX. Há duas formas de chegar ao retorno zero em 0x419952
+antes de chamar outro método ou escrever na coordenada Y:
+
+- O campo de 32 bits em [esi+0x8C] é diferente de zero (0x419930–0x419937).
+- Esse campo vale zero, o bit de máscara 2 em [esi+0x80] está ativo
+  e o argumento é nulo ou tem o bit de máscara 1 limpo no byte
+  [argumento+0x81] (0x419939–0x419950).
+
+Em ambos os casos, EAX recebe zero e o salto leva ao epílogo em
+0x419A63, que termina com ret 4. Se o fluxo chega a 0x419959, ECX
+recebe [esi+0x7C]. Se esse valor é zero, a rotina lê [edi+0x7C],
+onde EDI contém o argumento. Para um ponteiro válido selecionado
+diferente de zero, 0x419967 lê sua tabela, 0x419969 empilha ESI e
+0x41996A chama o slot +0x10. Essa é a primeira chamada desse caminho
+que recebe o ator e cujo efeito sobre Y precisa ser verificado.
+
+O vínculo da tabela candidata ao protagonista de A0 permanece aberto.
+Em 01:00 da gravação, a figura aparece nos degraus que sobem à direita.
+O quadro não revela o valor dos campos que selecionam o ramo.
+
+Reprodução com a variável `exe` definida acima e intervalos de fim exclusivo:
+
+```bash
+objdump -s --start-address=0x46e7dc --stop-address=0x46e7e0 "$exe"
+for intervalo in 419020:41903b 404386:40438b 419926:41996d 419a63:419a6a; do
+    objdump -d -Mintel --start-address="0x${intervalo%:*}" \
+        --stop-address="0x${intervalo#*:}" "$exe"
+done
+```

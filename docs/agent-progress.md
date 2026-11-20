@@ -650,3 +650,49 @@ EDI. A diferença fica em ECX. Condições e reprodução constam em
 Quadro de 01:00 conferido e 31 testes locais aprovados. B02 segue
 aberta. Próxima ação: seguir ECX de 0x426A5B até seu consumidor e
 verificar se alguma escrita posterior alcança o Y da instância de A0.
+
+## B02 — origem do receptor de 0x419028 nos dois chamadores diretos
+
+A busca em `objdump -d -Mintel HDKWIN.EXE` encontrou o salto de
+0x404124 para 0x418E47 e duas chamadas diretas a esse salto.
+Nos dois caminhos, ao chegar ao despacho, ECX contém o receptor de
+entrada do chamador e o argumento empilhado em 0x419022 é o segundo
+argumento recebido pelo chamador.
+
+| Entrada → chamada | Como conferir a origem |
+| --- | --- |
+| 0x418E24 → 0x418E2F | Salva ESI e empilha duas vezes [ESP+0xC]. O primeiro push lê o segundo argumento e o deslocamento de ESP faz o seguinte ler o primeiro. ECX atravessa intacto. |
+| 0x42DBC1 → 0x42DBD0 | Após salvar EBX, lê o segundo argumento em [ESP+0xC]. Salva mais três registradores, empilha EBX e depois [ESP+0x18], que contém o primeiro argumento. Copia ECX para ESI. |
+
+As entradas também são alcançadas por saltos em 0x403049 e 0x403373,
+respectivamente. Uma busca de ponteiros de 32 bits alinhados em
+.rdata encontrou duas referências ao primeiro salto (0x46E7C0 e
+0x46E850) e 27 ao segundo (incluindo 0x46F458). Esses endereços
+permitem investigar quais tabelas pertencem às instâncias de A0.
+
+O limite está na associação entre a instância e sua tabela. O HDK
+identifica ROCK_0 e CRock a partir de 0x5D, mas esse registro não
+fornece o ECX de nenhum dos dois chamadores. Em 01:00 da gravação,
+uma figura está nos degraus que sobem à direita. A posição visual
+também não identifica o receptor. No ramo de retorno zero, 0x41903A
+testa a máscara 3 no byte +0x109 desse receptor. No ramo de retorno
+diferente de zero, 0x419032 escreve o primeiro argumento na pilha.
+A eventual escrita da coordenada Y pelo método +0x34 continua aberta.
+
+Validação local: seis casos isolados de pilha modelados em Python
+(dois prólogos e três pares de argumentos, incluindo 0 e 0xFFFFFFFF).
+A tentativa adicional com um ELF sintético de 32 bits terminou em
+SIGSYS e não forneceu resultado de execução. Os 31 testes do projeto
+passaram. A consulta remota à issue #8 ficou indisponível por falta
+de autenticação no gh e falha de DNS no acesso público.
+
+## B02 — primeiro desvio do slot +0x34 na tabela candidata 0x46E7A8
+
+Issue #8, em andamento. A leitura do ponteiro em 0x46E7DC e do salto
+em 0x404386 liga a chamada candidata a 0x419926. A desmontagem mostra
+um retorno antecipado sem escrita em Y e, no caminho que prossegue,
+um despacho em 0x41996A que passa o ator na pilha. Condições, comandos
+e comparação com 01:00 da gravação em docs/physics-collision.md.
+Próxima ação: rastrear quem preenche o campo +0x7C do receptor para
+tentar resolver o slot +0x10 chamado em 0x41996A. A tabela da instância
+de A0 e a escrita de Y do protagonista continuam sem confirmação.

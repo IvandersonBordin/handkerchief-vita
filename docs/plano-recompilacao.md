@@ -310,3 +310,49 @@ equivalência de retorno nos mesmos vetores. Se passar, repetir em
 `UnionRect`. A primeira prova mede o custo de traduzir uma rotina
 isolada. A segunda mede parte do custo de integração. Limitar a
 comparação com I.G.I. ou SH4 a um bloqueio concreto do PCRecomp.
+
+### Resultado da prova com PCRecomp
+
+A revisão MIT `621860a9d22c9b25ae2be4575b956596f4ddaeeb` do
+[PCRecomp](https://github.com/sp00nznet/pcrecomp/tree/621860a9d22c9b25ae2be4575b956596f4ddaeeb)
+foi usada em diretório temporário com Capstone 5.0.9 e Unicorn 2.1.4.
+O emissor `tools/lift/lift32_cpu.py` gerou C diretamente do PE32,
+sem alteração manual no corpo gerado. O SHA-256 do jogo é o do
+inventário desta auditoria. Os artefatos derivados ficaram locais.
+
+| Função | Comparação executada no Linux | ARMv7 |
+|---|---|---|
+| `0x4096E8`, sobreposição | 514/514 casos. Igualdade dos oito registradores de uso geral, das flags CF/PF/ZF/SF/OF e dos 4096 bytes da arena. O retorno também coincidiu com o modelo de desigualdades. | Objeto EABI5 compilado com VitaSDK. |
+| `0x40963E`, união gráfica | 128/128 casos. Igualdade dos oito registradores, da quantidade de chamadas de importação e dos 24576 bytes da arena. Testes incluem lista nula, lista vazia, até quatro elementos, dimensões negativas e sobreposição do destino com uma fonte da união. | Objeto ARMv7-A compilado com declaração externa de `dispatch`. |
+
+Para reproduzir o primeiro caso, ler 47 bytes a partir do offset de
+arquivo `0x8AE8` e chamar `Lifter.lift_function(bytes, 0x4096E8)`.
+Incluir `runtime/recomp32_cpu/cpu.h` no C emitido. Montar a arena de
+dados em `0x20000000`, com os retângulos nos offsets 0 e 16 e o
+retorno e argumentos no offset `0x800`. Usar os dois vetores
+`(0,0,4,4,4,0,8,4)`, `(0,0,4,4,1,1,2,2)` e gerar os demais com
+`random.Random(42).choice` sobre
+`[-2147483648,-100,-1,0,1,100,2147483647]`. Comparar após RET com
+Unicorn x86 de 32 bits, uma instrução de retorno por pilha e a mesma
+imagem inicial de memória.
+
+Para o segundo caso, emitir os 136 bytes a partir do offset
+`0x8A3E`. Mapear a arena em `0x4AB000` e preencher a tabela de
+bancos em `0x4ABD74` e o import em `0x4AFA34`. O C exige
+`g_image_delta` e um despachante para esse import. O teste usou
+`g_image_delta=0`, um adaptador em C no host e um hook Python
+independente no Unicorn. Ambos modelaram união de retângulos e a
+limpeza de 12 bytes de argumentos do callee. Isso compara a rotina
+original e a gerada sob um contrato de teste. Ainda falta comparar
+o adaptador com a implementação de Windows em casos reais.
+
+**Decisão após a prova.** A tradução de rotinas delimitadas é viável
+nos casos medidos. A estratégia para o jogo completo permanece B
+provisória. O runtime testado trata endereços convidados como
+ponteiros do host. O Linux permitiu arenas nos endereços de teste.
+No Vita falta demonstrar um mapa de memória compatível ou uma
+tradução de endereços, o despacho para chamadas externas e a
+execução do código ligado. O próximo experimento de maior valor
+é ligar a primeira função a um programa VitaSDK com dados
+sintéticos, medir sua execução no aparelho e verificar o acesso à
+memória antes de integrar código ao protótipo jogável.

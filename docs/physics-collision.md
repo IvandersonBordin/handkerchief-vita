@@ -863,3 +863,32 @@ for intervalo in 419020:41903b 404386:40438b 419926:41996d 419a63:419a6a; do
         --stop-address="0x${intervalo#*:}" "$exe"
 done
 ```
+
+### A0 — um produtor do receptor do slot +0x10
+
+Em 0x4182C1 a rotina instala a tabela candidata 0x46E7A8. Em
+0x4182DC–0x4182E1 zera o campo +0x7C da mesma instância. Há também
+um caminho que atribui um objeto com tabela identificável a esse campo:
+
+| Endereço | Evidência estática |
+| --- | --- |
+| 0x42DE33–0x42DE59 | Solicita 0x20 bytes. Se a chamada retorna zero, empilha zero. Caso contrário, chama 0x4041E7 com o ponteiro em ECX, ESI como primeiro argumento e zero como segundo, e empilha o retorno. |
+| 0x4041E7 → 0x41F3DF | A rotina instala 0x46E938 em [esi] em 0x41F3F3 e devolve essa instância em EAX em 0x41F416. |
+| 0x42DE5A–0x42DE5C → 0x403EE0 → 0x419C0A | O destino recebe o ESI do chamador em ECX. Depois de chamar 0x401B27, grava o argumento empilhado em [esi+0x7C] em 0x419C16. |
+| 0x46E948 → 0x4042F0 → 0x41F0B3 | Se o despacho em 0x41996A selecionar um objeto que conserve a tabela 0x46E938, o slot +0x10 lê [ecx+0xC]. Se zero, retorna. Caso contrário, passa o ator recebido na pilha a 0x401EB5, usando esse novo ponteiro em ECX. |
+
+O método em 0x41F0B3 não escreve diretamente em Y. A máscara 3
+testada em 0x41903A pertence ao caminho de retorno zero do despacho
+externo. A atribuição em 0x42DE5C, por si só, não prova que a
+instância selecionada nos degraus de A0 passou por esse caminho.
+Em A0.HDK, o par ROCK_0 e CRock começa em 0x5D. Em 01:00 do vídeo,
+uma figura aparece nos degraus. Nenhuma das observações distingue
+qual dos dois objetos forneceu +0x7C.
+
+Para conferir, use objdump -d -Mintel nos intervalos da tabela e
+objdump -s entre 0x46E948 e 0x46E94C (fim exclusivo). O ensaio
+isolado em x86-64 usou registradores de 32 bits e a sequência
+sintética `mov eax,edi; test eax,eax; jne fim; mov eax,esi; fim: ret`.
+Com os campos do ator e do argumento representados por sentinelas,
+os pares (0,0), (0,17), (23,0) e (23,17) devolveram 0, 17, 23 e 23.
+O ensaio cobre a prioridade do seletor para objetos válidos.

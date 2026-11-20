@@ -696,3 +696,17 @@ e comparação com 01:00 da gravação em docs/physics-collision.md.
 Próxima ação: rastrear quem preenche o campo +0x7C do receptor para
 tentar resolver o slot +0x10 chamado em 0x41996A. A tabela da instância
 de A0 e a escrita de Y do protagonista continuam sem confirmação.
+
+## B02 — origem possível de +0x7C e destino do slot +0x10
+
+Em andamento na issue #8. A atribuição em 0x42DE5C pode instalar um
+objeto de tabela 0x46E938 no campo +0x7C. Seu slot +0x10 chega a
+0x41F0B3, que consulta outro receptor em +0xC e pode encaminhar o
+ator a 0x401EB5. O vínculo dessa instância com o movimento de A0 e
+a escrita em Y continuam abertos. Endereços, observação de 01:00
+e casos isolados estão em docs/physics-collision.md. Passaram os
+quatro casos sintéticos de seleção x86 e os 31 testes locais.
+A consulta e a atualização remotas da issue ficaram indisponíveis
+(gh sem autenticação e API pública sem resolução DNS).
+Próxima ação: seguir 0x401EB5 com o ator como argumento e verificar
+se há escrita em Y e a qual instância ela pertence.

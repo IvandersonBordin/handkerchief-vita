@@ -143,3 +143,29 @@ A confirmação estabelece o grupo a priorizar no atlas. A referência
 ao ator controlado, a situação em que essa aparência é usada e a
 ordem e duração das poses ainda precisam ser confirmadas no motor.
 [Controles da prévia](vista-walk.md#prévia-de-personagens-na-rodada).
+
+### Sequência encontrada no executável
+
+A leitura estática de `.data` encontrou em `0x49D8F0` quatro
+pares consecutivos de ponteiro e inteiro de 32 bits. Cada ponteiro
+leva a uma lista gráfica com um elemento e um terminador zero.
+
+| Par na tabela | Lista gráfica | Referência bruta | Banco e índice | Segundo valor |
+|---|---|---|---|---|
+| `0x49D8F0` | `0x49D338` | `0x18008029` | 6, 41 | 1 |
+| `0x49D8F8` | `0x49D350` | `0x1800802A` | 6, 42 | 1 |
+| `0x49D900` | `0x49D368` | `0x1800802B` | 6, 43 | 1 |
+| `0x49D908` | `0x49D380` | `0x1800802C` | 6, 44 | 1 |
+
+As listas usam deslocamentos locais `(-20, -39)`. A tabela de
+descritores repete o ponteiro inicial `0x49D8F0` em `0x49DA7C`,
+`0x49DA8C`, `0x49DA9C` e `0x49DAAC`. A ordem dos registros é
+verificável no binário. O estado que seleciona o descritor, o
+significado do segundo valor e a duração de cada quadro aguardam
+o rastreio da rotina consumidora.
+
+Para reproduzir, use `objdump -s` com
+`--start-address=0x49d338 --stop-address=0x49d398`,
+`--start-address=0x49d8f0 --stop-address=0x49d910` e
+`--start-address=0x49da78 --stop-address=0x49dab0`. A leitura
+usa o `HDKWIN.EXE` local em modo somente leitura.

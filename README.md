@@ -2,7 +2,7 @@
 
 > **Work in progress.** This is an independent research project exploring a native PlayStation Vita port of *Handkerchief*. It is **not a complete or faithful playable port**.
 
-[Português](#português) · [Technical documentation](docs/feasibility.md)
+[Technical documentation](docs/feasibility.md)
 
 ## Current status
 
@@ -58,23 +58,12 @@ Contributions and technical discussions can be proposed through [GitHub Issues](
 
 This is an unofficial, non-commercial research effort. No original commercial game executable or proprietary game assets are provided. You must supply your own original data. Reverse-engineering findings and prototype behavior should not be interpreted as proof of compatibility with the complete game.
 
----
 
-## Português
+## Technical documentation
 
-Este é um projeto independente de pesquisa para portar *Handkerchief* nativamente ao PS Vita. **Ainda não é um port completo nem fiel ao jogo original.** O objetivo é estudar os formatos HDK, compreender partes do motor Windows x86 e implementar componentes testáveis em C com VitaSDK.
-
-**Já existe:** leitura parcial dos dados, prévias de cenário, protótipos no Vita com controles/animação e testes de uma rodada com física sintética. Uma consulta vertical do terreno original foi validada em 432 casos isolados.
-
-**Ainda falta:** vincular as consultas do terreno à movimentação real do protagonista, reproduzir gravidade, saltos e colisões, e implementar o restante das regras, eventos e fases.
-
-**Colaborações:** propostas e discussões técnicas podem ser registradas nas [issues](../../issues).
-
-### Documentação técnica
-
-- [Viabilidade e estratégia](docs/feasibility.md)
-- [Mapa do motor](docs/engine-map.md)
-- [Formato HDK](docs/hdk-format.md)
-- [Investigação de personagens](docs/character-identification.md)
-- [Protótipos e testes no Vita](docs/vista-walk.md)
-- [Orientações de desenvolvimento e validação](AGENTS.md)
+- [Feasibility and strategy](docs/feasibility.md)
+- [Engine map](docs/engine-map.md)
+- [HDK format](docs/hdk-format.md)
+- [Character investigation](docs/character-identification.md)
+- [Vita prototypes and tests](docs/vista-walk.md)
+- [Development and validation guidelines](AGENTS.md)

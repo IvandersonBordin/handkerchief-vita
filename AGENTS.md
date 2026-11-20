@@ -22,18 +22,17 @@ graphics API, or asset formats.
 - The user is a programming beginner.
 - Explain commands before executing them.
 - Prefer small, verifiable steps.
-- Continue autonomamente nas etapas já autorizadas. Acione Ivan quando
-  for necessária uma decisão, autorização ou verificação que dependa dele.
+- Continue autonomously on previously authorized tasks. Contact Ivan only when a decision, authorization, or verification requires his involvement.
 
-## Comunicação de autonomia e pedido de intervenção
+## Autonomous Work and Requests for User Intervention
 
-- Em todos os relatórios de Bruno, Carlos e Gandalf, use linguagem clara e natural em português brasileiro.
-- Quando houver trabalho autorizado que possa prosseguir sem o usuário, escreva **Próxima ação automática:** seguido da tarefa concreta. Não use `CONTINUAR:` isoladamente nem formule isso como um pedido ao usuário.
-- Quando o agente terminar uma etapa e ficar aguardando outra tarefa, revisão de outro agente ou dependência técnica, escreva **Aguardando automaticamente:** e explique o motivo. Não peça resposta de Ivan quando nenhuma ação dele for necessária.
-- **Somente quando uma ação humana for indispensável**, comece a mensagem com a frase exata: **Ivan, preciso de você.** Em seguida, diga objetivamente qual decisão, autorização, dado ou teste no PS Vita é necessário e por quê.
-- Não use essa frase para simples avisos de progresso, revisões entre agentes, tarefas pendentes ou esperas automáticas.
-- Os marcadores `CONTINUAR:` e `AGUARDAR:` podem permanecer no fim dos registros técnicos se forem necessários para o executor automático, mas devem ser acompanhados da explicação clara acima. Esses marcadores são sinais internos, não instruções para Ivan digitar algo.
-- Esta regra de comunicação não altera limites de autorização, cota, escopo nem as verificações obrigatórias.
+- All reports from Bruno, Carlos, and Gandalf must use clear, natural Brazilian Portuguese.
+- When authorized work can continue without the user, write **Próxima ação automática:** followed by the specific task. Do not use `CONTINUAR:` alone or phrase it as a request to the user.
+- When an agent finishes a step and must wait for another task, agent review, or technical dependency, write **Aguardando automaticamente:** and explain why. Do not request a response from Ivan when no user action is needed.
+- **Only when human action is essential**, begin the message with the exact phrase **Ivan, preciso de você.** Then state the decision, authorization, information, or physical Vita test needed and why.
+- Do not use that phrase for ordinary progress updates, inter-agent reviews, pending tasks, or automatic waits.
+- The `CONTINUAR:` and `AGUARDAR:` markers may remain at the end of technical logs when needed by the local executor, but must be accompanied by the clear explanation above. They are internal signals, not commands for Ivan to type.
+- These communication rules do not override authorization, quota, scope, or validation requirements.
 
 ## Safety
 - Do not run sudo or install packages without approval.
@@ -63,74 +62,37 @@ graphics API, or asset formats.
 ## Project Documentation
 Record important findings and decisions in docs/.
 
-Ao aplicar a skill `vita-port` neste projeto, consulte o
-[plano de recompilação](docs/plano-recompilacao.md) para ver as referências
-avaliadas, o procedimento experimental e os critérios de autorização.
+When applying the `vita-port` skill to this project, consult the [recompilation plan](docs/plano-recompilacao.md) for evaluated references, experimental procedures, and authorization criteria.
 
-## Regra prioritária de economia de tokens
+## Token Usage and Quota Control — Priority Rules
 
-- Os timers verificam localmente a cada cinco minutos se há trabalho liberado.
-  O intervalo normal entre chamadas ao modelo é de cinco minutos. Após uma
-  publicação com alterações além do diário, permitir uma continuação no
-  próximo disparo se houver uma próxima ação concreta e já autorizada.
-  Após essa continuação, aplicar novamente o intervalo normal.
-- O agente encerra o resumo com `CONTINUAR: <ação concreta>` ou
-  `AGUARDAR: <dependência ou conclusão>`. Espera explícita ou ciclo sem
-  novo commit suspende chamadas até a coordenação registrar uma nova
-  tarefa ou evidência e remover o arquivo de estado daquele agente
-  (`bruno.schedule` ou `carlos.schedule` no diretório do bloqueio de cota).
-- Antes de chamar o Codex, o executor deve verificar localmente o bloqueio
-  de cota compartilhado. Se qualquer agente receber `usage limit`, bloquear
-  novas chamadas dos dois. Retomar manualmente após confirmar a renovação
-  da cota e receber o pedido de Ivan.
-- Reaproveite as evidências já registradas. Se a tarefa depende de hardware,
-  de uma decisão ou de um dado que continua ausente, registre o bloqueio
-  uma vez e aguarde uma mudança. Evite repetir investigações, testes ou
-  commits apenas para registrar mais um ciclo de espera.
+- Timers check locally every five minutes for authorized work. The normal interval between model calls is five minutes. After publishing changes beyond the activity log, allow one continuation on the next trigger if there is a concrete, previously authorized next action. Then restore the normal interval.
+- An agent ends its summary with `CONTINUAR: <concrete action>` or `AGUARDAR: <dependency or completion>`. An explicit wait or a cycle without a new commit suspends calls until coordination records a new task or evidence and removes that agent's state file (`bruno.schedule` or `carlos.schedule` in the quota-lock directory).
+- Before calling Codex, the executor must check the shared quota lock locally. If either agent receives a `usage limit` error, block further calls from both agents. Resume manually only after confirming quota renewal and receiving Ivan's request.
+- Reuse recorded evidence. If a task depends on hardware, a decision, or missing information, record the blocker once and wait for a change. Do not repeat investigations, tests, or commits solely to record another waiting cycle.
 
-## Validação e publicação automática
+## Automatic Validation and Publication
 
-Após cada tarefa de implementação ou documentação neste projeto:
+After each implementation or documentation task in this project:
 
-1. Execute as verificações aplicáveis. Para Python, verifique a sintaxe,
-   execute os testes existentes e compare com as saídas de referência
-   quando disponíveis.
-2. Execute `git diff --check`, revise o diff e confira os arquivos
-   criados, modificados e excluídos. Confira também o conteúdo staged
-   com `git diff --cached` e `git diff --cached --check` antes do commit.
-3. Adicione explicitamente apenas os arquivos da tarefa. Evite
-   `git add .`. Exclua da publicação `original-data/`, `build/`,
-   executáveis comerciais, temporários, credenciais e segredos.
-4. Se houver erros, alterações inesperadas ou dúvidas de segurança,
-   interrompa a publicação e informe o usuário.
-5. Com as verificações aprovadas, crie um commit com mensagem descritiva
-   e execute `git push origin main`. A autorização cobre commits e
-   pushes normais das tarefas solicitadas neste projeto.
-6. Preserve as alterações do usuário e o histórico. A autorização
-   exclui ações destrutivas, `push --force`, `reset --hard` e
-   reescrita de histórico. Se o push for rejeitado, pare e informe o
-   conflito.
-7. Ao finalizar, informe o SHA do commit, as verificações executadas,
-   o resultado do push e o estado do Git.
+1. Run applicable checks. For Python, verify syntax, run existing tests, and compare against reference outputs when available.
+2. Run `git diff --check`, review the diff, and inspect created, modified, and deleted files. Also inspect staged content with `git diff --cached` and `git diff --cached --check` before committing.
+3. Stage only files belonging to the task. Avoid `git add .`. Exclude `original-data/`, `build/`, commercial executables, temporary files, credentials, and secrets.
+4. If errors, unexpected changes, or security concerns arise, stop publication and notify the user.
+5. Once checks pass, create a descriptive commit and run `git push origin main`. Authorization covers normal commits and pushes for requested project tasks.
+6. Preserve user changes and history. Authorization excludes destructive operations, `push --force`, `reset --hard`, and history rewriting. If the push is rejected, stop and report the conflict.
+7. On completion, report the commit SHA, checks performed, push result, and Git status.
 
 ## Scope Control
 Do not start unrelated tasks.
 Do not create multiple agents unless explicitly requested.
 Do not perform large refactors without approval.
 
-## Coordenação entre ChatGPT e Codex local
+## Coordination Between ChatGPT and Local Codex
 
-- O ChatGPT no navegador atua como líder do projeto: define objetivos,
-  prioridades, critérios de aceite e revisa entregas usando GitHub Issues.
-- O Codex no VS Code atua como executor local: lê a issue atribuída à tarefa,
-  inspeciona os arquivos do computador, implementa, executa testes e relata evidências.
-- Antes de iniciar trabalho novo, verifique a issue indicada no GitHub e siga
-  os critérios de aceite. Não invente requisitos além dos descritos.
-- Mantenha um resumo da execução na própria issue: evidências, testes,
-  limitações, commit e resultado do push. Não publique binários, screenshots
-  proprietárias ou dados de `original-data/` na issue.
-- Para cada tarefa com mudanças, respeite a rotina de validação e publicação
-  automática acima. Se houver bloqueio ou ambiguidade material, registre na
-  issue e peça decisão ao usuário; não substitua prova por suposições.
-- O ChatGPT não controla nem inicia automaticamente esta sessão local do Codex.
-  A execução requer uma sessão ativa no VS Code e autorização apropriada.
+- ChatGPT in the browser serves as project lead: it defines goals, priorities, acceptance criteria, and reviews deliverables using GitHub Issues.
+- Codex in VS Code is the local executor: it reads the assigned issue, inspects local files, implements changes, runs tests, and reports evidence.
+- Before starting new work, inspect the specified GitHub issue and follow its acceptance criteria. Do not invent additional requirements.
+- Keep an execution summary in the issue: evidence, tests, limitations, commit, and push result. Do not publish proprietary binaries, screenshots, or data from `original-data/` in the issue.
+- For every task that changes files, follow the automatic validation and publication procedure above. If blocked or facing material ambiguity, record it in the issue and ask the user to decide; do not replace evidence with assumptions.
+- ChatGPT cannot control or automatically start this local Codex session. Execution requires an active VS Code session and appropriate authorization.

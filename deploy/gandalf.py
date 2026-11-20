@@ -142,10 +142,11 @@ def dispatch_idle(db, agent, head):
     existing = db.get("grants", {}).get(prefix)
     if existing and not (STATE / f"{agent}.{head}.consumed").exists():
         return False
-    for action in ACTIONS[agent]:
-        key = prefix + "/" + action
-        if key in db.get("grants", {}) and not (STATE / f"{agent}.{head}.{action}.consumed").exists():
-            return False
+    # Uma unica continuacao automatica por SHA. Depois de consumida,
+    # exigir uma nova entrega/commit antes de liberar mais trabalho.
+    # Evita que o mesmo commit dispare todo o catalogo em ciclos sucessivos.
+    if any(prefix + "/" + action in db.get("grants", {}) for action in ACTIONS[agent]):
+        return False
     # A proposta pendente já foi avaliada no evento aprovado deste SHA.
     catalog = available_actions(db, agent)
     for action in catalog:

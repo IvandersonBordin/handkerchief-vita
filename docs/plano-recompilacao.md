@@ -482,3 +482,35 @@ O próximo recorte útil é ligar essa função ao leitor e à apresentação
 nativa, mantendo os dados originais como entrada local separada do VPK.
 O critério de integração é preservar as prévias de A0 e demonstrar
 os mesmos seis limites com dados carregados pelo aplicativo.
+
+### Protótipo híbrido com dados de A0 no Vita
+
+Uma variante local do passeio nativo executa `0x40963E` antes da
+entrada na cena. Os dados de A0 e os seis resultados de referência
+do x86 foram exportados para `a0-test.bin`. O exportador existente
+regenerou `vista0.rgba`. Os dois arquivos foram enviados separadamente
+ao console e conferidos por SHA-256. A variante valida comprimentos,
+banco e índices antes de montar a arena e chamar o C recompilado.
+A rotina de desenho e os controles vieram do passeio existente.
+
+A primeira instalação, `HKRC00004`, abriu sem retornar relatório.
+A revisão passou a gravá-lo pela API de arquivos do VitaSDK. A
+reinstalação sobre o primeiro título foi rejeitada pelo VitaCompanion,
+então a revisão usou o identificador separado `HKRC00005`, com os
+mesmos dados locais. Os seis arquivos instalados coincidiram com
+o VPK e o console retornou por FTP:
+
+```text
+HKRC00005 6/6 PASS scene=ready
+```
+
+O resultado confirma os seis limites gráficos de referência com
+dados reais carregados pelo Vita. O campo `scene=ready` confirma a
+presença e o tamanho do arquivo de pixels, antes da entrada na
+rotina de apresentação. A confirmação visual da tela ainda está
+pendente. Os limites calculados são observados pelo diagnóstico
+e ainda não são consumidos para desenho nem para colisões.
+
+O VPK experimental local está em `build/recomp-a0/out/recomp_a0.vpk`,
+fora do Git. Passou em `unzip -tq` e no verificador da skill.
+SHA-256 `2b20d360794c538ab89e4390215560aa914e6b71985654f55d03cf69595c8aa3`.

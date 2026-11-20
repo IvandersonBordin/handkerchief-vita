@@ -255,7 +255,7 @@ def tick(db, persist, now):
                 persist()
                 continue
             calls = [t for t in db["calls"] if now - t < 86400]
-            if calls and (now - calls[-1] < 300 or len(calls) >= 16):
+            if calls and (now - calls[-1] < 300 or len(calls) >= 32):
                 return
             db["seen"][agent] = head
             db["events"][key] = "reservado"

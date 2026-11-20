@@ -111,6 +111,15 @@ class Supervisor(unittest.TestCase):
         self.tick(10001)
         self.review.assert_called_once()
 
+    def test_rolling_daily_review_limit(self):
+        now = 100000
+        self.db["calls"] = list(range(now - 86400 + 1, now - 86400 + 33))
+        self.tick(now)
+        self.tests.assert_not_called()
+        self.tick(now + 1)
+        self.review.assert_called_once()
+        self.assertEqual(len(self.db["calls"]), 32)
+
     def test_failed_test_parked(self):
         self.tests.side_effect = ValueError("falha")
         self.tick()

@@ -58,7 +58,11 @@ class Supervisor(unittest.TestCase):
         self.assertEqual(g.consume("bruno", self.root), 4)
         self.tick(30000)
         self.assertEqual(self.review.call_count, 1)
-        self.assertNotIn("bruno/" + self.head + "/b04-indices-extra", self.db["grants"])
+        self.assertEqual(
+            sorted(key for key in self.db["grants"] if key.startswith("bruno/" + self.head)),
+            sorted(["bruno/" + self.head, "bruno/" + self.head + "/b04-indices"]),
+        )
+        self.assertNotIn("bruno/" + self.head + "/b02-posicao", self.db["grants"])
 
     def test_idle_needs_approved_review(self):
         self.review.return_value.update(decision="hold", next_action="hold")

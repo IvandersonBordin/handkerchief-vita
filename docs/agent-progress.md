@@ -26,6 +26,14 @@ do jogo. A rodada sintética independente foi autorizada na issue #4.
 
 ## Ciclo C05 — consulta vertical CRock no Linux
 
+- Na retomada, a leitura de `vita-prototype/test_crock.c` e do contrato
+  em `main` (`dc40d8d`) confirmou que o teste versionado já cobre o
+  escopo solicitado. Os resultados Linux e os marcos do vídeo abaixo
+  são do ciclo anterior. A issue #4 foi consultada. A documentação da
+  `main` registra usos do ponto retornado em comparações e criação de
+  objetos. Ainda falta demonstrar que esse Y chega à origem do
+  protagonista, condição para retomar a integração à física da rodada.
+
 - `vita-prototype/test_crock.c` exercita um modelo isolado da consulta
   vertical descrita em `docs/hdk-format.md` na `main` (`dc40d8d`).
   São 15 casos com uma grade sintética em ordem por linhas, células de
@@ -78,6 +86,40 @@ do jogo. A rodada sintética independente foi autorizada na issue #4.
   os fontes do `HKRC00007` e o teste Linux ou as instruções para
   compilá-lo com dados sintéticos. C05 continua dependente de B02 e B03.
   Este ciclo foi de inspeção e documentação, sem execução no Vita.
+
+- Na retomada de 20/11, a issue #4, os nomes de arquivos no histórico
+  Git local e os arquivos ignorados do worktree foram consultados.
+  A revisão `3257a8b` continua sendo o registro do teste anterior. Os
+  fontes e o teste Linux do `HKRC00007` seguem indisponíveis neste
+  worktree. Nenhum dos quatro controles ou eventos solicitados foi
+  executado nesta retomada (movimento nos dois sentidos, salto,
+  chegada e reinício).
+- A revisão visual amostrou somente a abertura entre 00:20 e 03:50.
+  A casa domina o enquadramento entre 00:20 e 00:50. Por volta de
+  01:05–01:20, a câmera acompanha a passagem para o desnível e a
+  entrada de um túnel. Por volta de 03:20–03:35, o enquadramento
+  passa do interior do túnel para uma área aberta. A faixa inferior
+  do HUD permanece visível. Esses marcos permitem comparar a
+  apresentação do A0 quando o teste estiver disponível. Nenhum
+  quadro da gravação foi incluído no worktree.
+
+## Ciclo HKRC00007 — roteiro Linux
+
+- A issue #4 confirmou o teste anterior com GCC e UBSan. O checkout
+  principal expôs apenas `.git` nesta sessão, sem
+  `build/playable-a0`. O histórico consultado contém o relato da
+  execução anterior, sem os fontes locais ou o comando completo.
+- [Roteiro Linux](hkrc00007-linux.md) registra a pré-verificação e
+  os critérios para direita, esquerda, salto nos três obstáculos,
+  chegada e reinício. O bloco passou em `sh -n`. No caminho real,
+  retornou 2 com diagnóstico de fonte indisponível. Com uma árvore
+  temporária sintética, identificou GCC 16.2.1 e listou o arquivo C.
+- A amostra da abertura confirmou os marcos de enquadramento no
+  roteiro. Os quadros ficaram em `/tmp`. A compilação e a execução
+  da rodada aguardam os fontes locais e o ponto de entrada do teste.
+  A validação deste ciclo se limitou à pré-verificação no Linux.
+  O conector recusou o comentário na issue #4 porque exigia aprovação
+  e a política da sessão não permite concedê-la. Sem commit ou push.
 
 ## Rodada sintética — quadro inicial após reinício
 

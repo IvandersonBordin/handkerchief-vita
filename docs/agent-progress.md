@@ -537,3 +537,14 @@ estão no [rastreio da inicialização](hdk-format.md#inicialização-das-refer�
 A conferência foi estática com GNU objdump e os 31 testes locais passaram.
 O próximo passo é identificar a origem de EDI em `0x45282F` e verificar
 quais entradas das tabelas são selecionadas no caminho de A0.
+
+## Ciclo da origem de EDI em 0x45282F — issue #6
+
+O índice das três referências vem de um byte lido em `0x44FBC6`.
+A escrita em `0x452734` esclarece a origem do campo `+0x28`:
+o chamador reutiliza a posição do argumento na pilha para guardar
+o valor da primeira tabela. Os endereços e os intervalos conferidos
+com objdump estão no [rastreio do índice](hdk-format.md#origem-do-índice-das-três-referências).
+Para associar uma linha a A0, o próximo passo é seguir a chamada
+em `0x44FBC1` e identificar quem preenche o byte selecionado.
+Os 31 testes locais passaram e `git diff --check` passou.

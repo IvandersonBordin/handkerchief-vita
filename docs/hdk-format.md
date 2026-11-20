@@ -451,7 +451,7 @@ em `0x452840` passa por `0x403C92` e chega a `0x435E7D`. Os três
 
 | Campo da entrada | Origem no chamador | Instrução que empilha | Instrução que grava |
 | --- | --- | --- | --- |
-| `+0x28` | Primeiro argumento do chamador, em `[EBP+8]` | `0x45283D` | `0x435E87` |
+| `+0x28` | Valor de `[EDI+0x489B70]` salvo em `[EBP+8]` | `0x45283D` | `0x435E87` |
 | `+0x2C` | Palavra de 32 bits em `[EDI+0x489B90]` | `0x452837` | `0x435E8D` |
 | `+0x30` | Palavra de 32 bits em `[EDI+0x489BB0]` | `0x45282F` | `0x435E97` |
 
@@ -462,6 +462,28 @@ esse campo já satisfaz o teste de valor diferente de zero do slot
 Para reproduzir, use `objdump -d -Mintel` nos intervalos
 `[0x452828, 0x452845)`, `[0x403C92, 0x403C97)` e
 `[0x435E7D, 0x435EB4)` do executável original.
+
+#### Origem do índice das três referências
+
+Em `0x45271E`, ECX recebe o ponteiro guardado em `0x4AD228`.
+A chamada em `0x452724` passa por `0x402C0C` e chega a `0x44FBB8`.
+Esse método chama `0x401DED` sobre o subobjeto em `receptor+0x50`,
+com o campo `+0x34` como argumento. Usando o retorno como deslocamento,
+`0x44FBC6` lê um byte em `receptor+0x84+deslocamento` e o amplia
+sem sinal. Em `0x452729` e `0x45272B`, EDI recebe esse byte
+multiplicado por quatro. Em `0x452734`, o primeiro valor indexado
+substitui o conteúdo de `[EBP+8]` antes do uso em `0x45283D`.
+
+Para os índices 0 e 1, os valores iniciais das três tabelas no PE são
+iguais entre essas duas linhas: `0x8104`, `0x8118` e `0x810A`,
+respectivamente para os campos `+0x28`, `+0x2C` e `+0x30`.
+A seleção depende do conteúdo do receptor. O vínculo entre A0 e um
+índice específico continua em aberto.
+
+Para reproduzir, use `objdump -d -Mintel` nos intervalos
+`[0x45271E, 0x452845)`, `[0x402C0C, 0x402C11)` e
+`[0x44FBB8, 0x44FBD0)`. Use `objdump -s --start-address=0x489b70
+--stop-address=0x489bd0` no mesmo PE para conferir as tabelas.
 
 #### Origem do seletor em 0x4ABFD8
 

@@ -734,3 +734,12 @@ Issue indisponível para consulta e atualização (gh sem autenticação,
 API pública sem DNS). Próxima ação: seguir o valor local [ebp-4]
 a partir de 0x419146 no caminho de retorno 1 e verificar se o
 consumidor o usa para alterar Y.
+
+## B02 — argumento devolvido em 0x4194F3
+
+Issue #8, em andamento. No caminho por 0x419411 e 0x41941D, o epílogo
+devolve o argumento salvo após 0x419028. A chamada anterior usa ESI
+como receptor e chega a 0x41CA5C. Condições, comandos e confronto com
+01:00 estão em docs/physics-collision.md. Passaram 31 testes locais.
+Próxima ação: verificar se 0x41CA5C, com argumento 1, escreve no
+campo Y do receptor ou encaminha essa escrita a outro método.

@@ -955,3 +955,31 @@ Para retorno um, todos os casos seguiram pelo desvio anterior à máscara.
 O ensaio verifica a seleção do chamador. O quadro de 01:00 mostra
 uma figura na escada e o HDK contém ROCK_0/CRock em 0x5D. Nenhuma
 dessas referências permite observar o valor de EAX.
+
+### A0 — uso do argumento salvo após 0x419028
+
+Quando o despacho retorna 1, 0x41902F–0x419035 copia o primeiro
+argumento para [ebp-4] e desvia para 0x419146. Um caminho curto
+reproduzível exige [esi+0x8C] igual a zero e ao menos um bit da
+máscara 0x0C ligado no byte +0xBA do objeto apontado por [esi+0x78].
+O primeiro teste leva a 0x419411. Pelo segundo, 0x41941D e
+0x419424 zeram os campos +0x84 e +0x88 do receptor.
+
+Em 0x4194D6–0x4194EE o código altera +0x108 e +0x10C do receptor,
+passa 1 na pilha e chama 0x401E97 com ESI em ECX. O salto nesse
+endereço leva a 0x41CA5C. Quando a chamada retorna, 0x4194F3 lê
+[ebp-4] em EAX e o epílogo devolve esse valor sem desreferenciá-lo.
+Assim, nesse caminho o uso explícito da variável local é devolver
+o argumento. Os efeitos internos da chamada permanecem em aberto.
+
+Para reproduzir a leitura estática a partir da raiz do worktree:
+
+```sh
+exe=../handkerchief-vita/original-data/HDKWIN.EXE
+for intervalo in 419028:41903a 419146:419153 419411:419430 4194d6:419501 401e97:401e9c; do
+  objdump -d -Mintel --start-address="0x${intervalo%:*}" --stop-address="0x${intervalo#*:}" "$exe"
+done
+```
+
+Em 01:00 da gravação há uma figura sobre os degraus. O quadro não
+identifica ESI nem revela qual ramo atualiza a altura dessa figura.

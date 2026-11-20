@@ -1017,3 +1017,39 @@ exclusivo 0x41CA5C–0x41CB73, 0x401177–0x40117C e 0x401E24–0x401E29.
 O ensaio independente em x86-64 combinou os três bits 0x0800,
 0x2000 e 0x4000 com o bit 0x10 do receptor (16 casos). Conferiu
 a classificação dos caminhos com argumento 1, sem simular os destinos.
+
+### A0 — destino da máscara 0x40 em 0x40BC5D
+
+Com argumento 1 em 0x41CA5C, a chamada em 0x41CB4E chega por
+0x401E24 a 0x40BC5D. EDI recebe ECX em 0x40BC66. Esse receptor vem
+da cadeia de ponteiros +0x48, +0x3C, +0x6C descrita acima. Há saída
+antecipada se a chamada em 0x40BC6B devolver um valor diferente de
+zero ou se a chamada em 0x40BC80 devolver zero.
+
+No caminho que prossegue, sejam L, T, R, B os quatro inteiros locais
+a partir de [ebp-0x10] após a segunda chamada. Entre 0x40BC8C e
+0x40BCBF, divisões com sinal por 4 produzem as colunas de L/4 até
+(R-1)/4 e as linhas de T/4 até (B-1)/4, com truncamento em direção
+a zero e extremos inclusivos. As diferenças negativas pulam o laço
+correspondente. 0x40BCC4–0x40BCCB calcula o endereço inicial como
+base + linha inicial × passo + coluna inicial, com base em [edi+8]
+e passo em [edi+0xC]. Em 0x40BCDF, BL recebe o byte baixo do segundo
+argumento. Em 0x40BCE2, `or BYTE PTR [eax],bl` liga o bit 0x40
+preservando os demais bits. 0x40BCE4 avança um byte e 0x40BCE8
+avança a origem da linha pelo passo.
+
+O destino demonstrado é uma grade de bytes. O corpo não atribui uma
+nova altura ao campo +0x1C do ator. O significado do bit e os efeitos
+das duas chamadas anteriores continuam abertos. Na abertura, em 01:00,
+a figura aparece junto à escada que sobe à direita. O quadro mostra
+o terreno, mas não permite identificar uma célula da grade na cena.
+
+Reprodução em leitura estática, com fim exclusivo em cada intervalo.
+
+```bash
+exe=../handkerchief-vita/original-data/HDKWIN.EXE
+for intervalo in 41ca5c:41cb73 401e24:401e29 40bc5d:40bcf7; do
+    objdump -d -Mintel --start-address="0x${intervalo%:*}" \
+        --stop-address="0x${intervalo#*:}" "$exe"
+done
+```

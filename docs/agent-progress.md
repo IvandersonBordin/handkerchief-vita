@@ -754,3 +754,13 @@ sintéticos x86 e 31 testes locais. A issue ficou sem atualização remota
 (gh sem autenticação e falha de DNS na API pública).
 Próxima ação: seguir 0x40BC5D com a cópia local e 0x40 para identificar
 o objeto e os campos de destino da escrita no caminho comum ativo.
+
+## B02 — escrita da grade em 0x40BCE2
+
+Issue #8 em andamento. Na chamada comum de 0x41CA5C com argumento 1,
+0x40BC5D liga o bit 0x40 em células de uma grade de bytes. Base, passo,
+limites inclusivos, instrução de escrita e comandos de reprodução estão
+em docs/physics-collision.md. O quadro de 01:00 mostra a escada, mas
+não identifica a grade. A escrita de Y do protagonista segue em aberto.
+Passaram os 31 testes locais. Próxima ação: examinar 0x40BDDD no
+ramo opcional chamado em 0x41CAD1 e identificar o destino da escrita.

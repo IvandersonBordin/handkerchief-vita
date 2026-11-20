@@ -21,12 +21,14 @@ QUOTA = re.compile(r"usage.limit|out of codex messages", re.I)
 LEGACY_SHA = "80375220230ce2a4c7276d4ed5d7363dee84b7de"
 ACTIONS = {
     "bruno": {
+        "altura-a0": "A partir do achado na issue 8, revisar o próximo caminho de escrita de Y do protagonista de A0 após excluir o ramo (1,0) de 0x41D861 como escritor direto. Registrar instruções, comandos de reprodução e limites em docs/physics-collision.md quando houver evidência inédita. Somente leitura dos originais, sem executar o jogo.",
         "terreno-a0": "Priorizar em A0 o consumidor da consulta CRock no movimento: seguir o despacho em 0x419028, identificar receptor, mascara e escrita de Y, ou documentar o limite exato. Usar o HDK e o executavel somente para leitura, o video como referencia visual e casos x86 isolados para validar. Nao executar o jogo nem acessar o Vita.",
         "b04-indices": "Investigar estaticamente atribuicoes a 0x4AD16C e 0x4AD228 e verificar se leitura e escrita alcancam a mesma instancia em A0. Documentar evidencias e lacunas; originais somente leitura.",
         "b03-edi": "Rastrear estaticamente a instância em EDI no ramo de A0, a origem de +0x38 e os slots virtuais efetivos. Documentar endereços e lacunas. Originais somente leitura.",
         "b02-posicao": "Rastrear estaticamente o ramo de CCastMK até as escritas de posição +0x18/+0x1C. Documentar a cadeia ou o ponto em que a evidência termina. Originais somente leitura.",
     },
     "carlos": {
+        "teste-percurso-a0": "Tornar reproduzível o teste Linux da rodada híbrida HKRC00007 aprovado na issue 4. Usar a fonte existente no checkout principal em build/playable-a0, apenas para leitura. Acrescentar roteiro verificável em docs/ ou teste em vita-prototype/ sem copiar ativos nem código comercial. Cobrir ambos os sentidos, salto, chegada e reinício. Sem acesso ao Vita e sem declarar física original.",
         "sonda-terreno-a0": "Preparar um teste Linux isolado do contrato CRock documentado em main: grade sintetica, coordenadas por celula, mascara e transicao vertical. Cobrir bordas e ausencia de transicao. Preservar a fisica da rodada ate haver evidencia do chamador original. Nao usar assets comerciais nem acessar o Vita.",
         "controles-a0": "Testar no Linux controles de esquerda/direita, salto, reinicio e chegada no prototipo hibrido A0, com dados sinteticos. Registrar resultados; nao instalar no Vita.",
         "rodada-reinicio": "Verificar no teste Linux da rodada sintética se o reinício restaura o quadro inicial da animação. Acrescentar a comparação de pixels se faltar. Usar somente dados sintéticos.",
@@ -303,12 +305,14 @@ def tick(db, persist, now):
             return
 
 
-def authorize_terrain(db):
+def authorize_terrain(db, followup=False):
     """Registra a prioridade autorizada por Ivan nas revisões já aprovadas."""
     if (STATE / "usage-limit").exists():
         raise ValueError("Cota compartilhada bloqueada")
     receipts = {}
-    for agent, action in (("bruno", "terreno-a0"), ("carlos", "sonda-terreno-a0")):
+    tasks = (("bruno", "altura-a0"), ("carlos", "teste-percurso-a0")) if followup else (
+        ("bruno", "terreno-a0"), ("carlos", "sonda-terreno-a0"))
+    for agent, action in tasks:
         branch = BRANCH[agent]
         head = git("rev-parse", branch)
         prefix = agent + "/" + head
@@ -351,7 +355,7 @@ def report_changes(before, after):
             print(f"{agent} {head} relatório GitHub não confirmado", file=sys.stderr, flush=True)
 
 
-def main(terrain=False):
+def main(terrain=False, followup=False):
     STATE.mkdir(parents=True, exist_ok=True)
     with lock("model") as free:
         if free and not (STATE / "usage-limit").exists():
@@ -361,7 +365,7 @@ def main(terrain=False):
             def persist():
                 save(path, json.dumps(db, indent=2, ensure_ascii=False))
             if terrain:
-                authorize_terrain(db)
+                authorize_terrain(db, followup)
                 persist()
                 return
             before = dict(db["events"])
@@ -374,4 +378,5 @@ def main(terrain=False):
 if __name__ == "__main__":
     if len(sys.argv) == 4 and sys.argv[1] == "consume" and sys.argv[2] in BRANCH:
         sys.exit(consume(sys.argv[2], sys.argv[3]))
-    main(sys.argv[1:] == ["authorize-terrain"])
+    followup = sys.argv[1:] == ["authorize-terrain-followup"]
+    main(followup or sys.argv[1:] == ["authorize-terrain"], followup)

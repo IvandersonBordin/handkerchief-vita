@@ -50,7 +50,7 @@ class Supervisor(unittest.TestCase):
         (self.state / "gandalf.json").write_text(g.json.dumps(self.db))
         self.assertEqual(g.consume("bruno", self.root), 0)
         self.tick(20000)
-        key = "bruno/" + self.head + "/terreno-a0"
+        key = "bruno/" + self.head + "/altura-a0"
         self.assertIn(key, self.db["grants"])
         self.assertEqual(self.review.call_count, 1)
         (self.state / "gandalf.json").write_text(g.json.dumps(self.db))
@@ -60,7 +60,7 @@ class Supervisor(unittest.TestCase):
         self.assertEqual(self.review.call_count, 1)
         self.assertEqual(
             sorted(key for key in self.db["grants"] if key.startswith("bruno/" + self.head)),
-            sorted(["bruno/" + self.head, "bruno/" + self.head + "/terreno-a0"]),
+            sorted(["bruno/" + self.head, "bruno/" + self.head + "/altura-a0"]),
         )
         self.assertNotIn("bruno/" + self.head + "/b02-posicao", self.db["grants"])
 
@@ -149,6 +149,13 @@ class Supervisor(unittest.TestCase):
             g.authorize_terrain(self.db)
             g.authorize_terrain(self.db)
             self.assertEqual(len(self.db["grants"]), 2)
+            (self.state / "gandalf.json").write_text(g.json.dumps(self.db))
+            for agent in ("bruno", "carlos"):
+                self.assertEqual(g.consume(agent, self.root), 0)
+                self.assertEqual(g.consume(agent, self.root), 4)
+            g.authorize_terrain(self.db, followup=True)
+            g.authorize_terrain(self.db, followup=True)
+            self.assertEqual(len(self.db["grants"]), 4)
             (self.state / "gandalf.json").write_text(g.json.dumps(self.db))
             for agent in ("bruno", "carlos"):
                 self.assertEqual(g.consume(agent, self.root), 0)

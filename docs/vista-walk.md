@@ -78,3 +78,26 @@ do ator controlado e a ordem original dos quadros seguem em aberto.
 O pacote local está em `build/actor-playtest/out/recomp_a0.vpk`,
 fora do Git. SHA-256
 `82cd3a2337f95cc257e5b79143fce48bf2dd132732c999f9e58e2e2664dac667`.
+
+### Sequência do personagem roxo na rodada
+
+A variante local `HKRC00009` (Handkerchief A0 Sequence) inicia
+com o personagem roxo e percorre os índices 41–44 do banco 6
+enquanto a rodada registra movimento horizontal. A ordem vem do
+[descritor original](character-identification.md#sequência-encontrada-no-executável).
+O avanço a cada oito atualizações de caminhada e o retorno ao
+índice 41 ao parar são escolhas da demo. O estado e o tempo que
+o jogo original atribui à sequência seguem em investigação.
+SELECT e Triângulo continuam disponíveis para explorar o catálogo.
+
+Inspirado em comparações por rotina e entradas repetíveis por
+quadro, o teste Linux com UBSan verificou quatro imagens distintas,
+a repetição do ciclo e o retorno à pose de partida. O VPK passou
+nas verificações ZIP e LiveArea. O console estava desligado, então
+a instalação e a validação visual desse pacote seguem pendentes.
+[I.G.I. Recomp](https://github.com/HenryKun55/igi-recomp),
+[PCRecomp](https://github.com/sp00nznet/pcrecomp).
+
+Pacote experimental local `build/actor-sequence/out/recomp_a0.vpk`,
+SHA-256 `8536d3671afcb27cec9f085797c196877cdaa9e8caab89cd49189f96da580bec`.
+A variante usa os mesmos arquivos locais externos da prévia anterior.

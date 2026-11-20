@@ -321,3 +321,40 @@ célula. A associação com o protagonista, a máscara de piso em
 uso e a consequência durante a atualização de Y ainda precisam
 ser rastreadas. A gravação de gameplay serve para escolher
 trechos com transições e inclinações para essa comparação.
+
+#### Chamadores e efeito do ponto retornado
+
+A consulta `0x42D856` é alcançada pelo salto `0x403B43`.
+Na rotina que começa em `0x419C4F`, EBX recebe o objeto em
+`0x419C59`. Em `0x41A469–0x41A477`, um despacho pelo
+salto `0x4045F7 → 0x41C877` recebe o retângulo
+`[objeto+0x30]` e grava o objeto retornado em `+0x110`.
+Esse endereço de despacho já foi validado no Vita com uma
+estrutura sintética, conforme o plano de recompilação.
+
+Quando o retorno do despacho é diferente de zero,
+`0x41A485–0x41A496` passa `[EBX+0x18]` e `[EBX+0x1C]`
+como X e Y à consulta de terreno. O ponto retornado vai para
+`[EBP-0x8C]` e `[EBP-0x88]`. `0x41A49E` carrega o Y
+temporário e `0x41A4A4` compara com `[EBX+0x34]`.
+Em ramos como `0x41A4FE–0x41A50A`, o ponto é passado à
+rotina de inicialização `0x40259F → 0x415DA2`. O caminho que
+chega a `0x41A84A–0x41A857` encaminha o objeto produzido à
+inserção `0x402275`. O segundo chamador direto, em `0x42D268`,
+também usa o ponto como entrada para verificações e criação
+condicional de outro objeto.
+
+A mesma rotina `0x419C4F` contém um caminho distinto em
+`0x41A0B0–0x41A0DF`: copia o par `[ESI]` e `[ESI+0x04]`
+para `[EBX+0x18]` e `[EBX+0x1C]` e chama
+`0x401D7F → 0x410E48` para recalcular os limites.
+O ramo anterior calcula diferenças entre esse registro e
+a posição corrente. A origem do registro em ESI e a classe
+concreta do receptor precisam ser rastreadas. O Y temporário
+da consulta em `0x41A496` ainda não foi ligado à escrita
+da origem do protagonista.
+
+Reproduzir com `objdump -d -Mintel` no `HDKWIN.EXE` local,
+nos intervalos `0x419C4F–0x419C65`, `0x41A0B0–0x41A0E4`,
+`0x41A469–0x41A50F`, `0x41A84A–0x41A85C` e
+`0x42D268–0x42D31D`.

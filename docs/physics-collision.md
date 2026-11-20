@@ -1053,3 +1053,33 @@ for intervalo in 41ca5c:41cb73 401e24:401e29 40bc5d:40bcf7; do
         --stop-address="0x${intervalo#*:}" "$exe"
 done
 ```
+
+### A0 — marcação vertical no ramo de 0x41CAD1
+
+Com argumento 1 e o ramo do bit 0x2000 ativo, 0x41CAD1 chama
+0x401177, que salta para 0x40BDDD. ECX chega pela cadeia +0x48,
++0x3C, +0x6C do ator. Os argumentos, na ordem em que o destino
+os lê, são X esquerdo ajustado, topo, fundo ajustado, 0x90 e 0x88.
+O ramo do bit 0x4000 em 0x41CB16 usa o mesmo destino e passa o X
+direito ajustado.
+
+Se a chamada indireta de 0x40BDEF retorna zero, a rotina termina.
+Caso prossiga, usa uma coluna X/4 e percorre do topo/4 até
+(min(fundo, [edi+0x20])-1)/4 inclusive, com divisão inteira
+truncada em direção a zero. Um intervalo invertido de linhas sai
+em 0x40BE31. O primeiro endereço é [edi+8] + linha × [edi+0xC]
++ coluna. Em 0x40BE3B, a primeira célula recebe 0x88 se estiver
+zerada. Em 0x40BE50, cada célula vazia seguinte recebe 0x90.
+Se a primeira já estiver ocupada, o laço a reexamina, preserva
+seu byte e segue com 0x90 para as vazias. Ambas as instruções
+atribuem um byte. A única escrita demonstrada no laço é na grade.
+A associação desse despacho a uma mudança de Y do ator continua aberta.
+
+Para conferir, desassemblar com objdump -d -Mintel os intervalos
+0x41CA5C–0x41CB1D, 0x401177–0x40117C e 0x40BDDD–0x40BE5F
+(fim exclusivo). Um ensaio x86-64 independente cobriu as oito
+combinações de três células vazias ou ocupadas, com passo de dois
+bytes e sentinelas na coluna vizinha. Validou os valores e a
+preservação dessa coluna. Em A0.HDK, a partir de 0x5D, aparecem
+ROCK_0 e CRock. Em 01:00 da gravação há uma figura junto à escada.
+Essas referências não identificam qual coluna recebeu uma escrita.

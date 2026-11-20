@@ -764,3 +764,14 @@ em docs/physics-collision.md. O quadro de 01:00 mostra a escada, mas
 não identifica a grade. A escrita de Y do protagonista segue em aberto.
 Passaram os 31 testes locais. Próxima ação: examinar 0x40BDDD no
 ramo opcional chamado em 0x41CAD1 e identificar o destino da escrita.
+
+## B02 — coluna da grade no ramo opcional de 0x41CAD1
+
+Issue #8 em andamento. Documentados em docs/physics-collision.md o
+receptor, as duas escritas condicionais (0x88 e 0x90) e o segundo
+chamador em 0x41CB16. O vínculo com uma alteração de Y continua
+aberto. Conferidos A0.HDK em 0x5D e o vídeo em 01:00. Passaram oito
+casos x86 sintéticos e a suíte local com PYTHONPATH=tools. A issue
+remota ficou inacessível por falta de autenticação no gh e falha de DNS.
+Próxima ação: rastrear os chamadores da rotina cujo epílogo passa
+por 0x4194F3 e verificar se consomem o valor devolvido ao escrever Y.

@@ -535,6 +535,6 @@ comparados byte a byte. Em seguida, o VitaCompanion instalou
 `HKRC00006` com autorização para preservar temporariamente os três
 títulos anteriores. Os seis arquivos instalados coincidiram com o
 VPK. O relatório por FTP retornou `HKRC00006 6/6 PASS scene=ready`
-e o VitaCompanion confirmou o encerramento do aplicativo. A
-confirmação visual do alinhamento durante o passeio segue pendente.
-A pasta de dados `ux0:data/HKRC00004` é compartilhada.
+e o VitaCompanion confirmou o encerramento do aplicativo. Ivan
+confirmou visualmente que os contornos acompanharam a rolagem e
+ficaram alinhados ao fundo durante o passeio. A pasta de dados `ux0:data/HKRC00004` é compartilhada.

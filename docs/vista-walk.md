@@ -21,15 +21,8 @@ cc -std=c11 -Wall -Wextra -Werror -ffunction-sections -fdata-sections -Wl,--gc-s
 /tmp/hkvw-camera
 ```
 
-## Encerramento e versões no console de teste
+## Encerramento do teste no console
 
 Após capturar o resultado de cada teste físico, encerrar o aplicativo
 pelo identificador do título e conferir a confirmação. Com VitaCompanion,
 usar `quit <TITLE_ID>`. Preservar os outros aplicativos abertos.
-
-A referência de limpeza é manter as três instalações mais recentes
-do Handkerchief, usando os registros de teste para ordenar versões
-de séries diferentes. Instalar a nova versão quando o teste for
-autorizado. Ivan pode remover versões antigas pela LiveArea depois
-do teste. Preservar arquivos de dados compartilhados pelas versões
-mantidas.

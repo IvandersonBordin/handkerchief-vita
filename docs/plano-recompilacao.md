@@ -393,3 +393,32 @@ A primeira função recompilada executou no Vita com ponteiros para
 buffers do próprio aplicativo. A próxima prova física é ligar a
 segunda função com dados sintéticos, deslocamento de endereços e
 um adaptador de teste para `UnionRect`.
+
+### Segunda rotina no PS Vita físico
+
+Em 19/11/2026, o pacote `HKRC00002` passou no teste de integridade
+ZIP e no verificador de VPK. O VitaCompanion instalou e abriu o
+aplicativo, e os seis arquivos instalados coincidiram com o pacote.
+O relatório recuperado por FTP foi:
+
+```text
+HKRC00002 128/128 PASS 1947 us base=810c0a20
+```
+
+O diagnóstico executou a rotina gerada em ARMv7 com uma arena de
+24 KiB alocada no aplicativo, fora do endereço original. Verificou
+o ponteiro retornado, a pilha, ESI/EDI/EBP, a contagem de chamadas
+do adaptador e o retângulo produzido em cada vetor sintético.
+A chamada `UnionRect` foi atendida pelo adaptador de teste local.
+Os 1947 microssegundos incluem a preparação e as verificações
+dos 128 vetores em uma execução.
+
+O pacote local está fora do Git em
+`build/recomp-second/out/recomp_second.vpk`, SHA-256
+`b278910a75e6876bce2fce04a5af85e0cc40bfb3cb0fc1c6bdaf426dc719a98e`.
+A prova confirma acesso aos dados deslocados e despacho de um
+import modelado neste recorte. A equivalência com a implementação
+Windows de `UnionRect`, o despacho entre objetos e o custo do
+runtime em uma cena real continuam em aberto. O próximo recorte
+deve verificar uma chamada indireta entre funções do jogo antes
+de ampliar a integração.

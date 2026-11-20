@@ -47,6 +47,7 @@ class Supervisor(unittest.TestCase):
     def test_idle_dispatch_without_model_and_single_use(self):
         self.tick()
         self.assertEqual(self.review.call_count, 1)
+        (self.state / "gandalf.json").write_text(g.json.dumps(self.db))
         self.assertEqual(g.consume("bruno", self.root), 0)
         self.tick(20000)
         key = "bruno/" + self.head + "/b04-indices"

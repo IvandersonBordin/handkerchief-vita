@@ -52,3 +52,29 @@ da revisão. Uma revisão sem mudança de estado não produz nova
 ativação pelo monitor. Os timers continuam disponíveis como
 retaguarda. A agenda, as travas, a validação do recibo e os limites
 de chamadas ao modelo continuam valendo em cada ativação.
+
+## Prioridade de terreno de A0
+
+Bruno rastreia o consumidor do resultado de CRock, a máscara e a
+escrita de Y. Carlos prepara uma sonda sintética para o contrato
+já comprovado, incluindo bordas e ausência de transição. Alterar
+o movimento da rodada exige identificar o receptor original e
+demonstrar como ele usa o resultado. C05 continua condicionada
+às evidências de movimento e colisão.
+
+A autorização explícita da prioridade usa `python3 -B
+deploy/gandalf.py authorize-terrain` uma vez na coordenação.
+Ela registra os dois recibos somente com revisões aprovadas, pontas
+locais iguais às publicadas e cota disponível. Os monitores
+despertam os executores, que consomem cada recibo uma vez. O fluxo
+regular segue o catálogo, sem agendar novos comandos manuais.
+
+Um timeout dos testes locais permite uma única repetição cinco
+minutos depois, sem reservar uma chamada ao modelo. Reprovação
+determinística, novo timeout, erro de publicação ou revisão ficam
+em espera. Gandalf tenta registrar novos pareceres definitivos
+na issue #8 para Bruno e #4 para Carlos via `gh` autenticado.
+O comentário contém SHA e situação da revisão. Diffs, texto
+livre do modelo, mídia e dados originais ficam locais. Se a
+publicação da nota falhar, o log registra a falha, evitando
+repetir uma solicitação de resultado incerto.

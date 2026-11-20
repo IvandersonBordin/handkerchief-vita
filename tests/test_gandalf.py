@@ -50,7 +50,7 @@ class Supervisor(unittest.TestCase):
         (self.state / "gandalf.json").write_text(g.json.dumps(self.db))
         self.assertEqual(g.consume("bruno", self.root), 0)
         self.tick(20000)
-        key = "bruno/" + self.head + "/b04-indices"
+        key = "bruno/" + self.head + "/terreno-a0"
         self.assertIn(key, self.db["grants"])
         self.assertEqual(self.review.call_count, 1)
         (self.state / "gandalf.json").write_text(g.json.dumps(self.db))
@@ -60,7 +60,7 @@ class Supervisor(unittest.TestCase):
         self.assertEqual(self.review.call_count, 1)
         self.assertEqual(
             sorted(key for key in self.db["grants"] if key.startswith("bruno/" + self.head)),
-            sorted(["bruno/" + self.head, "bruno/" + self.head + "/b04-indices"]),
+            sorted(["bruno/" + self.head, "bruno/" + self.head + "/terreno-a0"]),
         )
         self.assertNotIn("bruno/" + self.head + "/b02-posicao", self.db["grants"])
 
@@ -115,6 +115,61 @@ class Supervisor(unittest.TestCase):
         self.tick()
         self.tests.assert_called_once()
         self.review.assert_not_called()
+
+    def test_transient_test_timeout_retries_once_then_parks(self):
+        self.tests.side_effect = subprocess.TimeoutExpired("checks", 300)
+        self.tick(10000)
+        self.tick(10299)
+        self.assertEqual(self.tests.call_count, 1)
+        self.tick(10300)
+        self.tick(20000)
+        self.assertEqual(self.tests.call_count, 2)
+        self.review.assert_not_called()
+        self.assertEqual(self.db["calls"], [])
+
+    def test_recovered_delivery_grants_next_task_once(self):
+        self.tests.side_effect = [subprocess.TimeoutExpired("checks", 300), None]
+        self.review.return_value["next_action"] = "terreno-a0"
+        self.tick(10000)
+        self.assertNotIn("grants", self.db)
+        self.tick(10300)
+        (self.state / "gandalf.json").write_text(g.json.dumps(self.db))
+        self.assertEqual(g.consume("bruno", self.root), 0)
+        self.assertEqual(g.consume("bruno", self.root), 4)
+        self.assertEqual(self.review.call_count, 1)
+        self.assertEqual(self.db["calls"], [10300])
+
+    def test_explicit_terrain_authorization_is_atomic_and_idempotent(self):
+        with patch.object(g, "BRANCH", {"bruno": "main", "carlos": "main"}):
+            self.db["approved"]["bruno/" + self.head] = True
+            with self.assertRaises(ValueError):
+                g.authorize_terrain(self.db)
+            self.assertNotIn("grants", self.db)
+            self.db["approved"]["carlos/" + self.head] = True
+            g.authorize_terrain(self.db)
+            g.authorize_terrain(self.db)
+            self.assertEqual(len(self.db["grants"]), 2)
+            (self.state / "gandalf.json").write_text(g.json.dumps(self.db))
+            for agent in ("bruno", "carlos"):
+                self.assertEqual(g.consume(agent, self.root), 0)
+                self.assertEqual(g.consume(agent, self.root), 4)
+
+    def test_report_does_not_include_review_text_or_intermediate_state(self):
+        prefix = "bruno/" + self.head + "/"
+        after = {prefix + "pending": "reservado",
+                 prefix + "approved": {"decision": "approve", "reason": "texto privado"},
+                 prefix + "blocked": "bloqueado: dados privados"}
+        bodies = []
+
+        def post(args, **kwargs):
+            self.assertEqual(args[:4], ["gh", "issue", "comment", "8"])
+            bodies.append(Path(args[-1]).read_text())
+
+        with patch.object(g.subprocess, "run", side_effect=post):
+            g.report_changes({}, after)
+            g.report_changes(after, after)
+        self.assertEqual(len(bodies), 2)
+        self.assertTrue(all(self.head in body and "privado" not in body for body in bodies))
 
     def test_journal(self):
         self.db["tips"]["bruno"] = self.head

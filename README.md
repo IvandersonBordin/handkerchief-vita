@@ -1,6 +1,6 @@
 # Handkerchief — PS Vita Port (Research Project)
 
-> **Work in progress.** This is an independent research project exploring a native PlayStation Vita port of *Handkerchief*. It is **not a complete or faithful playable port**. Feedback and technical review are welcome.
+> **Work in progress.** This is an independent research project exploring a native PlayStation Vita port of *Handkerchief*. It is **not a complete or faithful playable port**.
 
 [Português](#português) · [Technical documentation](docs/feasibility.md)
 
@@ -50,16 +50,9 @@ These tools inspect HDK sections and render background previews under `build/`. 
 
 For the VitaSDK demonstration build and its requirements, see [VISTA_0 prototype instructions](docs/vista-walk.md). Other experimental prototypes described there may use local build artifacts or assets that are not published.
 
-## Feedback wanted
+## Contributions
 
-I am learning game porting, reverse engineering and C development, and I use Codex to assist with investigation and implementation. I would particularly appreciate review of:
-
-- The division between portable game logic and Vita-specific rendering/input.
-- The terrain and player-physics investigation, including missing evidence and better test strategies.
-- The HDK readers, data structures, memory usage and potential performance issues on PS Vita.
-- The build/test setup and whether the project is becoming unnecessarily complex.
-
-Please feel free to open an [issue](../../issues) with constructive suggestions. **No one is expected to do the work for me**; the goal is to learn and improve the implementation.
+Contributions and technical discussions can be proposed through [GitHub Issues](../../issues).
 
 ## Legal and project boundaries
 
@@ -75,7 +68,7 @@ Este é um projeto independente de pesquisa para portar *Handkerchief* nativamen
 
 **Ainda falta:** vincular as consultas do terreno à movimentação real do protagonista, reproduzir gravidade, saltos e colisões, e implementar o restante das regras, eventos e fases.
 
-**Ajuda bem-vinda:** revisão da arquitetura, da engenharia reversa, dos testes e da separação entre lógica portátil e código específico do Vita. Sugestões podem ser enviadas pelas [issues](../../issues).
+**Colaborações:** propostas e discussões técnicas podem ser registradas nas [issues](../../issues).
 
 ### Documentação técnica
 

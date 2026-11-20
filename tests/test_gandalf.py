@@ -44,6 +44,28 @@ class Supervisor(unittest.TestCase):
     def tick(self, now=10000):
         g.tick(self.db, lambda: None, now)
 
+    def test_idle_dispatch_without_model_and_single_use(self):
+        self.tick()
+        self.assertEqual(self.review.call_count, 1)
+        self.assertEqual(g.consume("bruno", self.root), 0)
+        self.tick(20000)
+        key = "bruno/" + self.head + "/b04-indices"
+        self.assertIn(key, self.db["grants"])
+        self.assertEqual(self.review.call_count, 1)
+        (self.state / "gandalf.json").write_text(g.json.dumps(self.db))
+        self.assertEqual(g.consume("bruno", self.root), 0)
+        self.assertEqual(g.consume("bruno", self.root), 3)
+        self.tick(30000)
+        self.assertEqual(self.review.call_count, 1)
+        self.assertNotIn("bruno/" + self.head + "/b04-indices-extra", self.db["grants"])
+
+    def test_idle_needs_approved_review(self):
+        self.review.return_value.update(decision="hold", next_action="hold")
+        self.tick()
+        self.tick(20000)
+        self.assertEqual(self.review.call_count, 1)
+        self.assertNotIn("grants", self.db)
+
     def test_catalog_avoids_repeated_grants(self):
         self.assertIn("b03-edi", g.available_actions(self.db, "bruno"))
         for i in range(3):

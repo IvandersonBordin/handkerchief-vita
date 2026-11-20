@@ -379,4 +379,17 @@ função foi compilado com VitaSDK e GCC 15.2.0. O ZIP e o verificador
 de VPK da skill passaram. O pacote local está em
 `build/recomp-diagnostic/hdk_recomp_test.vpk`, fora do Git.
 SHA-256 `a710887a1b8312451dfc35eb8c1a65e43b908edbc2ca7937fb586889c1b6ff66`.
-O teste físico aguarda o console voltar à rede.
+### Execução no PS Vita físico
+
+Em 19/11/2026, o VitaCompanion instalou e abriu `HKRC00001`.
+Os seis arquivos instalados foram comparados byte a byte com o VPK.
+O aplicativo gravou `HKRC00001 514/514 PASS 423 us`, e o relatório
+foi recuperado por FTP. O teste verificou o retorno, a posição da
+pilha, os registradores preservados e os dados dos retângulos.
+Os 423 microssegundos correspondem à bateria inteira em uma única
+execução. A medição não representa tempo por quadro.
+
+A primeira função recompilada executou no Vita com ponteiros para
+buffers do próprio aplicativo. A próxima prova física é ligar a
+segunda função com dados sintéticos, deslocamento de endereços e
+um adaptador de teste para `UnionRect`.

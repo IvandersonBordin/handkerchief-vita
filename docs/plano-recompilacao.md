@@ -422,3 +422,33 @@ Windows de `UnionRect`, o despacho entre objetos e o custo do
 runtime em uma cena real continuam em aberto. O próximo recorte
 deve verificar uma chamada indireta entre funções do jogo antes
 de ampliar a integração.
+
+### Chamada indireta entre rotinas originais no Vita
+
+O PCRecomp emitiu a cadeia `0x41C877 → 0x412D29 → 0x4096E8`.
+Em `0x41C887`, o primeiro método lê o slot virtual `+0x1C` do
+objeto e chama o endereço convidado `0x401843`. O despachante
+do diagnóstico redireciona esse endereço ao corpo recompilado
+em `0x412D29` e resolve o segundo salto conhecido
+`0x40119F → 0x4096E8`. Destinos fora da tabela encerram o teste.
+
+Foram usados os mesmos 514 pares de retângulos da primeira prova.
+Unicorn executou os corpos e saltos originais com uma estrutura
+sintética de objetos e confirmou retorno e pilha. O código gerado
+passou nos mesmos casos no Linux e no Vita. O diagnóstico também
+verificou os registradores preservados, a integridade dos retângulos
+e uma chamada de cada tipo por caso. No VitaCompanion, os seis
+arquivos instalados foram comparados com o VPK e o aplicativo
+`HKRC00003` gravou:
+
+```text
+HKRC00003 514/514 PASS 1694 us base=81080a20
+```
+
+A medição inclui preparação e verificação dos vetores em uma única
+execução. O VPK local passou nas verificações de integridade e tem
+SHA-256 `a003d601bb2f1757db9cdbf60d5ff98d21d4e6fafcef0442e8c480cf0299991b`.
+Os objetos e a tabela de métodos foram montados para o recorte.
+O resultado sustenta uma prova híbrida com dados reais de A0.
+A relação do chamador com a execução normal de A0, as demais
+ramificações de `0x412D29` e a resposta física continuam em aberto.

@@ -44,6 +44,18 @@ class Supervisor(unittest.TestCase):
     def tick(self, now=10000):
         g.tick(self.db, lambda: None, now)
 
+    def test_catalog_avoids_repeated_grants(self):
+        self.assertIn("b03-edi", g.available_actions(self.db, "bruno"))
+        for i in range(3):
+            g.grant(self.db, "bruno", str(i), "b03-edi", "")
+        available = g.available_actions(self.db, "bruno")
+        self.assertNotIn("b03-edi", available)
+        self.assertIn("b04-indices", available)
+        self.assertIn("b02-posicao", available)
+
+    def test_catalog_for_carlos_has_independent_task(self):
+        self.assertIn("controles-a0", g.available_actions(self.db, "carlos"))
+
     def test_release_once(self):
         (self.state / "bruno.pending").write_text(self.head + "\nverificar posição\n")
         self.tick()

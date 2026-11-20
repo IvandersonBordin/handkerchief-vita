@@ -531,7 +531,10 @@ do passeio. O VPK passou nas verificações ZIP e LiveArea.
 SHA-256 `ce09415a7618be30e185c37db861a1ddad042a25e11d3d1eca71fdd9a75dd3f4`.
 
 O pacote e o arquivo complementar de A0 foram enviados por FTP e
-comparados byte a byte. O console ainda tem `HKRC00003`, `HKRC00004`
-e `HKRC00005` instalados. A instalação de `HKRC00006` aguarda a
-remoção de `HKRC00003` pela LiveArea para respeitar a retenção de
-três versões. A pasta de dados `ux0:data/HKRC00004` é compartilhada.
+comparados byte a byte. Em seguida, o VitaCompanion instalou
+`HKRC00006` com autorização para preservar temporariamente os três
+títulos anteriores. Os seis arquivos instalados coincidiram com o
+VPK. O relatório por FTP retornou `HKRC00006 6/6 PASS scene=ready`
+e o VitaCompanion confirmou o encerramento do aplicativo. A
+confirmação visual do alinhamento durante o passeio segue pendente.
+A pasta de dados `ux0:data/HKRC00004` é compartilhada.

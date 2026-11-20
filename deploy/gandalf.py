@@ -49,6 +49,15 @@ def consume(agent, worktree):
         return subprocess.check_output(["git", "-C", worktree, *args], text=True).strip()
     head = ref("rev-parse", "HEAD")
     receipt = db.get("grants", {}).get(agent + "/" + head)
+    receipt_key = agent + "/" + head
+    if receipt is None or (STATE / f"{agent}.{head}.consumed").exists():
+        receipt = None
+        for action_id in ACTIONS[agent]:
+            candidate_key = agent + "/" + head + "/" + action_id
+            candidate = db.get("grants", {}).get(candidate_key)
+            if candidate and not (STATE / f"{agent}.{head}.{action_id}.consumed").exists():
+                receipt, receipt_key = candidate, candidate_key
+                break
     if receipt is None:
         return 3
     action = receipt["action"]
@@ -59,7 +68,8 @@ def consume(agent, worktree):
             or (dependency and not db["approved"].get(dependency))
             or (STATE / "usage-limit").exists()):
         return 4
-    marker = STATE / f"{agent}.{head}.consumed"
+    marker = (STATE / f"{agent}.{head}.consumed" if receipt_key == agent + "/" + head
+              else STATE / f"{agent}.{head}.{action}.consumed")
     try:
         with marker.open("x") as out:
             json.dump(receipt, out)
@@ -119,6 +129,35 @@ def available_actions(db, agent):
     if len(history) >= 3 and history[-1] == history[-2] == history[-3]:
         catalog.pop(history[-1], None)
     return catalog
+
+
+def dispatch_idle(db, agent, head):
+    """Distribui uma tarefa diferente, uma vez por SHA e ação, sem usar o modelo."""
+    prefix = agent + "/" + head
+    if not db.get("approved", {}).get(prefix):
+        return False
+    existing = db.get("grants", {}).get(prefix)
+    if existing and not (STATE / f"{agent}.{head}.consumed").exists():
+        return False
+    for action in ACTIONS[agent]:
+        key = prefix + "/" + action
+        if key in db.get("grants", {}) and not (STATE / f"{agent}.{head}.{action}.consumed").exists():
+            return False
+    pending = STATE / (agent + ".pending")
+    if pending.exists():
+        lines = pending.read_text().splitlines()
+        if lines and lines[0] == head:
+            return False
+    catalog = available_actions(db, agent)
+    for action in catalog:
+        if action == (existing or {}).get("action"):
+            continue
+        key = prefix + "/" + action
+        if key not in db.get("grants", {}):
+            db.setdefault("grants", {})[key] = {
+                "agent": agent, "sha": head, "action": action, "dependency": ""}
+            return True
+    return False
 
 
 def review(agent, patch, task, folder, catalog=None):
@@ -186,6 +225,10 @@ def tick(db, persist, now):
                         and agent + "/" + head not in db.get("grants", {})):
                     grant(db, agent, head, "b03-edi", "")
                     persist()
+                if (isinstance(previous, dict) and previous.get("decision") == "approve"
+                        and dispatch_idle(db, agent, head)):
+                    persist()
+                    print(agent, head, "nova tarefa autorizada sem chamada ao modelo", flush=True)
                 continue
             base = db["tips"].setdefault(agent, git("rev-parse", head + "^"))
             if base == head:

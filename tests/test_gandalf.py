@@ -111,8 +111,8 @@ class Supervisor(unittest.TestCase):
         self.tests.assert_not_called()
         self.review.side_effect = KeyboardInterrupt
         with self.assertRaises(KeyboardInterrupt):
-            self.tick(100000)
-        self.tick(105000)
+            self.tick(120000)
+        self.tick(125000)
         self.review.assert_called_once()
 
     def test_quota_from_reviewer(self):

@@ -50,16 +50,19 @@ def consume(agent, worktree):
     head = ref("rev-parse", "HEAD")
     receipt = db.get("grants", {}).get(agent + "/" + head)
     receipt_key = agent + "/" + head
+    had_grant = receipt is not None
     if receipt is None or (STATE / f"{agent}.{head}.consumed").exists():
         receipt = None
         for action_id in ACTIONS[agent]:
             candidate_key = agent + "/" + head + "/" + action_id
             candidate = db.get("grants", {}).get(candidate_key)
-            if candidate and not (STATE / f"{agent}.{head}.{action_id}.consumed").exists():
-                receipt, receipt_key = candidate, candidate_key
-                break
+            if candidate:
+                had_grant = True
+                if not (STATE / f"{agent}.{head}.{action_id}.consumed").exists():
+                    receipt, receipt_key = candidate, candidate_key
+                    break
     if receipt is None:
-        return 3
+        return 4 if had_grant else 3
     action = receipt["action"]
     dependency = receipt["dependency"]
     if (receipt["agent"] != agent or receipt["sha"] != head or action not in ACTIONS[agent]

@@ -48,3 +48,31 @@ O pacote experimental local está em
 `build/playable-a0/out/recomp_a0.vpk`, fora do Git.
 SHA-256 `3987c46736f35d7a52daeb1569e2a79560e74e7710ba8ca177a7484e437a5d84`.
 A rodada lê os dados locais compartilhados em `ux0:data/HKRC00004`.
+
+### Prévia de personagens na rodada
+
+O protótipo local `HKRC00008` (Handkerchief A0 Actor Preview) lê
+57 recortes em quatro grupos dos bancos 5 e 6 da cópia local.
+O arquivo de pixels separado foi enviado ao Vita e verificado
+byte a byte. O VPK contém o visualizador e o código da rodada.
+A transparência do índice zero e a ordem por índice de catálogo
+são escolhas experimentais. Identidade, ordem e duração das
+animações originais seguem em investigação.
+
+Quadrado ativa a prévia e alterna a reprodução automática durante
+a caminhada. SELECT passa ao próximo grupo, na ordem banco 5
+129–140, banco 5 157–168, banco 6 1–20 e banco 6 32–44. Triângulo
+avança um quadro e pausa a reprodução automática. A caixa de
+movimento continua sendo a da rodada sintética.
+
+No Linux, o teste com UBSan passou para carregamento, mudanças
+de quadro e grupo, recorte na borda e ausência de arquivo.
+O pacote passou nos verificadores ZIP e LiveArea. No Vita, os
+seis arquivos instalados coincidiram com o VPK e o diagnóstico
+registrou `HKRC00008 6/6 PASS scene=ready actors=ready`.
+O VitaCompanion confirmou o encerramento. A conferência visual
+dos recortes e da transição de quadros no console está pendente.
+
+O pacote local está em `build/actor-playtest/out/recomp_a0.vpk`,
+fora do Git. SHA-256
+`82cd3a2337f95cc257e5b79143fce48bf2dd132732c999f9e58e2e2664dac667`.

@@ -55,7 +55,7 @@ class Supervisor(unittest.TestCase):
         self.assertEqual(self.review.call_count, 1)
         (self.state / "gandalf.json").write_text(g.json.dumps(self.db))
         self.assertEqual(g.consume("bruno", self.root), 0)
-        self.assertEqual(g.consume("bruno", self.root), 3)
+        self.assertEqual(g.consume("bruno", self.root), 4)
         self.tick(30000)
         self.assertEqual(self.review.call_count, 1)
         self.assertNotIn("bruno/" + self.head + "/b04-indices-extra", self.db["grants"])

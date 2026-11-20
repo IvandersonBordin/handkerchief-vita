@@ -1,23 +1,17 @@
-# Automação local controlada — Handkerchief PS Vita
+# Controlled Local Automation — Handkerchief PS Vita
 
-Esta automação é **opt-in** e não é habilitada por um commit remoto. Ela
-executa uma issue por vez por meio do Codex CLI no computador do usuário.
-O ChatGPT no navegador **não** acompanha o processo continuamente nem
-inicia novas tarefas automaticamente. O GitHub armazena as tarefas e os relatórios.
+This automation is **opt-in** and is not enabled by a remote commit. It executes one GitHub issue at a time using the Codex CLI on the user's computer. ChatGPT in the browser **does not** continuously monitor the process or automatically start new tasks. GitHub stores tasks and reports.
 
-## Pré-requisitos
+## Prerequisites
 
-- Git e GitHub CLI (`gh`) autenticados para `IvandersonBordin`.
-- Codex **CLI** disponível por `command -v codex` e autenticado. A extensão
-  do VS Code sozinha não garante a instalação do executável de linha de comando.
-- Python 3, systemd --user e repositório clonado em
-  `~/Projetos/handkerchief-vita`. Não instale pacotes automaticamente.
-- Working tree limpa e `main` sincronizada com `origin/main` antes de executar.
-  O executor não faz pull automático de mudanças pendentes.
+- Git and GitHub CLI (`gh`) authenticated as `IvandersonBordin`.
+- Codex **CLI** available via `command -v codex` and authenticated. The VS Code extension alone does not guarantee that the command-line executable is installed.
+- Python 3, systemd --user, and a repository clone at `~/Projetos/handkerchief-vita`. Do not install packages automatically.
+- Clean working tree and `main` synchronized with `origin/main` before execution. The executor does not automatically pull pending changes.
 
-## Preparar, sem ativar automaticamente
+## Preparation — Does Not Enable Automation
 
-No terminal do Manjaro, dentro do repositório:
+In a Manjaro terminal, inside the repository:
 
 ```bash
 git pull --ff-only origin main
@@ -27,11 +21,11 @@ python3 tools/issue_worker.py
 python3 -m py_compile tools/issue_worker.py
 ```
 
-Se o Codex CLI não existir, **não ative o timer**. A instalação e autenticação
-exigem uma etapa separada e consentimento.
+If the Codex CLI is unavailable, **do not enable the timer**. Installation and authentication require a separate step and consent.
 
-O executor usa Bubblewrap para montar `original-data/` e `.git/` em modo somente leitura dentro de uma área de projeto gravável. A pasta `~/.codex/` recebe permissão de escrita restrita para o estado de execução do cliente; quando existe, `~/.codex/auth.json` recebe uma montagem adicional somente leitura. As demais pastas fora do projeto continuam somente leitura. Antes de executar o Codex, verifica se `HDKWIN.EXE` pode ser lido e não pode ser aberto para escrita. O Codex usa `--ephemeral` para reduzir gravações fora do projeto. Esse isolamento ainda precisa ser testado localmente com o Codex CLI nesta configuração.\n\nO executor só escolhe issues abertas do proprietário com o rótulo
-`codex-ready`. Para criar os rótulos uma única vez:
+The executor uses Bubblewrap to mount `original-data/` and `.git/` read-only inside a writable project area. The `~/.codex/` directory has restricted write access for client runtime state; when present, `~/.codex/auth.json` is mounted separately as read-only. Other directories outside the project remain read-only. Before starting Codex, the executor checks that `HDKWIN.EXE` is readable but cannot be opened for writing. Codex uses `--ephemeral` to reduce writes outside the project. This isolation configuration still requires local testing with Codex CLI.
+
+The executor selects only open issues created by the repository owner and labeled `codex-ready`. To create the labels once:
 
 ```bash
 for label in codex-ready codex-running codex-blocked codex-done; do
@@ -39,22 +33,23 @@ for label in codex-ready codex-running codex-blocked codex-done; do
 done
 ```
 
-Para autorizar a issue #1, após verificar seu conteúdo:
+To authorize issue #1 after reviewing its contents:
 
 ```bash
 gh issue edit 1 --repo IvandersonBordin/handkerchief-vita --add-label codex-ready
 ```
 
-Antes da execução, faça o teste de isolamento read-only com o Bubblewrap conforme a etapa de configuração. O modo seguro acima não valida credenciais do GitHub nem toda a integração com Codex.\n\nPara **testar manualmente apenas uma execução**, sem agendar:
+Before execution, perform the read-only isolation test with Bubblewrap according to the setup procedure. The safe mode above does not validate GitHub credentials or the entire Codex integration.
+
+To **run a single manual test**, without scheduling:
 
 ```bash
 python3 tools/issue_worker.py --run
 ```
 
-Logs ficam em `build/codex-issue-N.log` e fora do Git. É possível verificar
-o estado em `gh issue view 1 --repo IvandersonBordin/handkerchief-vita`.
+Logs are stored in `build/codex-issue-N.log`, outside Git. Check issue status using `gh issue view 1 --repo IvandersonBordin/handkerchief-vita`.
 
-## Ativar execução periódica (opcional; após teste manual aprovado)
+## Enable Periodic Execution (Optional; After a Successful Manual Test)
 
 ```bash
 mkdir -p ~/.config/systemd/user
@@ -64,53 +59,32 @@ systemctl --user enable --now handkerchief-worker.timer
 systemctl --user list-timers handkerchief-worker.timer
 ```
 
-O timer verifica uma tarefa a cada ~15 minutos enquanto a sessão do usuário
-e o computador estiverem ativos. Não é necessário deixar o VS Code aberto,
-mas é necessário que o Codex CLI e a autenticação estejam disponíveis ao
-serviço. **Não habilite linger** por padrão. A execução não continua com o
-computador desligado ou suspenso.
+The timer checks for a task approximately every 15 minutes while the user session and computer are active. VS Code does not need to remain open, but Codex CLI and authentication must be available to the service. **Do not enable linger** by default. Execution cannot continue when the computer is powered off or suspended.
 
-Para pausar imediatamente:
+To pause immediately:
 
 ```bash
 systemctl --user disable --now handkerchief-worker.timer
 ```
 
-Para acompanhar:
+To inspect logs:
 
 ```bash
 journalctl --user -u handkerchief-worker.service -n 100 --no-pager
 ```
 
-## Segurança e limites conhecidos
+## Security and Known Limitations
 
-- O executor exige `--run` e usa um lock local para impedir concorrência.
-- Seleciona somente issues do proprietário marcadas `codex-ready`;
-  reserva como `codex-running`, remove `codex-ready` e exige reautorização
-  manual para tentativas bloqueadas.
-- Executa `codex exec --ephemeral` com `workspace-write` dentro do Bubblewrap, limitado\n  a 45 minutos; não usa `danger-full-access`.
-- Impede publicações com arquivos proibidos, executáveis, exclusões,
-  arquivos grandes ou mudanças nos metadados dos originais detectadas;
-  protege `AGENTS.md` e o próprio executor de alterações automáticas.
-- Valida `git diff --check`, AST dos Python modificados, testes unittest
-  quando disponíveis e revisa a lista de arquivos staged antes de publicar.
-- O sistema **não é uma barreira de segurança absoluta**. O Codex pode escrever em `~/.codex/` (exceto `auth.json`, quando presente) para manter seu estado; por isso, o isolamento não é uma garantia de proteção contra todos os efeitos do processo. O Bubblewrap protege\n  os originais de escrita durante a sessão isolada, mas o processo externo\n  controla os commits e a publicação. Metadados não detectam todas as possíveis\n  alterações; mantenha backup dos arquivos originais.
-- A verificação automática é limitada: testes específicos de imagens e
-  fidelidade visual ainda podem exigir revisão humana. Um commit publicado
-  não significa aprovação técnica do ChatGPT.
-- Issues são entradas de instrução: autorize apenas tarefas escritas/revisadas
-  por você e pelo líder. Não use a automação para operações sensíveis,
-  instalações, mudanças de firmware nem publicação de recursos comerciais.
-- Se houver divergência Git, falha de Codex CLI, problema de autenticação,
-  erro de validação ou push rejeitado, o processo para e registra bloqueio.
-  Não faz force push nem reset de histórico.
+- The executor requires `--run` and uses a local lock to prevent concurrent execution.
+- It selects only owner-created issues labeled `codex-ready`, reserves them as `codex-running`, removes `codex-ready`, and requires manual reauthorization for blocked attempts.
+- It executes `codex exec --ephemeral` with `workspace-write` inside Bubblewrap, with a 45-minute limit; it does not use `danger-full-access`.
+- It prevents publication of prohibited files, executables, deletions, oversized files, or detected changes to original-game metadata; it protects `AGENTS.md` and the executor itself from automatic changes.
+- It checks `git diff --check`, the AST of modified Python files, available unittest suites, and the staged file list before publishing.
+- This system **is not an absolute security boundary**. Codex can write to `~/.codex/` (except `auth.json`, when present) to maintain runtime state, so isolation does not guarantee protection from every process side effect. Bubblewrap prevents writes to the originals during the isolated session, but the external process controls commits and publication. Metadata checks cannot detect every possible modification; maintain backups of the original game files.
+- Automated checks are limited: image-specific and visual-fidelity tests may still require human review. A published commit does not imply technical approval by ChatGPT.
+- Issues are instruction inputs: authorize only tasks written or reviewed by you and the project lead. Do not use this automation for sensitive operations, installations, firmware changes, or publishing commercial assets.
+- On Git divergence, Codex CLI failure, authentication problems, validation errors, or rejected pushes, execution stops and records a blocker. It does not force-push or reset history.
 
-### Gravação de referência dentro dos executores locais
+### Reference Gameplay Recording in Local Executors
 
-O launcher instalado disponibiliza o MP4 fornecido pelo usuário
-em `/opt/handkerchief-reference/gameplay.mp4` para Bruno e Carlos
-quando o arquivo está presente em Downloads. Somente esse arquivo
-é montado, em modo leitura. A configuração foi verificada com
-`bash -n` e com um teste da montagem no Bubblewrap. O vídeo e os
-quadros extraídos ficam fora do Git. A gravação orienta tarefas
-autorizadas e não altera a agenda nem os limites de execução.
+The installed launcher makes the user-supplied MP4 available to Bruno and Carlos at `/opt/handkerchief-reference/gameplay.mp4` when the file exists in Downloads. Only that file is mounted, read-only. The configuration was checked with `bash -n` and a Bubblewrap mount test. The video and extracted frames remain outside Git. The recording guides authorized tasks and does not change scheduling or execution limits.

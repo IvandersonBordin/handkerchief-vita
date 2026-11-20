@@ -1,12 +1,12 @@
-# Teste do executor automático
+# Automated Runner Smoke Test
 
-Este teste utiliza o Codex CLI local sob supervisão do projeto.
+This test uses the local Codex CLI under project supervision.
 
-## Checklist para futuras validações
+## Checklist for future validation
 
-- [ ] Confirmar que a branch local está sincronizada com o Git remoto.
-- [ ] Manter os arquivos originais em modo somente leitura.
-- [ ] Executar as validações de código aplicáveis e revisar as alterações.
-- [ ] Fazer commit e push somente se todas as verificações passarem.
+- [ ] Confirm that the local branch is synchronized with the remote Git branch.
+- [ ] Keep original game files read-only.
+- [ ] Run applicable code checks and review changes.
+- [ ] Commit and push only if all checks pass.
 
-Este teste não comprova compilação nem execução no PS Vita.
+This test does not demonstrate successful compilation or execution on PlayStation Vita.

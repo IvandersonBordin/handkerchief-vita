@@ -34,3 +34,9 @@ O catalogo inclui a investigacao estatica b04-indices (enderecos 0x4AD16C e 0x4A
 Quando as tres ultimas concessoes de um agente sao da mesma acao, Gandalf remove temporariamente essa acao das opcoes da revisao seguinte. O modelo escolhe entre as outras tarefas previamente autorizadas ou hold. O historico e os recibos antigos permanecem intactos. A regra nao gera novas revisoes sem entrega, nao reabre eventos reservados e nao contorna o intervalo de 20 minutos nem a cota.
 
 Depois de atualizar o checkout local, valide com `python3 -B -m unittest discover -s tests -p test_gandalf.py` antes de reiniciar os servicos. O codigo publicado no GitHub nao atualiza automaticamente o processo systemd local.
+
+## Distribuicao ociosa controlada
+
+Quando uma entrega ja foi aprovada e o SHA da branch ainda coincide com origin, Gandalf pode conceder, sem chamar Codex, uma acao diferente do catalogo. A concessao antiga deve ter sido consumida, e nao pode existir concessao ociosa ainda pendente. O recibo ocioso tem chave agente/SHA/acao e marcador exclusivo por acao, impedindo a repeticao no mesmo SHA. O executor continua usando a mesma chamada consume e o mesmo bloqueio espera 0. Uma entrega com decisao hold nao habilita distribuicao. A lista disponivel respeita a supressao de tres concessoes iguais. A distribuicao nao reabre revisoes, nao ultrapassa o escopo das acoes, nao instala no Vita e nao faz chamadas ao modelo por conta propria.
+
+Atualize a branch principal e rode ambas as suites antes de confiar na mudanca: `python3 -B -m unittest discover -s tests -p test_gandalf.py` e `bash tests/test_handkerchief_cycle.sh`. O servico Gandalf carregara o codigo novo na proxima sondagem; nao ha necessidade de reiniciar timers.

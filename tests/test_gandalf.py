@@ -53,6 +53,14 @@ class Supervisor(unittest.TestCase):
         self.assertIn("b04-indices", available)
         self.assertIn("b02-posicao", available)
 
+    def test_repetitive_action_does_not_block_review(self):
+        for i in range(3):
+            g.grant(self.db, "bruno", str(i), "b03-edi", "")
+        self.tick()
+        self.assertEqual(self.db["approved"].get("bruno/" + self.head), True)
+        self.assertNotIn("bruno/" + self.head, self.db["grants"])
+        self.assertIn("b04-indices", self.review.call_args.args[4])
+
     def test_catalog_for_carlos_has_independent_task(self):
         self.assertIn("controles-a0", g.available_actions(self.db, "carlos"))
 
@@ -98,7 +106,7 @@ class Supervisor(unittest.TestCase):
         self.assertNotIn("grants", self.db)
 
     def test_budget_and_interrupted_reservation(self):
-        self.db["calls"] = list(range(8))
+        self.db["calls"] = list(range(19985, 20001))
         self.tick(20000)
         self.tests.assert_not_called()
         self.review.side_effect = KeyboardInterrupt

@@ -775,3 +775,14 @@ casos x86 sintéticos e a suíte local com PYTHONPATH=tools. A issue
 remota ficou inacessível por falta de autenticação no gh e falha de DNS.
 Próxima ação: rastrear os chamadores da rotina cujo epílogo passa
 por 0x4194F3 e verificar se consomem o valor devolvido ao escrever Y.
+
+## B02 — dois chamadores do método que retorna em 0x4194F3
+
+Issue #8 em andamento. Em 0x418E2F, o retorno segue para a seleção
+de laço e pode virar argumento do método virtual +0x18 de um item.
+Em 0x42DBD0, o retorno segue para [esp+0x14]. Evidências e limites
+em docs/physics-collision.md. Conferidos o registro em A0.HDK, o
+quadro de 01:00, quatro casos x86 isolados e os 31 testes locais.
+A consulta remota ficou bloqueada por falta de autenticação no gh e
+falha de DNS da API. Próxima ação: seguir [esp+0x14] a partir de
+0x42DBDB até seu uso, verificando a relação com o campo Y (+0x1C).

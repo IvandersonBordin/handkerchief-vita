@@ -1083,3 +1083,40 @@ bytes e sentinelas na coluna vizinha. Validou os valores e a
 preservação dessa coluna. Em A0.HDK, a partir de 0x5D, aparecem
 ROCK_0 e CRock. Em 01:00 da gravação há uma figura junto à escada.
 Essas referências não identificam qual coluna recebeu uma escrita.
+
+### A0 — quem recebe o retorno de 0x4194F3
+
+A rotina começa em 0x418E47. O salto de 0x404124 leva a essa entrada.
+A busca por chamadas diretas ao salto encontra 0x418E2F e 0x42DBD0.
+No segundo ponto, 0x42DBDB guarda EAX na pilha, em [esp+0x14].
+A máscara 0x100 em 0x42DBE5 incide sobre o campo +0x80 do receptor,
+carregado em EDI, independentemente do valor salvo.
+
+No primeiro ponto, 0x418E34 empilha EAX e 0x418E35 recupera em ECX o
+receptor original. A chamada segue por 0x403A99 até 0x4196AF. O
+argumento entra em EBX. O teste em 0x4196B6 escolhe entre dois laços.
+Ambos zeram o índice em [esi+0x4C] e percorrem ponteiros a partir
+de [esi+4], enquanto o índice for menor que a contagem em [esi+8].
+Para o primeiro item não nulo, EDI recebe o ponteiro ao item e passa
+a ECX na chamada virtual pelo deslocamento +0x18 da tabela do item.
+
+| Retorno recebido | Chamada | Primeiro argumento | Segundo argumento |
+| --- | --- | --- | --- |
+| Zero | 0x4196E2 | Receptor original (ESI) | ESI |
+| Diferente de zero | 0x419722 | Retorno recebido (EBX) | ESI |
+
+No segundo laço, 0x419728 substitui EBX pelo retorno da chamada virtual
+para os itens seguintes. O resultado de 0x4194F3 serve, portanto, para
+selecionar o laço e pode chegar inteiro ao primeiro item. A escrita
+direta identificada nesses laços é a do índice. Atribuir uma escrita
+de Y ao despacho exige identificar o método do item ou seguir o valor
+salvo pelo outro chamador.
+
+Para reproduzir, usar objdump -d -Mintel no HDKWIN.EXE e procurar os
+destinos 0x418e47 e 0x404124. Conferir 0x418E24–0x418E40,
+0x4196AF–0x41973A e 0x42DBD0–0x42DBEB (fim exclusivo).
+Um ensaio x86 isolado conferiu a seleção do primeiro argumento para
+0, 1, 0x80000000 e 0xFFFFFFFF, usando 17 como receptor sintético.
+A0.HDK contém ROCK_0 e CRock a partir de 0x5D. Em 01:00 da abertura,
+a figura está na escada que sobe à direita. O quadro e os nomes no HDK
+não identificam a classe do item em EDI.

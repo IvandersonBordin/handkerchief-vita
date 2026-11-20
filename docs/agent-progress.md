@@ -710,3 +710,16 @@ A consulta e a atualização remotas da issue ficaram indisponíveis
 (gh sem autenticação e API pública sem resolução DNS).
 Próxima ação: seguir 0x401EB5 com o ator como argumento e verificar
 se há escrita em Y e a qual instância ela pertence.
+
+## B02 — destino de 0x401EB5 no caminho candidato de A0
+
+Issue #8 em andamento. O salto chega a 0x446464. O destino usa o ator
+na comparação e lê seu byte +0x80. As escritas diretas identificadas
+atingem o receptor. As duas chamadas internas e a identidade da instância
+nos degraus continuam abertas. Endereços, máscaras, referência de 01:00
+e casos isolados estão em docs/physics-collision.md. Passaram quatro
+casos x86 e 31 testes com PYTHONPATH=tools. A consulta e a atualização
+remotas ficaram indisponíveis (gh sem autenticação e falha de DNS).
+Próxima ação: seguir o fluxo de 0x41996D até o retorno do método
+candidato para localizar a origem do valor testado após 0x419028 e
+verificar se esse trecho grava Y.

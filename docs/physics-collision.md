@@ -892,3 +892,37 @@ sintética `mov eax,edi; test eax,eax; jne fim; mov eax,esi; fim: ret`.
 Com os campos do ator e do argumento representados por sentinelas,
 os pares (0,0), (0,17), (23,0) e (23,17) devolveram 0, 17, 23 e 23.
 O ensaio cobre a prioridade do seletor para objetos válidos.
+
+### A0 — campos alterados pelo destino de 0x401EB5
+
+Na cadeia candidata acima, 0x401EB5 salta para 0x446464. ESI recebe
+o receptor vindo de [ecx+0xC] em 0x41F0B3. EDI recebe o ator passado
+na pilha. A comparação em 0x44646C dá prioridade à identidade do ator.
+
+| Condição | Escritas diretas no receptor |
+| --- | --- |
+| [esi+0x60] igual a EDI | Zera o ponteiro +0x60, liga o bit 0x04 na palavra de 32 bits +0x84 e segue direto ao retorno. |
+| Ponteiros diferentes e bit 0 de [edi+0x80] ligado | Liga o bit 0x02 em +0x84 e grava 3000 em +0x94. |
+| Ponteiros diferentes e bit 0 desligado | Decrementa o byte +0x88. |
+
+Nos dois últimos ramos, a rotina procura EDI no vetor apontado por
+[esi+0x68], com contagem em +0x6C. Ao encontrar o ator, chama
+0x403E72 com ECX apontando para esi+0x64. Se a contagem lida em
+0x4464C5 for zero, chama 0x401569 com valores de +0x7C e +0x78.
+Nenhuma instrução entre 0x446464 e o retorno em 0x4464DA grava
+diretamente por EDI. Os efeitos internos das duas chamadas permanecem
+abertos. No retorno ao chamador externo, 0x419970 recarrega EAX
+antes de qualquer teste desse registrador. Portanto o valor devolvido
+por esse slot interno não determina diretamente o teste de retorno do
+despacho em 0x419028.
+
+Para reproduzir, use objdump -d -Mintel nos intervalos de fim exclusivo
+0x401EB5–0x401EBA, 0x446464–0x4464DD e 0x41996A–0x41997F. Quatro
+casos sintéticos em x86-64 com operandos de 32 bits compararam dois
+identificadores e, quando diferentes, isolaram o bit baixo do terceiro
+operando. Para (1,1,0), (1,1,1), (1,2,2) e (1,2,3), os indicadores
+dos ramos foram 4, 4, 0 e 2. O ensaio cobre apenas a seleção inicial.
+
+O registro ROCK_0/CRock em A0.HDK (0x5D) e a figura sobre os degraus
+em 01:00 da abertura situam a comparação. A ligação entre esse registro,
+o receptor em ESI e a coordenada Y da figura permanece sem evidência.

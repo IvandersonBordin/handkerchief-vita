@@ -69,8 +69,8 @@ avaliadas, o procedimento experimental e os critérios de autorização.
 
 ## Regra prioritária de economia de tokens
 
-- Os timers verificam localmente a cada minuto se há trabalho liberado.
-  O intervalo normal entre chamadas ao modelo é de 20 minutos. Após uma
+- Os timers verificam localmente a cada cinco minutos se há trabalho liberado.
+  O intervalo normal entre chamadas ao modelo é de cinco minutos. Após uma
   publicação com alterações além do diário, permitir uma continuação no
   próximo disparo se houver uma próxima ação concreta e já autorizada.
   Após essa continuação, aplicar novamente o intervalo normal.

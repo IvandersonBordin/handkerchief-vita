@@ -105,9 +105,11 @@ class Supervisor(unittest.TestCase):
         marker.touch()
         self.tick()
         marker.unlink()
-        self.db["calls"] = [9900]
+        self.db["calls"] = [9701]
         self.tick()
         self.tests.assert_not_called()
+        self.tick(10001)
+        self.review.assert_called_once()
 
     def test_failed_test_parked(self):
         self.tests.side_effect = ValueError("falha")

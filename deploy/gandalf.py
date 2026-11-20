@@ -231,7 +231,8 @@ def tick(db, persist, now):
                     db["tips"][agent] = head
                 action = result["next_action"]
                 if action != "hold" and action not in catalog:
-                    raise ValueError("Acao repetitiva ou nao autorizada")
+                    print(agent, head, "continuação não autorizada; mantendo entrega revisada em espera", flush=True)
+                    action = "hold"
                 if action != "hold" and git("rev-parse", branch) == head:
                     grant(db, agent, head, action, dependency)
             except Exception as error:

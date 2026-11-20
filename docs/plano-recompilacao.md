@@ -149,8 +149,12 @@ local de ações sensíveis. A CLI prevê captura, entrada, abertura e
 instalação de app, logs e eventos de crash. A coleta integral de dumps
 e seus limites de acesso precisam de confirmação na revisão escolhida.
 O protocolo é acessível por CLI, portanto Codex não exige um servidor
-MCP para esse desenho. O Python local encontra `cryptography`, mas a
-CLI não foi testada no Manjaro.
+MCP para esse desenho. Por solicitação de Ivan, esta é a ferramenta
+escolhida para os próximos testes no Vita real. No Manjaro, o cliente
+da revisão `ae140b995977829e582885b2a9bfb25b7d286970` está em
+`build/vita-agent-use`, fora do Git. O Python local importou
+`cryptography` e a CLI exibiu a ajuda geral e a de captura e execução.
+A comunicação com o console ainda precisa ser validada.
 
 O upstream declara incompatibilidade com o VitaCompanion, já usado
 para os testes da demo. A instalação também exige alteração de
@@ -161,6 +165,12 @@ recuperação e definir como voltar ao fluxo atual. Credenciais de
 pareamento, screenshots proprietárias e dumps ficam locais.
 Configuração, pareamento e operações no aparelho exigem autorização
 explícita. [Requisitos e controles do upstream](https://github.com/shoui520/vita-agent-use).
+
+O primeiro teste autorizado deve confirmar o firmware 3.65 e o estado
+dos plugins antes da migração. Depois do pareamento, verificar captura
+da LiveArea e, com um VPK autorizado, abertura, resposta aos controles,
+captura do resultado e encerramento. Registrar a evidência de hardware
+no relatório e manter as capturas e credenciais locais.
 
 ## C. Sequência e critérios de aprovação
 

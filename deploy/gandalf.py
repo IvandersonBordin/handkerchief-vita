@@ -143,11 +143,7 @@ def dispatch_idle(db, agent, head):
         key = prefix + "/" + action
         if key in db.get("grants", {}) and not (STATE / f"{agent}.{head}.{action}.consumed").exists():
             return False
-    pending = STATE / (agent + ".pending")
-    if pending.exists():
-        lines = pending.read_text().splitlines()
-        if lines and lines[0] == head:
-            return False
+    # A proposta pendente já foi avaliada no evento aprovado deste SHA.
     catalog = available_actions(db, agent)
     for action in catalog:
         if action == (existing or {}).get("action"):

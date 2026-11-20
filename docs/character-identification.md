@@ -139,9 +139,11 @@ indeterminadas.
 Na prévia `HKRC00008`, Ivan reconheceu o protagonista no quarto
 grupo, correspondente ao banco 6, índices 32–44. Descreveu o
 personagem como um policial de roupa roxa e boina, com uma pistola.
-A confirmação estabelece o grupo a priorizar no atlas. A referência
-ao ator controlado, a situação em que essa aparência é usada e a
-ordem e duração das poses ainda precisam ser confirmadas no motor.
+Ivan esclareceu que o protagonista só assume a aparência de policial
+depois de pegar a boina no jogo original. O grupo do banco 6 é a
+referência visual para depois da coleta. A aparência inicial, o item
+equivalente nos dados, a rotina de transformação e a ordem e duração
+das poses ainda precisam ser confirmados no motor.
 [Controles da prévia](vista-walk.md#prévia-de-personagens-na-rodada).
 
 ### Sequência encontrada no executável

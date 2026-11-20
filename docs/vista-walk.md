@@ -88,6 +88,9 @@ enquanto a rodada registra movimento horizontal. A ordem vem do
 O avanço a cada oito atualizações de caminhada e o retorno ao
 índice 41 ao parar são escolhas da demo. O estado e o tempo que
 o jogo original atribui à sequência seguem em investigação.
+No jogo original, segundo Ivan, o protagonista assume esse visual
+depois de pegar a boina. A variante experimental já começa com a
+aparência pós-coleta.
 SELECT e Triângulo continuam disponíveis para explorar o catálogo.
 
 Inspirado em comparações por rotina e entradas repetíveis por

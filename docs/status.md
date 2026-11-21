@@ -72,7 +72,11 @@ Main path: full static recompilation of `HDKWIN.EXE` (see [static-recomp.md](sta
   all letters/F1/F4 posted (H D K in a stage opens Secret Option 1490). Test aid `HK_STAGE=<label>` starts NEW GAME
   in any stage file (hook in recomp/image_patches.py: regenerate the C); 32 stages of territories A-J load with no
   FATAL, `e2` returns to the intro. On the Vita, Save/Stop are reached through the port's menu bar.
-  12 WAV files are missing from the player's data and the game retries opening them on every play.
+  12 WAV files are missing from the player's data. The game's voice code handles that silently (Play 0x45C78E
+  calls the loader 0x45C4C1 while the voice has no buffer and returns 0 when both ./wav/ and ./wav/8bit/ fail;
+  the free-voice search 0x45CC88 sees status 0 and picks that voice again; no other buffer is touched), but it
+  retries two opens per play (a1: ~32000 failed opens in 60 s headless, 56 us each on Linux). CreateFileA now
+  remembers read-only .wav paths that failed with ENOENT (a1: 23 failed opens in the same run).
 - Old test apps HKRC00005-00009 were uninstalled by Ivan from the LiveArea (vita-agent-use `content preview`
   fails with firmware error 0xFFFEFFF2 on this console).
 - Ivan's feedback (2026-11-20): the game runs smoothly on the Vita; stretched 16:9 makes text easier to read

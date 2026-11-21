@@ -535,11 +535,33 @@ static int file_traced(const File *f) {
     if (!init) { want = getenv("SH3_TRACE_FILE"); init = 1; }
     return want && *want && strstr(f->path, want);
 }
+// Missing sound files: the game's voice loader (0x45C4C1, via 0x45C406) opens ./wav/NAME.wav then ./wav/8bit/NAME.wav
+// every time a voice with no buffer is played (Play 0x45C78E calls it while [voice+0xC] is NULL) and plays nothing
+// when both fail. The player's data lacks 12 WAVs, so a1 retries ~2 failed opens per machine-gun shot (thousands per
+// minute; on the Vita each one costs ux0 I/O on the game thread). A read-only .wav that failed with ENOENT is
+// remembered and later opens fail at once with ERROR_FILE_NOT_FOUND, as before. The game never writes .wav files.
+#define WAV_MISS_MAX 32
+static char g_wav_miss[WAV_MISS_MAX][64];
+static int g_wav_miss_n;
+static SDL_mutex *g_wav_miss_mx;
+static int is_wav(const char *gp) { size_t n = gp ? strlen(gp) : 0; return n > 4 && n < 64 && !SDL_strcasecmp(gp + n - 4, ".wav"); }
+static int wav_missing(const char *gp, int add) {
+    if (!g_wav_miss_mx) g_wav_miss_mx = SDL_CreateMutex();
+    SDL_LockMutex(g_wav_miss_mx);
+    int i = 0;
+    while (i < g_wav_miss_n && SDL_strcasecmp(g_wav_miss[i], gp)) i++;
+    int hit = i < g_wav_miss_n;
+    if (!hit && add && g_wav_miss_n < WAV_MISS_MAX) snprintf(g_wav_miss[g_wav_miss_n++], 64, "%s", gp);
+    SDL_UnlockMutex(g_wav_miss_mx);
+    return hit;
+}
 K(CreateFileA) {
     HOSTFN;
     char hp[600];
     const char *gp = GSTR(ARG(1));
     uint32_t access = ARG(2), disp = ARG(5);
+    int wav_ro = !(access & 0x40000000u) && is_wav(gp);
+    if (wav_ro && wav_missing(gp, 0)) { w32_set_last_error(c, 2); STDRET(7, 0xffffffffu); }
     w32_host_path(gp, hp, sizeof hp);
     const char *mode = (access & 0x40000000u) ? (disp == 3 || disp == 4 ? "r+b" : "w+b") : "rb";
     // Reserve metadata before opening a possibly destructive CREATE_ALWAYS
@@ -559,9 +581,11 @@ K(CreateFileA) {
     }
     if (!f && errno == ENOENT && (access & 0x40000000u) && disp == 4) f = fopen(hp, "w+b"); // OPEN_ALWAYS
     if (!f) {
-        uint32_t error = file_error(errno, 2);
+        int err = errno;
+        uint32_t error = file_error(err, 2);
         free(fl);
-        rt_log("CreateFileA(\"%s\") failed\n", gp);
+        rt_log("CreateFileA(\"%s\") failed%s\n", gp, wav_ro && err == ENOENT ? " (remembered as missing)" : "");
+        if (wav_ro && err == ENOENT) wav_missing(gp, 1);
         w32_set_last_error(c, error);
         STDRET(7, 0xffffffffu);
     }

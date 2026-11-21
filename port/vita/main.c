@@ -181,6 +181,7 @@ int main(int argc, char **argv) {
     int r = rt_load_exe(HK_DATA_DIR "/HDKWIN.EXE");
     if (r) rt_fatal("cannot load " HK_DATA_DIR "/HDKWIN.EXE (%d): copy your game files there", r);
     rt_fill_iat();
+    { void hk_patch_data(void); hk_patch_data(); }
     rt_log("game loaded from %s\n", g_game_dir);
     rt_run_entry();
     SDL_Quit();

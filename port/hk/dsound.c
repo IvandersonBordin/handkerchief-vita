@@ -123,8 +123,10 @@ static void mix(void *ud, Uint8 *stream, int len) {
     }
     SDL_UnlockMutex(mx);
     int16_t *out = (int16_t *)stream;
-    for (int i = 0; i < n * 2; i++) {
-        float v = acc[i] * 32767.f;
+    for (int i = 0; i < n * 2; i++) {   // soft knee above 0.75 full scale: loud mixes round off instead of clipping
+        float a = acc[i], m = fabsf(a);
+        if (m > 0.75f) a = copysignf(0.75f + 0.25f * tanhf((m - 0.75f) / 0.25f), a);
+        float v = a * 32767.f;
         out[i] = (int16_t)(v > 32767.f ? 32767 : v < -32768.f ? -32768 : v);
     }
     if (n * 4 < len) memset(stream + n * 4, 0, (size_t)(len - n * 4));
@@ -380,12 +382,9 @@ static void build_vtables(void) {
 }
 
 // DSOUND ordinal 1 = DirectSoundCreate(guid, out, outer)
-// Off unless HK_SOUND is set: with sound on, HDKWIN.EXE's sound list (0x45CE4C) ends up holding a sound object whose
-// small-block-heap memory was reused, and the next Stop call jumps to garbage (docs/status.md). Until that is
-// understood, the game runs without a sound driver, as before.
+// HK_NOSOUND=1 runs without a sound driver. Sound depends on the small-block-heap patch in port/hk/glue.c.
 void imp_DSOUND_ord1(CPU *c) {
     HOSTFN;
-    if (!getenv("HK_SOUND")) { if (ARG(2)) W32(ARG(2), 0); STDRET(3, 0x88780078u); }   // DSERR_NODRIVER
     audio_start();
     if (!g_vt_ds) build_vtables();
     DSBuf *o = calloc(1, sizeof *o);

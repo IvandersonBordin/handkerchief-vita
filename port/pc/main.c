@@ -142,6 +142,7 @@ int main(int argc, char **argv) {
     int r = rt_load_exe(exe);
     if (r) rt_fatal("cannot load %s (%d)", exe, r);
     rt_fill_iat();
+    { void hk_patch_data(void); hk_patch_data(); }
     rt_log("game loaded from %s\n", g_game_dir);
     if (getenv("HK_DUMP_AFTER")) SDL_CreateThread(dump_thread, "hkdump", (void *)(intptr_t)atoi(getenv("HK_DUMP_AFTER")));
     rt_run_entry();

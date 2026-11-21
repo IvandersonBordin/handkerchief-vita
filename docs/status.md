@@ -51,23 +51,15 @@ Main path: full static recompilation of `HDKWIN.EXE` (see [static-recomp.md](sta
 
 ## Planned work (approved order)
 
-1. Sound. port/hk/dsound.c implements DirectSound (DirectX 5 interfaces) over an SDL2 mixer (from sh3vita) and
-   PlaySoundA; SetTimer/WM_TIMER now exist (the game starts a 40 ms timer, proc 0x45CF00, idEvent = its sound
-   manager). It is OFF unless HK_SOUND=1, because with sound on the run stops after ~25 s in stage loading:
-   "indirect call to 0xaa00dea2". Reproducible with SH3_VTIME=1 (deterministic addresses). Findings:
-   - The loop at 0x45CE4C walks a CPtrArray of sound objects (class vtable 0x472628: +0x04 owner, +0x0C the
-     IDirectSoundBuffer, +0x10 size) and calls 0x45C920, which calls Stop (vtable +0x48) on [obj+0x0C].
-   - Element 7 (0x914DD0 with SH3_VTIME) was constructed as a sound object (vtable written at 0x45C351), then
-     overwritten by a CPtrArray::SetSize copy (0x459D13 -> memcpy, dst 0x914DD0, 20 bytes): the CRT handed out
-     the same memory again. That address never came from the port's heap: this CRT's malloc (0x45E2E0) always
-     uses its own small-block heap (__sbh_alloc_block 0x4626D0) below the threshold at [0x4A88EC].
-   - So a sound object is freed while still listed (use after free inside the game's CRT heap). The original
-     does not crash on Windows, so a DirectSound behaviour difference probably changes when the game destroys
-     sound objects (suspects: buffer end / GetStatus timing, Duplicate/Release pattern: 351 DuplicateSoundBuffer
-     and no Release before the crash). Next: trace the scalar deleting destructor 0x45CA5B (via 0x401F96) and
-     who removes entries from the list at [0x914B20+4].
-   Tried without effect (kept only where it matches Windows): zeroed HeapAlloc, zeroing on MEM_DECOMMIT (kept),
-   full DSCAPS (kept), dead-but-valid COM objects after Release (kept), a free quarantine (removed).
+1. Sound: works on PC since 2026-11-21. port/hk/dsound.c implements DirectSound (DirectX 5 interfaces) over an
+   SDL2 mixer (from sh3vita, soft limiter above 0.75 full scale) and PlaySoundA; SetTimer/WM_TIMER drive the
+   game's 40 ms sound timer (proc 0x45CF00). HK_NOSOUND=1 disables it. Root cause of the earlier crash: the
+   CRT small-block heap (__sbh_alloc_block 0x4626D0, used by malloc 0x45E2E0 below the threshold [0x4A88EC]
+   = 0x1E0) handed out a live sound object a second time (0x45CB29, then CPtrArray::SetSize at 0x459D13),
+   with no free in between (gdb + SH3_VTIME=1). Why its bookkeeping goes wrong is still unknown; the fix is a
+   load-time patch (hk_patch_data, port/hk/glue.c) that sets the threshold to 0, so every allocation goes to
+   HeapAlloc and the port's heap. Verified: 3 min of A0 with walking, shooting and jumping, sound continuous,
+   no crash, no clipped samples (SDL disk audio driver). Console test pending.
 2. Win32 dialogs used by the game: 1498 "Exit Handkerchief ?" (Esc), 1491 Game Configuration and 1492 Key
    Configuration (F2); both start with IDirectDraw::GetGDISurface. The 4:3/16:9 option can move there.
 3. Native widescreen (requested by Ivan): a wider view of the world instead of stretching. Start from the

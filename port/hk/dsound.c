@@ -185,11 +185,21 @@ static void mix(void *ud, Uint8 *stream, int len) {
         outn += (unsigned)n;
     }
     SDL_UnlockMutex(mx);
+    // Master gain and a block limiter: many loud voices at once (explosions, gunfire) used to drive the old
+    // per-sample soft clipper into constant saturation, heard as distortion. The gain drops at once when a block
+    // would exceed the ceiling and recovers over ~0.3 s; a hard clip remains only as a safety net.
+    static float env = 1.f;
+    const float master = 0.7f, ceiling = 0.9f;
+    float peak = 0.f;
+    for (int i = 0; i < n * 2; i++) { float m = fabsf(acc[i]) * master; if (m > peak) peak = m; }
+    float target = peak > ceiling ? ceiling / peak : 1.f, g0 = env, g1;
+    if (target < env) g0 = g1 = target;          // attack: this whole block at the lower gain
+    else g1 = env + (target - env) * 0.15f;      // release
+    env = g1;
     int16_t *out = (int16_t *)stream;
-    for (int i = 0; i < n * 2; i++) {   // soft knee above 0.75 full scale: loud mixes round off instead of clipping
-        float a = acc[i], m = fabsf(a);
-        if (m > 0.75f) a = copysignf(0.75f + 0.25f * tanhf((m - 0.75f) / 0.25f), a);
-        float v = a * 32767.f;
+    for (int i = 0; i < n * 2; i++) {
+        float g = (g0 + (g1 - g0) * (float)(i >> 1) / (float)n) * master;
+        float v = acc[i] * g * 32767.f;
         out[i] = (int16_t)(v > 32767.f ? 32767 : v < -32768.f ? -32768 : v);
     }
     if (n * 4 < len) memset(stream + n * 4, 0, (size_t)(len - n * 4));

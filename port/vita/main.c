@@ -142,7 +142,8 @@ static void show_frame(const uint32_t *pixels, int width, int height, int pitch_
 extern uint64_t g_pause_qpc;
 // Select on the pause screen leaves it and opens the game's menu bar (File: save / stop / exit, Option: Key and Game
 // Configuration, About): plat_vk_down reports F10 for a few frames, which USER32 turns into the game's right click
-// (port/hk/dialog.c hk_menu_key). In play, Select stays Esc (the game's exit prompt).
+// (port/hk/dialog.c hk_menu_key). In play Select opens the menu directly (Ivan's request, 2026-11-21); Exit is in
+// its File menu.
 static unsigned g_menu_until;
 static void pause_loop(const uint32_t *pixels, int width, int height, int pitch_bytes) {
     static uint32_t dim[480][640];
@@ -214,6 +215,7 @@ void plat_present_xrgb(const uint32_t *pixels, int width, int height, int pitch_
 // Circle = Z (Switch & Rotation), Triangle = C (Turncoat Bomb), as the Key Configuration defaults show; L = Shift,
 // R = Ctrl, Select = Esc. Start is the port's own pause (plat_present_xrgb), not a game key. In the game's dialogs
 // (port/hk/dialog.c) Cross presses the focused control, Triangle presses OK and Circle or Select cancel.
+int hk_dlg_active(void);   // port/hk/dialog.c
 int plat_vk_down(int vk) {
     static SceCtrlData pad;
     static uint32_t last_frame = 0xffffffffu;
@@ -237,8 +239,9 @@ int plat_vk_down(int vk) {
     case 'A': return (b & SCE_CTRL_SQUARE) != 0;
     case 'Z': return (b & SCE_CTRL_CIRCLE) != 0;
     case 'C': return (b & SCE_CTRL_TRIANGLE) != 0;
-    case 0x1B: return (b & SCE_CTRL_SELECT) != 0;
-    case 0x79: return g_frame < g_menu_until;   // F10: the game's menu, from the pause screen
+    // Select opens the game's menu bar in play (F10) and cancels (Esc) while a dialog or the menu is up.
+    case 0x1B: return (b & SCE_CTRL_SELECT) && hk_dlg_active();
+    case 0x79: return g_frame < g_menu_until || ((b & SCE_CTRL_SELECT) && !hk_dlg_active());
     case 0x10: return (b & SCE_CTRL_LTRIGGER) != 0;
     case 0x11: return (b & SCE_CTRL_RTRIGGER) != 0;
     default: return 0;

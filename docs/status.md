@@ -73,6 +73,12 @@ Main path: full static recompilation of `HDKWIN.EXE` (see [static-recomp.md](sta
 
 ## Planned work (approved order)
 
+- Ivan's console test (2026-11-21, b702239): menu bar, save and continue work on the Vita. Requests: Select opens
+  the menu directly (done), sound distorted like a speaker at maximum (master gain 0.7 + block limiter replace the
+  per-sample soft clipper; PC: house explosion peaks 0.9 full scale, no clipped samples), and later a Vita-style
+  friendly menu instead of the Windows menu bar and dialogs (future work).
+
+
 1. Sound: works on PC since 2026-11-21. port/hk/dsound.c implements DirectSound (DirectX 5 interfaces) over an
    SDL2 mixer (from sh3vita, soft limiter above 0.75 full scale) and PlaySoundA; SetTimer/WM_TIMER drive the
    game's 40 ms sound timer (proc 0x45CF00). HK_NOSOUND=1 disables it. Root cause of the earlier crash: the

@@ -33,6 +33,7 @@ typedef struct DSBuf {
     int32_t volume, pan;
     int nnotify;
     struct { uint32_t off, ev; } notify[32];
+    uint32_t gen;               // changed by Play/Stop/SetCurrentPosition: the mixer drops stale results
     int dup;                    // started on top of a copy of the same sound: mixed silent (see buf_play)
     float lp[4];                // anti-imaging low-pass state (two one-pole stages, left and right)
     int *shared_refs;           // sample memory shared between duplicates
@@ -46,6 +47,7 @@ static SDL_AudioDeviceID audio_dev;
 static float mix_acc[MIX_FRAMES * 2];
 static uint32_t g_vt_ds, g_vt_buf, g_vt_notify;
 
+static uint32_t g_gen;   // under mx
 static float db_gain(int32_t v) { return v <= -10000 ? 0.f : powf(10.f, (float)v / 2000.f); }
 
 static uint32_t obj_wrap(DSBuf *b, int kind, uint32_t vt) {
@@ -115,61 +117,94 @@ static void mix(void *ud, Uint8 *stream, int len) {
     late_check(n);
     float *acc = mix_acc;
     memset(acc, 0, (size_t)n * 2 * sizeof(float));
+    // The mixing itself runs without the lock: the game's DirectSound calls (Play, SetVolume, GetCurrentPosition,
+    // Lock ...) take mx many times per frame, and holding it for the whole mix stalled the game's main thread on
+    // the console (25 -> 18 fps once the low-pass filter made mixing slower). Voices are copied under the lock,
+    // mixed, and their new state is written back under the lock only if nothing changed them meanwhile (gen).
+    static struct Voice {
+        DSBuf *b; uint32_t gen, mem, frames; int stereo, bits16, looping, dup;
+        uint64_t pos, st; float gl, gr, a, lp[4]; double before; int ended;
+    } vs[MAX_OBJ];
+    int nv = 0;
     SDL_LockMutex(mx);
     for (int k = 1; k < MAX_OBJ; k++) {
         DSBuf *b = g_obj[k];
         if (!b || b->kind != K_BUF || !b->playing || b->primary || !b->align) continue;
-        float g = b->dup ? 0.f : db_gain(b->volume), gl = g, gr = g;
-        if (b->pan < 0) gr *= db_gain(b->pan); else if (b->pan > 0) gl *= db_gain(-b->pan);
+        struct Voice *v = &vs[nv++];
+        float g = b->dup ? 0.f : db_gain(b->volume);
+        v->gl = v->gr = g;
+        if (b->pan < 0) v->gr *= db_gain(b->pan); else if (b->pan > 0) v->gl *= db_gain(-b->pan);
         double step = (double)(b->freq ? b->freq : b->rate) / OUT_RATE;
-        uint32_t frames = b->size / b->align;
-        double before = b->pos;
-        // Fixed-point 32.16 position and direct sample access (one format per voice): the Vita mixes up to ~20
-        // voices per block, and the per-sample helper calls of the first version made it miss deadlines.
-        uint64_t pos = (uint64_t)(b->pos * 65536.0), st = (uint64_t)(step * 65536.0), end = (uint64_t)frames << 16;
-        const uint8_t *base = g_mem + b->mem;
-        int stereo = b->ch > 1, bits16 = b->bits == 16;
-        const float k16 = 1.f / 32768.f, k8 = 1.f / 128.f;
         // Linear interpolation of 11/22 kHz samples up to 48 kHz leaves images above the source's Nyquist
         // frequency, heard as hiss. Two one-pole low-pass stages at 0.45 x the voice's playback rate remove most
         // of them (a sound card's reconstruction filter does this on Windows).
-        float rate_hz = (float)(b->freq ? b->freq : b->rate), a = 1.f;
-        if (rate_hz < 40000.f) a = 1.f - expf(-6.2831853f * 0.45f * rate_hz / OUT_RATE);
-        float z0 = b->lp[0], z1 = b->lp[1], z2 = b->lp[2], z3 = b->lp[3];
+        float rate_hz = (float)(b->freq ? b->freq : b->rate);
+        v->a = rate_hz < 40000.f ? 1.f - expf(-6.2831853f * 0.45f * rate_hz / OUT_RATE) : 1.f;
+        v->b = b; v->gen = b->gen; v->mem = b->mem; v->frames = b->size / b->align;
+        v->stereo = b->ch > 1; v->bits16 = b->bits == 16; v->looping = b->looping; v->dup = b->dup;
+        v->before = b->pos;
+        v->pos = (uint64_t)(b->pos * 65536.0); v->st = (uint64_t)(step * 65536.0);
+        memcpy(v->lp, b->lp, sizeof v->lp);
+        v->ended = 0;
+    }
+    SDL_UnlockMutex(mx);
+    const float k16 = 1.f / 32768.f, k8 = 1.f / 128.f;
+    for (int j = 0; j < nv; j++) {
+        struct Voice *v = &vs[j];
+        // Fixed-point 32.16 position and direct sample access (one format per voice).
+        uint64_t pos = v->pos, st = v->st, end = (uint64_t)v->frames << 16;
+        const uint8_t *base = g_mem + v->mem;
+        uint32_t frames = v->frames;
+        float a = v->a, gl = v->gl, gr = v->gr, z0 = v->lp[0], z1 = v->lp[1], z2 = v->lp[2], z3 = v->lp[3];
+        int silent = gl == 0.f && gr == 0.f;
         for (int i = 0; i < n; i++) {
-            uint32_t f = (uint32_t)(pos >> 16);
-            float t = (float)(pos & 0xffffu) * (1.f / 65536.f);
-            uint32_t f2 = f + 1 < frames ? f + 1 : (b->looping ? 0 : f);
-            float l, r;
-            if (bits16) {
-                const int16_t *s16 = (const int16_t *)base;
-                if (stereo) {
-                    float a = s16[2 * f], c2 = s16[2 * f2], a1 = s16[2 * f + 1], c3 = s16[2 * f2 + 1];
-                    l = (a + (c2 - a) * t) * k16; r = (a1 + (c3 - a1) * t) * k16;
+            if (!silent) {
+                uint32_t f = (uint32_t)(pos >> 16);
+                float t = (float)(pos & 0xffffu) * (1.f / 65536.f);
+                uint32_t f2 = f + 1 < frames ? f + 1 : (v->looping ? 0 : f);
+                float l, r;
+                if (v->bits16) {
+                    const int16_t *s16 = (const int16_t *)base;
+                    if (v->stereo) {
+                        float x0 = s16[2 * f], x1 = s16[2 * f2], y0 = s16[2 * f + 1], y1 = s16[2 * f2 + 1];
+                        l = (x0 + (x1 - x0) * t) * k16; r = (y0 + (y1 - y0) * t) * k16;
+                    } else {
+                        float x0 = s16[f], x1 = s16[f2];
+                        l = r = (x0 + (x1 - x0) * t) * k16;
+                    }
                 } else {
-                    float a = s16[f], c2 = s16[f2];
-                    l = r = (a + (c2 - a) * t) * k16;
+                    if (v->stereo) {
+                        float x0 = base[2 * f] - 128, x1 = base[2 * f2] - 128, y0 = base[2 * f + 1] - 128, y1 = base[2 * f2 + 1] - 128;
+                        l = (x0 + (x1 - x0) * t) * k8; r = (y0 + (y1 - y0) * t) * k8;
+                    } else {
+                        float x0 = base[f] - 128, x1 = base[f2] - 128;
+                        l = r = (x0 + (x1 - x0) * t) * k8;
+                    }
                 }
-            } else {
-                if (stereo) {
-                    float a = base[2 * f] - 128, c2 = base[2 * f2] - 128, a1 = base[2 * f + 1] - 128, c3 = base[2 * f2 + 1] - 128;
-                    l = (a + (c2 - a) * t) * k8; r = (a1 + (c3 - a1) * t) * k8;
-                } else {
-                    float a = base[f] - 128, c2 = base[f2] - 128;
-                    l = r = (a + (c2 - a) * t) * k8;
-                }
+                z0 += a * (l - z0); z1 += a * (z0 - z1); z2 += a * (r - z2); z3 += a * (z2 - z3);
+                acc[2 * i] += z1 * gl;
+                acc[2 * i + 1] += z3 * gr;
             }
-            z0 += a * (l - z0); z1 += a * (z0 - z1); z2 += a * (r - z2); z3 += a * (z2 - z3);
-            acc[2 * i] += z1 * gl;
-            acc[2 * i + 1] += z3 * gr;
             pos += st;
             if (pos >= end) {
-                if (b->looping) pos -= end;
-                else { pos = 0; b->playing = 0; break; }
+                if (v->looping) pos -= end;
+                else { pos = 0; v->ended = 1; break; }
             }
         }
-        b->pos = (double)pos / 65536.0;
-        b->lp[0] = z0; b->lp[1] = z1; b->lp[2] = z2; b->lp[3] = z3;
+        v->pos = pos;
+        v->lp[0] = z0; v->lp[1] = z1; v->lp[2] = z2; v->lp[3] = z3;
+    }
+    SDL_LockMutex(mx);
+    for (int j = 0; j < nv; j++) {
+        struct Voice *v = &vs[j];
+        DSBuf *b = v->b;
+        int alive = 0;
+        for (int k = 1; k < MAX_OBJ && !alive; k++) alive = g_obj[k] == b;
+        if (!alive || b->gen != v->gen || !b->playing) continue;   // released, restarted, stopped or moved
+        b->pos = (double)v->pos / 65536.0;
+        memcpy(b->lp, v->lp, sizeof b->lp);
+        if (v->ended) b->playing = 0;
+        double before = v->before;
         for (int q = 0; q < b->nnotify; q++) {   // position notifications crossed during this block
             uint32_t off = b->notify[q].off;
             if (off == 0xffffffffu) { if (!b->playing) w32_event_set(b->notify[q].ev, 1); continue; }
@@ -368,7 +403,8 @@ static void buf_lock(CPU *c) {
 static void buf_play(CPU *c) {   // (this, reserved, priority, flags): DSBPLAY_LOOPING 1
     HOSTFN; BUFN(4);
     SDL_LockMutex(mx);
-    if (!b->playing) {
+    if (!b->playing) {   // Play on a playing buffer only changes the looping flag: keep its position
+        b->gen = ++g_gen;
         memset(b->lp, 0, sizeof b->lp);
         // The game often starts the same sample on several duplicates at once (explosion debris, gunfire): the
         // copies add up in phase (block peaks of 5-9x full scale logged on the console), which forced the limiter
@@ -390,6 +426,7 @@ static void buf_set_position(CPU *c) {
     HOSTFN; BUFN(2);
     SDL_LockMutex(mx);
     if (b->align) b->pos = (double)(ARG(2) / b->align);
+    b->gen = ++g_gen;
     SDL_UnlockMutex(mx);
     STDRET(2, DS_OK);
 }
@@ -401,6 +438,7 @@ static void buf_stop(CPU *c) {
     HOSTFN; BUFN(1);
     SDL_LockMutex(mx);
     b->playing = 0;
+    b->gen = ++g_gen;
     for (int k = 0; k < b->nnotify; k++)
         if (b->notify[k].off == 0xffffffffu) w32_event_set(b->notify[k].ev, 1);
     SDL_UnlockMutex(mx);

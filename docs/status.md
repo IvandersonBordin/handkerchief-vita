@@ -61,7 +61,14 @@ Main path: full static recompilation of `HDKWIN.EXE` (see [static-recomp.md](sta
    HeapAlloc and the port's heap. Verified: 3 min of A0 with walking, shooting and jumping, sound continuous,
    no crash, no clipped samples (SDL disk audio driver). Installed on the console on 2026-11-21 (the first
    attempt shipped without dsound.c: CMake's file(GLOB) had not re-run; now CONFIGURE_DEPENDS); it runs with
-   sound at ~50 FPS during the intro. Ivan's listening test pending.
+   sound. Ivan's listening test (2026-11-21): music and effects play everywhere, but sound drops briefly when
+   the fish robot shoots the crate and crackles when crouching, picking up glucose and shooting at once;
+   the game slowed in tunnels (also before sound).
+   Measured on PC: up to 20 voices at once; the game flips 25 times/s and calls Palette::SetEntries every
+   frame, and each SetEntries also presented the frame (50 presents/s, each waiting for vblank). Fixes:
+   palette changes are shown by the next Flip (or after 60 ms without one), the mixer uses fixed-point
+   positions and direct sample access, and the SDL buffer is 2048 frames. The Vita now shows 25 presents/s
+   (one per game frame; the "50 FPS" measured before was the doubled presents). Listening test pending.
 2. Win32 dialogs used by the game: 1498 "Exit Handkerchief ?" (Esc), 1491 Game Configuration and 1492 Key
    Configuration (F2); both start with IDirectDraw::GetGDISurface. The 4:3/16:9 option can move there.
 3. Native widescreen (requested by Ivan): a wider view of the world instead of stretching. Start from the

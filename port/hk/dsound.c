@@ -11,7 +11,7 @@
 #include <stdlib.h>
 
 #define OUT_RATE 48000
-#define MIX_FRAMES 1024u
+#define MIX_FRAMES 2048u   // ~43 ms at 48 kHz: headroom when many voices play at once
 #define DS_OK 0u
 #define DSERR_INVALIDPARAM 0x80070057u
 #define DSERR_INVALIDCALL 0x88780032u
@@ -75,14 +75,6 @@ static void obj_unwrap(DSBuf *b) {
     W32(b->guest + 4, 0x44530000u);   // dead: index 0
 }
 
-static float sample(DSBuf *b, uint32_t frame, int chn) {
-    if (frame * b->align >= b->size) return 0;
-    const uint8_t *p = g_mem + b->mem + frame * b->align;
-    int ch = b->ch > 1 ? chn : 0;
-    if (b->bits == 16) { int16_t s; memcpy(&s, p + 2 * ch, 2); return s / 32768.f; }
-    return ((int)p[ch] - 128) / 128.f;
-}
-
 static void free_buffer(DSBuf *b);
 static void mix(void *ud, Uint8 *stream, int len) {
     (void)ud;
@@ -100,18 +92,44 @@ static void mix(void *ud, Uint8 *stream, int len) {
         double step = (double)(b->freq ? b->freq : b->rate) / OUT_RATE;
         uint32_t frames = b->size / b->align;
         double before = b->pos;
-        for (int i = 0; i < n && b->playing; i++) {
-            uint32_t f = (uint32_t)b->pos;
-            float t = (float)(b->pos - f);
+        // Fixed-point 32.16 position and direct sample access (one format per voice): the Vita mixes up to ~20
+        // voices per block, and the per-sample helper calls of the first version made it miss deadlines.
+        uint64_t pos = (uint64_t)(b->pos * 65536.0), st = (uint64_t)(step * 65536.0), end = (uint64_t)frames << 16;
+        const uint8_t *base = g_mem + b->mem;
+        int stereo = b->ch > 1, bits16 = b->bits == 16;
+        const float k16 = 1.f / 32768.f, k8 = 1.f / 128.f;
+        for (int i = 0; i < n; i++) {
+            uint32_t f = (uint32_t)(pos >> 16);
+            float t = (float)(pos & 0xffffu) * (1.f / 65536.f);
             uint32_t f2 = f + 1 < frames ? f + 1 : (b->looping ? 0 : f);
-            acc[2 * i] += (sample(b, f, 0) * (1 - t) + sample(b, f2, 0) * t) * gl;
-            acc[2 * i + 1] += (sample(b, f, 1) * (1 - t) + sample(b, f2, 1) * t) * gr;
-            b->pos += step;
-            if (b->pos >= frames) {
-                if (b->looping) b->pos -= frames;
-                else { b->pos = 0; b->playing = 0; }
+            float l, r;
+            if (bits16) {
+                const int16_t *s16 = (const int16_t *)base;
+                if (stereo) {
+                    float a = s16[2 * f], c2 = s16[2 * f2], a1 = s16[2 * f + 1], c3 = s16[2 * f2 + 1];
+                    l = (a + (c2 - a) * t) * k16; r = (a1 + (c3 - a1) * t) * k16;
+                } else {
+                    float a = s16[f], c2 = s16[f2];
+                    l = r = (a + (c2 - a) * t) * k16;
+                }
+            } else {
+                if (stereo) {
+                    float a = base[2 * f] - 128, c2 = base[2 * f2] - 128, a1 = base[2 * f + 1] - 128, c3 = base[2 * f2 + 1] - 128;
+                    l = (a + (c2 - a) * t) * k8; r = (a1 + (c3 - a1) * t) * k8;
+                } else {
+                    float a = base[f] - 128, c2 = base[f2] - 128;
+                    l = r = (a + (c2 - a) * t) * k8;
+                }
+            }
+            acc[2 * i] += l * gl;
+            acc[2 * i + 1] += r * gr;
+            pos += st;
+            if (pos >= end) {
+                if (b->looping) pos -= end;
+                else { pos = 0; b->playing = 0; break; }
             }
         }
+        b->pos = (double)pos / 65536.0;
         for (int q = 0; q < b->nnotify; q++) {   // position notifications crossed during this block
             uint32_t off = b->notify[q].off;
             if (off == 0xffffffffu) { if (!b->playing) w32_event_set(b->notify[q].ev, 1); continue; }
@@ -120,6 +138,15 @@ static void mix(void *ud, Uint8 *stream, int len) {
             if (crossed) w32_event_set(b->notify[q].ev, 1);
         }
         if (b->oneshot && !b->playing) free_buffer(b);
+    }
+    {   // HK_TRACE_DS: most voices mixed at once and mixer time, every 5 s
+        static int maxv; static Uint64 tsum, t0; int v = 0;
+        for (int k = 1; k < MAX_OBJ; k++) if (g_obj[k] && g_obj[k]->kind == K_BUF && g_obj[k]->playing) v++;
+        if (v > maxv) maxv = v;
+        Uint64 now = SDL_GetPerformanceCounter();
+        if (!t0) t0 = now;
+        if (now - t0 > 5 * SDL_GetPerformanceFrequency() && getenv("HK_TRACE_DS")) { rt_log("[mix] max voices %d\n", maxv); maxv = 0; t0 = now; }
+        (void)tsum;
     }
     SDL_UnlockMutex(mx);
     int16_t *out = (int16_t *)stream;
@@ -402,6 +429,7 @@ static DSBuf *g_playsound;
 void imp_WINMM_PlaySoundA(CPU *c) {
     HOSTFN;
     uint32_t snd = ARG(1), flags = ARG(3);
+    if (getenv("HK_TRACE_DS")) rt_log("[winmm] PlaySoundA(%s, flags %08x)\n", snd && !(flags & 4u) ? GSTR(snd) : "(memory/null)", flags);
     audio_start();
     if (!g_vt_ds) build_vtables();
     SDL_LockMutex(mx);

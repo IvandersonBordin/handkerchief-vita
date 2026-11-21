@@ -42,6 +42,7 @@ typedef struct {
 static Obj g_obj[MAX_OBJ];
 static uint32_t g_vt_dd, g_vt_surf, g_vt_pal, g_vt_clip;
 static int g_primary;   // index of the primary surface
+static uint32_t g_last_flip_ms;   // SDL ticks of the last Flip (palette changes wait for the next one)
 
 static int obj_new(int kind, uint32_t vt) {
     HOSTFN;
@@ -248,6 +249,12 @@ static void get_rect(uint8_t *mb, uint32_t r, Obj *s, int *x0, int *y0, int *x1,
 
 static void present_primary(void) {
     HOSTFN;
+    {   // HK_TRACE_DD: presents per second (Flip, Blt/BltFast/Unlock to the primary, palette changes)
+        static unsigned n; static uint32_t t0;
+        uint32_t now = SDL_GetTicks();
+        n++;
+        if (now - t0 >= 5000) { if (getenv("HK_TRACE_DD")) rt_log("[dd] %u presents in 5 s\n", n); n = 0; t0 = now; }
+    }
     if (!g_primary) return;
     Obj *p = &g_obj[g_primary];
     Obj *pal = p->palette ? &g_obj[p->palette] : NULL;
@@ -348,6 +355,7 @@ static void surf_bltfast(CPU *c) {
 // IDirectDrawSurface::Flip(this, target, flags): swap the primary's pixels with its back buffer's.
 static void surf_flip(CPU *c) {
     HOSTFN;
+    g_last_flip_ms = SDL_GetTicks();
     Obj *p = obj_of(ARG(1), OBJ_SURF);
     if (p && p->attached) {
         Obj *b = &g_obj[p->attached];
@@ -452,7 +460,12 @@ static void pal_set_entries(CPU *c) {
     uint32_t start = ARG(3), n = ARG(4);
     if (!p || start + n > 256) STDRET(5, DDERR_INVALIDPARAMS);
     memcpy(p->rgb[start], mb + ARG(5), n * 4u);
-    if (g_primary && g_obj[g_primary].palette == idx_of(p)) present_primary();
+    {   static unsigned cnt; static uint32_t t0; uint32_t now = SDL_GetTicks(); cnt++;
+        if (now - t0 >= 5000) { if (getenv("HK_TRACE_DD")) rt_log("[dd] %u palette SetEntries in 5 s\n", cnt); cnt = 0; t0 = now; } }
+    // HDKWIN.EXE animates the palette every frame (~25 SetEntries/s) and then flips: presenting here too doubled
+    // the presents (each waits for vblank) and slowed the game. The change is shown by the next Flip; only when
+    // no Flip came for 60 ms (a fade over a still image) is it presented right away.
+    if (g_primary && g_obj[g_primary].palette == idx_of(p) && SDL_GetTicks() - g_last_flip_ms > 60) present_primary();
     STDRET(5, DD_OK);
 }
 static void pal_get_entries(CPU *c) {

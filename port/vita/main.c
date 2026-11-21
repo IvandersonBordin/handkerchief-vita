@@ -6,7 +6,9 @@
 #include <psp2/ctrl.h>
 #include <psp2/io/stat.h>
 #include <psp2/power.h>
+#include <stdio.h>
 #include <stdlib.h>
+#include "hk/font_data.h"
 
 #define HK_DATA_DIR "ux0:data/handkerchief"
 
@@ -38,6 +40,37 @@ int plat_pump_events(void) {
     return quit;
 }
 
+// Aspect: 0 = 4:3 letterboxed (original proportions), 1 = stretched to the full 16:9 screen.
+// Toggled with Triangle on the pause screen, saved in HK_DATA_DIR/hkport.cfg.
+#define HK_CFG HK_DATA_DIR "/hkport.cfg"
+static int g_wide;
+static void apply_aspect(void) {
+    if (!g_ren) return;
+    if (g_wide) SDL_RenderSetLogicalSize(g_ren, 0, 0);
+    else SDL_RenderSetLogicalSize(g_ren, 640, 480);
+}
+static void load_cfg(void) {
+    FILE *f = fopen(HK_CFG, "r");
+    if (f) { if (fscanf(f, "wide=%d", &g_wide) != 1) g_wide = 0; fclose(f); }
+}
+static void save_cfg(void) {
+    FILE *f = fopen(HK_CFG, "w");
+    if (f) { fprintf(f, "wide=%d\n", g_wide); fclose(f); }
+}
+// Text on a 640x480 XRGB buffer with the port's bitmap font (cell 18).
+static void draw_text(uint32_t *buf, int x, int y, const char *s, uint32_t color) {
+    const HkFont *f = &hk_fonts[1];
+    for (; *s; s++) {
+        uint8_t ch = (uint8_t)*s;
+        const HkGlyph *g = &f->glyphs[(ch < 0x20 ? '?' : ch) - 0x20];
+        for (int gy = 0; gy < f->cell; gy++)
+            for (int gx = 0; gx < g->width; gx++)
+                if (((f->rows[g->offset + gy] >> gx) & 1u) && x + gx >= 0 && x + gx < 640 && y + gy >= 0 && y + gy < 480)
+                    buf[(y + gy) * 640 + x + gx] = color;
+        x += g->advance;
+    }
+}
+
 static void show_frame(const uint32_t *pixels, int width, int height, int pitch_bytes) {
     if (!g_ren) return;
     if (!g_tex) g_tex = SDL_CreateTexture(g_ren, SDL_PIXELFORMAT_XRGB8888, SDL_TEXTUREACCESS_STREAMING, width, height);
@@ -58,11 +91,18 @@ static void pause_loop(const uint32_t *pixels, int width, int height, int pitch_
             dim[y][x] = (pixels[y * (pitch_bytes / 4) + x] >> 2) & 0x3f3f3fu;
     for (int y = 200; y < 280; y++)
         for (int x = 0; x < 24; x++) { dim[y][296 + x] = 0xffffffu; dim[y][320 + x] = 0xffffffu; }
+    draw_text(&dim[0][0], 230, 300, "Start: continue", 0xffffffu);
     SceCtrlData pad;
-    int released = 0;
+    int released = 0, tri_was = 1;
     for (;;) {
-        show_frame(&dim[0][0], 640, 480, 640 * 4);
+        static uint32_t shown[480][640];
+        memcpy(shown, dim, sizeof shown);
+        draw_text(&shown[0][0], 230, 324, g_wide ? "Triangle: screen 16:9" : "Triangle: screen 4:3", 0xffff80u);
+        show_frame(&shown[0][0], 640, 480, 640 * 4);
         sceCtrlPeekBufferPositive(0, &pad, 1);
+        int tri = (pad.buttons & SCE_CTRL_TRIANGLE) != 0;
+        if (tri && !tri_was) { g_wide = !g_wide; apply_aspect(); save_cfg(); }
+        tri_was = tri;
         if (!(pad.buttons & SCE_CTRL_START)) released = 1;
         else if (released) break;
         SDL_Delay(16);
@@ -134,7 +174,8 @@ int main(int argc, char **argv) {
     }
     g_win = SDL_CreateWindow("Handkerchief", 0, 0, 960, 544, 0);
     g_ren = g_win ? SDL_CreateRenderer(g_win, -1, SDL_RENDERER_PRESENTVSYNC) : NULL;
-    if (g_ren) SDL_RenderSetLogicalSize(g_ren, 640, 480);
+    load_cfg();
+    apply_aspect();
     rt_log("[vita] window %p renderer %p\n", (void *)g_win, (void *)g_ren);
     if (rt_init(HK_GUEST_MB << 20)) rt_fatal("guest memory: allocation of %u MB failed", HK_GUEST_MB);
     int r = rt_load_exe(HK_DATA_DIR "/HDKWIN.EXE");

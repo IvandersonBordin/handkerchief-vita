@@ -9,3 +9,7 @@
 These notices do not claim ownership of Handkerchief, its original executable, resources, or
 generated translations. The C generated from `HDKWIN.EXE` (`build/hk-recomp/gen/`) is derived
 from the commercial game and is never committed or distributed. Players supply their own copy.
+
+- **Liberation Sans**, Red Hat and contributors: [source](https://github.com/liberationfonts/liberation-fonts),
+  SIL Open Font License 1.1. `port/hk/font_data.h` holds 1-bit glyph bitmaps rendered from Liberation Sans
+  Regular by `tools/make_font.py`, standing in for the MS Sans Serif text the game draws through GDI.

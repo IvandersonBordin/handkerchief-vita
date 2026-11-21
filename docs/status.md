@@ -36,7 +36,16 @@ Main path: full static recompilation of `HDKWIN.EXE` (see [static-recomp.md](sta
 - Ivan's console test (2026-11-20): the game plays correctly on the Vita, colours look right, Start enters
   the stage, Select quits; requests were a jump button and shooting on Cross, then jump on Square and pause on Start (all done in
   the mapping above). What looked like "Select quits" is the run stopping at GetGDISurface.
-- Missing: GDI text (speech bubbles are empty), sound, save/continue not checked.
+- GDI text is drawn (2026-11-20): the game asks for MS Sans Serif with LOGFONT heights 14 and 18; 1-bit fonts
+  rendered from Liberation Sans (tools/make_font.py -> port/hk/font_data.h) are used, with TA_CENTER/RIGHT,
+  TA_BOTTOM/BASELINE, ETO_OPAQUE/CLIPPED and opaque/transparent backgrounds. Speech bubbles in A0 show their
+  text ("Z Z Z z z z . . .").
+- Screen aspect: on the Vita pause screen (Start), Triangle toggles 4:3 letterboxed / stretched 16:9, saved in
+  ux0:data/handkerchief/hkport.cfg. True widescreen (more of the world visible) would need changes to the
+  game's drawing and camera; not attempted.
+- Missing: sound, Win32 dialogs (Esc exit prompt, F2 configuration), save/continue not checked.
+- Old test apps HKRC00005-00009: vita-agent-use `content preview` fails with firmware error 0xFFFEFFF2 on this
+  console, so Ivan removes them from the LiveArea himself.
 - CRT `memcpy`/`memmove` (`0x45E4B0`/`0x45F6C0`) are native; guest memory is 256 MB on PC (64 MB ran out
   when a 13.9 MB block was requested). Two double frees by the game are logged and ignored, as Windows does.
 - Not done yet: text rendering (ExtTextOutA is only logged), keyboard/pad input, sound (DirectSound

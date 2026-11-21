@@ -3,9 +3,10 @@
 // HDKWIN.EXE loads its BMP banks with LoadImageA(LR_CREATEDIBSECTION [| LR_LOADFROMFILE]), reads
 // BITMAP.bmBits through GetObjectA and copies rows itself, or uses StretchBlt into a surface DC
 // (docs/engine-map.md, 0x40DEF1 / 0x40E25F). Bitmaps therefore keep bottom-up DIB pixels in guest memory.
-// Text output (ExtTextOutA) is only logged for now: no font renderer yet.
+// Text output uses 1-bit bitmap fonts standing in for MS Sans Serif (font_data.h, tools/make_font.py).
 #include "win32.h"
 #include "hk_ddraw.h"
+#include "font_data.h"
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -289,34 +290,93 @@ G(SetPixel) {
 G(CreateFontIndirectA) {
     HOSTFN;
     for (int i = 0; i < NSLOT; i++)
-        if (!g_font_used[i]) { g_font_used[i] = 1; g_font_height[i] = ARG(1) ? (int32_t)R32(ARG(1)) : 16; STDRET(1, H_FONT + (uint32_t)i); }
+        if (!g_font_used[i]) {
+            g_font_used[i] = 1;
+            g_font_height[i] = ARG(1) ? (int32_t)R32(ARG(1)) : 16;
+            if (ARG(1)) rt_log("[gdi] CreateFontIndirectA height %d width %d weight %u charset %u face \"%s\" -> #%d\n",
+                               (int32_t)R32(ARG(1)), (int32_t)R32(ARG(1) + 4), R32(ARG(1) + 16), R8(ARG(1) + 23),
+                               (char *)mb + ARG(1) + 28, i);
+            STDRET(1, H_FONT + (uint32_t)i);
+        }
     STDRET(1, 0);
 }
 G(SetTextColor) { HOSTFN; DC *d = dc_of(ARG(1)); uint32_t p = d->text_color; d->text_color = ARG(2); STDRET(2, p); }
+G(SetBkColor) { HOSTFN; DC *d = dc_of(ARG(1)); uint32_t p = d->bk_color; d->bk_color = ARG(2); STDRET(2, p); }
 G(SetBkMode) { HOSTFN; DC *d = dc_of(ARG(1)); uint32_t p = d->bk_mode ? d->bk_mode : 2; d->bk_mode = ARG(2); STDRET(2, p); }
 G(SetTextAlign) { HOSTFN; DC *d = dc_of(ARG(1)); uint32_t p = d->align; d->align = ARG(2); STDRET(2, p); }
 G(SetTextCharacterExtra) { HOSTFN; DC *d = dc_of(ARG(1)); uint32_t p = d->extra; d->extra = ARG(2); STDRET(2, p); }
 static int font_h(DC *d) {
-    int h = d->font >= H_FONT && d->font < H_FONT + NSLOT ? g_font_height[d->font - H_FONT] : 16;
-    return h < 0 ? -h : h ? h : 16;
+    int h = d->font >= H_FONT && d->font < H_FONT + NSLOT ? g_font_height[d->font - H_FONT] : 14;
+    return h < 0 ? -h : h ? h : 14;
 }
-// GetTextExtentPoint32A(hdc, str, len, SIZE*): fixed-width estimate until a font renderer exists.
+// Bitmap font closest to the DC's LOGFONT cell height (port/hk/font_data.h, from tools/make_font.py).
+static const HkFont *dc_font(DC *d) {
+    int h = font_h(d);
+    const HkFont *best = &hk_fonts[0];
+    for (unsigned i = 0; i < sizeof hk_fonts / sizeof hk_fonts[0]; i++) {
+        int dd = hk_fonts[i].cell - h, bd = best->cell - h;
+        if ((dd < 0 ? -dd : dd) < (bd < 0 ? -bd : bd)) best = &hk_fonts[i];
+    }
+    return best;
+}
+static const HkGlyph *glyph(const HkFont *f, uint8_t ch) { return &f->glyphs[(ch < 0x20 ? '?' : ch) - 0x20]; }
+static int text_width(DC *d, const HkFont *f, const uint8_t *s, uint32_t n) {
+    int w = 0;
+    for (uint32_t i = 0; i < n; i++) w += glyph(f, s[i])->advance + (int)d->extra;
+    return w;
+}
+// GetTextExtentPoint32A(hdc, str, len, SIZE*)
 G(GetTextExtentPoint32A) {
     HOSTFN;
     DC *d = dc_of(ARG(1));
-    int h = font_h(d);
-    W32(ARG(4), (uint32_t)((int)ARG(3) * (h / 2 + (int)d->extra)));
-    W32(ARG(4) + 4, (uint32_t)h);
+    const HkFont *f = dc_font(d);
+    W32(ARG(4), (uint32_t)text_width(d, f, mb + ARG(2), ARG(3)));
+    W32(ARG(4) + 4, (uint32_t)f->cell);
     STDRET(4, 1);
 }
-// ExtTextOutA(hdc, x, y, options, rect, str, len, dx)
+// ExtTextOutA(hdc, x, y, options, rect, str, len, dx): 1-bit glyphs in the text colour's palette index.
+// Alignment: TA_CENTER 6 / TA_RIGHT 2, TA_BOTTOM 8 / TA_BASELINE 24; ETO_OPAQUE 2 fills the rectangle and
+// ETO_CLIPPED 4 clips to it; an OPAQUE background mode (2) fills the text cell with the background colour.
 G(ExtTextOutA) {
     HOSTFN;
-    char buf[256];
-    uint32_t n = ARG(7) < sizeof buf - 1 ? ARG(7) : sizeof buf - 1;
-    if (ARG(6)) memcpy(buf, mb + ARG(6), n);
-    buf[ARG(6) ? n : 0] = 0;
-    static int count;
-    if (count++ < 200) rt_log("[gdi] text at (%d,%d): \"%s\"\n", (int32_t)ARG(2), (int32_t)ARG(3), buf);
+    DC *d = dc_of(ARG(1));
+    View v;
+    if (!view_of(ARG(1), &v)) STDRET(8, 1);
+    const HkFont *f = dc_font(d);
+    const uint8_t *s = mb + ARG(6);
+    uint32_t n = ARG(6) ? ARG(7) : 0, opt = ARG(4), r = ARG(5), dx = ARG(8);
+    int x = (int32_t)ARG(2), y = (int32_t)ARG(3);
+    int cx0 = 0, cy0 = 0, cx1 = v.w, cy1 = v.h;
+    if (r && (opt & 6u)) {
+        int rl = (int32_t)R32(r), rt = (int32_t)R32(r + 4), rr = (int32_t)R32(r + 8), rb = (int32_t)R32(r + 12);
+        if (opt & 2u) {
+            uint8_t bk = nearest_index(d->bk_color);
+            for (int yy = rt < 0 ? 0 : rt; yy < rb && yy < v.h; yy++)
+                for (int xx = rl < 0 ? 0 : rl; xx < rr && xx < v.w; xx++) W8(px_addr(&v, xx, yy), bk);
+        }
+        if (opt & 4u) { if (rl > cx0) cx0 = rl; if (rt > cy0) cy0 = rt; if (rr < cx1) cx1 = rr; if (rb < cy1) cy1 = rb; }
+    }
+    int w = text_width(d, f, s, n);
+    if ((d->align & 6u) == 6u) x -= w / 2; else if (d->align & 2u) x -= w;
+    if ((d->align & 24u) == 24u) y -= f->ascent; else if (d->align & 8u) y -= f->cell;
+    uint8_t fg = nearest_index(d->text_color), bg = nearest_index(d->bk_color);
+    int opaque = d->bk_mode == 2;
+    for (uint32_t i = 0; i < n; i++) {
+        const HkGlyph *g = glyph(f, s[i]);
+        int adv = dx ? (int32_t)R32(dx + 4 * i) : g->advance + (int)d->extra;
+        for (int gy = 0; gy < f->cell; gy++) {
+            int py = y + gy;
+            if (py < cy0 || py >= cy1) continue;
+            uint32_t bits = f->rows[g->offset + gy];
+            int span = opaque ? adv : g->width;
+            for (int gx = 0; gx < span; gx++) {
+                int px = x + gx;
+                if (px < cx0 || px >= cx1) continue;
+                if (gx < g->width && ((bits >> gx) & 1u)) W8(px_addr(&v, px, py), fg);
+                else if (opaque) W8(px_addr(&v, px, py), bg);
+            }
+        }
+        x += adv;
+    }
     STDRET(8, 1);
 }

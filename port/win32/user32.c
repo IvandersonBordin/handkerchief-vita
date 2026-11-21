@@ -61,7 +61,10 @@ U(MessageBoxA) {
 }
 // Keyboard messages: each key the game uses becomes WM_KEYDOWN / WM_KEYUP on a state change (plat_vk_down),
 // queued for the window procedure like Windows does; GetKeyState keeps answering from the same state.
+static void post_due_timers(void);
+static void timer_delivered(uint32_t id);
 static void post_key_changes(void) {
+    post_due_timers();
     static const uint8_t keys[] = {0x25, 0x26, 0x27, 0x28, 0x0D, 0x1B, 0x20, 0x10, 0x11, 0x12, 0x71, 'Z', 'X', 'C', 'A', 'S'};
     static uint8_t down[256];
     for (unsigned i = 0; i < sizeof keys; i++) {
@@ -87,6 +90,7 @@ U(PeekMessageA) {
         if (g_nposted) {
             memset(mb + msg, 0, 28);
             W32(msg, g_posted[0].hwnd); W32(msg + 4, g_posted[0].msg); W32(msg + 8, g_posted[0].wp); W32(msg + 12, g_posted[0].lp);
+            if ((ARG(5) & 1) && g_posted[0].msg == 0x113) timer_delivered(g_posted[0].wp);
             if (ARG(5) & 1) memmove(&g_posted[0], &g_posted[1], (size_t)(--g_nposted) * sizeof g_posted[0]);   // PM_REMOVE
             got = 1;
         }
@@ -98,6 +102,10 @@ U(TranslateMessage) { STDRET(1, 0); }
 U(DispatchMessageA) {
     HOSTFN;
     uint32_t m = ARG(1), r = 0;
+    if (R32(m + 4) == 0x113 && R32(m + 12)) {   // WM_TIMER with a TIMERPROC: Windows calls it instead of the window
+        rt_guest_call(c, R32(m + 12), 4, R32(m), 0x113u, R32(m + 8), w32_tick_ms());
+        STDRET(1, 0);
+    }
     if (g_wndproc && R32(m + 4) != 0x12) r = rt_guest_call(c, g_wndproc, 4, R32(m), R32(m + 4), R32(m + 8), R32(m + 12));
     STDRET(1, r);
 }
@@ -158,6 +166,7 @@ U(GetMessageA) {   // blocking PeekMessage: WM_QUIT -> 0, otherwise a WM_NULL ev
         SDL_LockMutex(g_post_lock);
         if (g_nposted) {
             W32(msg, g_posted[0].hwnd); W32(msg + 4, g_posted[0].msg); W32(msg + 8, g_posted[0].wp); W32(msg + 12, g_posted[0].lp);
+            if (g_posted[0].msg == 0x113) timer_delivered(g_posted[0].wp);
             memmove(&g_posted[0], &g_posted[1], (size_t)(--g_nposted) * sizeof g_posted[0]);
             SDL_UnlockMutex(g_post_lock);
             STDRET(4, 1);
@@ -229,7 +238,39 @@ U(SetCursor) { STDRET(1, 0); }
 U(ScreenToClient) { STDRET(2, 1); }
 U(InvalidateRect) { STDRET(3, 1); }
 U(RedrawWindow) { STDRET(4, 1); }
-U(KillTimer) { STDRET(2, 1); }
+// Window timers (HDKWIN.EXE starts one once DirectSound works): SetTimer(hwnd, id, ms, proc). A due timer posts
+// one WM_TIMER (wParam id, lParam proc) unless one is already waiting, like Windows' low-priority timer message.
+static struct { uint32_t hwnd, id, ms, proc, due; int used, pending; } g_timers[16];
+static void post_due_timers(void) {
+    uint32_t now = w32_tick_ms();
+    for (int i = 0; i < 16; i++)
+        if (g_timers[i].used && !g_timers[i].pending && (int32_t)(now - g_timers[i].due) >= 0) {
+            g_timers[i].pending = 1;
+            g_timers[i].due = now + g_timers[i].ms;
+            w32_post_message(g_timers[i].hwnd, 0x113u, g_timers[i].id, g_timers[i].proc);
+        }
+}
+static void timer_delivered(uint32_t id) {
+    for (int i = 0; i < 16; i++) if (g_timers[i].used && g_timers[i].id == id) g_timers[i].pending = 0;
+}
+U(SetTimer) {
+    HOSTFN;
+    uint32_t hwnd = ARG(1), id = ARG(2), ms = ARG(3) < 10 ? 10 : ARG(3), proc = ARG(4);
+    int slot = -1;
+    for (int i = 0; i < 16; i++) if (g_timers[i].used && g_timers[i].hwnd == hwnd && g_timers[i].id == id) slot = i;
+    for (int i = 0; slot < 0 && i < 16; i++) if (!g_timers[i].used) slot = i;
+    if (slot < 0) STDRET(4, 0);
+    if (!hwnd && !id) id = 0x100 + (uint32_t)slot;
+    g_timers[slot].used = 1; g_timers[slot].hwnd = hwnd; g_timers[slot].id = id; g_timers[slot].ms = ms;
+    g_timers[slot].proc = proc; g_timers[slot].due = w32_tick_ms() + ms; g_timers[slot].pending = 0;
+    rt_log("[user32] SetTimer(id %u, %u ms, proc %08x)\n", id, ms, proc);
+    STDRET(4, id ? id : 1);
+}
+U(KillTimer) {
+    HOSTFN;
+    for (int i = 0; i < 16; i++) if (g_timers[i].used && g_timers[i].hwnd == ARG(1) && g_timers[i].id == ARG(2)) g_timers[i].used = 0;
+    STDRET(2, 1);
+}
 U(GetClassLongA) { STDRET(2, 0); }
 U(BeginPaint) { HOSTFN; memset(mb + ARG(2), 0, 64); W32(ARG(2), 0x0001d000u); STDRET(2, 0x0001d000u); }   // fake HDC
 U(EndPaint) { STDRET(2, 1); }

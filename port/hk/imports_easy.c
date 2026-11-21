@@ -181,11 +181,9 @@ A(RegFlushKey) { HOSTFN; STDRET(1, 0); }
 // ---------- SHELL32 ----------
 S(ShellExecuteA) { HOSTFN; STDRET(6, 2); }   // "file not found": no external program can be launched on the Vita
 
-// ---------- DirectPlay, DirectSound, Winsock: unavailable (no multiplayer; sound comes later) ----------
+// ---------- DirectPlay, Winsock: unavailable (no multiplayer) ----------
 // DPLAYX ordinal 4 = DirectPlayLobbyCreateA(guid, out, unknown, data, size)
 void imp_DPLAYX_ord4(CPU *c) { HOSTFN; if (ARG(2)) W32(ARG(2), 0); STDRET(5, 0x8877047Eu); }   // DPERR_UNAVAILABLE
-// DSOUND ordinal 1 = DirectSoundCreate(guid, out, outer)
-void imp_DSOUND_ord1(CPU *c) { HOSTFN; if (ARG(2)) W32(ARG(2), 0); STDRET(3, 0x88780078u); }   // DSERR_NODRIVER
 // WSOCK32 ordinals: 115 WSAStartup, 116 WSACleanup, 57 gethostname, 52 gethostbyname, 8 htonl
 void imp_WSOCK32_ord115(CPU *c) { HOSTFN; STDRET(2, 10091u); }   // WSASYSNOTREADY
 void imp_WSOCK32_ord116(CPU *c) { HOSTFN; STDRET(0, 0); }

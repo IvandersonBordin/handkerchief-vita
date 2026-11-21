@@ -321,7 +321,7 @@ static void trace_big(CPU *c, const char *what, uint32_t size, uint32_t a) {
 }
 K(HeapAlloc) {
     HOSTFN;
-    uint32_t a = (ARG(2) & 8) ? gheap_calloc(ARG(3)) : gheap_alloc(ARG(3));
+    uint32_t a = gheap_calloc(ARG(3));   // always zeroed: fresh Windows heap pages read as zero, and HDKWIN.EXE relies on it
     trace_big(c, "HeapAlloc", ARG(3), a);
     STDRET(3, a);
 }
@@ -349,6 +349,9 @@ K(VirtualAlloc) {
 K(VirtualFree) {
     HOSTFN;
     if (ARG(3) & 0x8000) { live_del(ARG(1)); gheap_free(ARG(1)); } // MEM_RELEASE
+    // MEM_DECOMMIT: Windows hands back zeroed pages when they are committed again, and VirtualAlloc(MEM_COMMIT) on a
+    // reserved address returns the memory as is here, so clear it now (the MSVC CRT small-block heap decommits pages).
+    else if ((ARG(3) & 0x4000) && ARG(1) && ARG(2) && (uint64_t)ARG(1) + ARG(2) <= g_mem_size) memset(mb + ARG(1), 0, ARG(2));
     STDRET(3, 1);
 }
 K(VirtualQuery) {

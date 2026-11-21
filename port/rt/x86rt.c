@@ -116,6 +116,14 @@ static void dump(CPU *c) {
            c->eax, c->ecx, c->edx, c->ebx, c->esp, c->ebp, c->esi, c->edi, c->ftop);
     uint8_t *mb = g_mem;
     for (int i = 0; i < 8 && c->esp + 4 * i < g_mem_size; i++) rt_log("  [esp+%02x]=%08x\n", 4 * i, R32(c->esp + 4 * i));
+    {   // memory the registers point to (guest objects: vtable and first fields)
+        const char *nm[] = {"eax", "ecx", "esi", "edi", "ebx"};
+        uint32_t v[] = {c->eax, c->ecx, c->esi, c->edi, c->ebx};
+        for (int k = 0; k < 5; k++)
+            if (v[k] >= 0x10000 && v[k] + 32 < g_mem_size)
+                rt_log("  [%s] %08x %08x %08x %08x %08x %08x %08x %08x\n", nm[k], R32(v[k]), R32(v[k] + 4), R32(v[k] + 8),
+                       R32(v[k] + 12), R32(v[k] + 16), R32(v[k] + 20), R32(v[k] + 24), R32(v[k] + 28));
+    }
 #ifdef SH3_TRACE_CALLS
     rt_calltrace_dump();
 #endif

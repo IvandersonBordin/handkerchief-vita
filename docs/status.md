@@ -1,7 +1,7 @@
 # Project status (handoff)
 
 Updated at every milestone so work can resume after a quota stop or a new session.
-Last update: 2026-11-20, branch `recomp/static-pipeline`.
+Last update: 2026-11-21, branch `recomp/static-pipeline`.
 
 ## Where the project stopped
 
@@ -68,7 +68,17 @@ Main path: full static recompilation of `HDKWIN.EXE` (see [static-recomp.md](sta
    frame, and each SetEntries also presented the frame (50 presents/s, each waiting for vblank). Fixes:
    palette changes are shown by the next Flip (or after 60 ms without one), the mixer uses fixed-point
    positions and direct sample access, and the SDL buffer is 2048 frames. The Vita now shows 25 presents/s
-   (one per game frame; the "50 FPS" measured before was the doubled presents). Listening test pending.
+   (one per game frame; the "50 FPS" measured before was the doubled presents).
+   Ivan's second listening test (2026-11-21, commit 01b62f5): sound still drops out, worse than before, in the
+   long tunnel, when the bazooka shot destroys the player's house, and when crouching; FPS counter shows a
+   steady 25. Findings: on PC (SDL disk driver, HK_TRACE_DS, scratchpad sil.py) the house is destroyed around
+   frame 1900 with no silent stretch, but the mix saturates the soft limiter (peaks at full scale for ~5 s)
+   and the background loop is quiet afterwards (peak ~2000). On the Vita, main thread is now on core 0 and the
+   audio thread on core 1 (confirmed in hklog), and the late-callback check logged **no** late callback, so
+   the drops are not CPU starvation. Vita logs also show ~10 "[heap] free of non-allocated" per session.
+   Next: log on the console what happens at each audible->silent transition (playing voices, Stop/Release
+   callers, sample memory still non-zero?) to tell game logic, limiter, and overwritten sample memory apart.
+   FPS above 30 is not possible without changing game speed: the game logic runs at 25 frames/s.
 2. Win32 dialogs used by the game: 1498 "Exit Handkerchief ?" (Esc), 1491 Game Configuration and 1492 Key
    Configuration (F2); both start with IDirectDraw::GetGDISurface. The 4:3/16:9 option can move there.
 3. Native widescreen (requested by Ivan): a wider view of the world instead of stretching. Start from the

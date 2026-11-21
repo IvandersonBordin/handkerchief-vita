@@ -276,16 +276,19 @@ static void present_primary(void) {
 void hk_dd_present(void) { present_primary(); }
 
 // Copies a rectangle, clipped to both surfaces; key >= 0 skips that source index (8-bit colour key).
+// HK_TRACE_CLIP=1 logs every blit whose source or destination had to be clipped ("[clip]" lines).
 static void blit(uint8_t *mb, Obj *d, int dx, int dy, Obj *s, int sx0, int sy0, int sx1, int sy1, int key) {
     int w = sx1 - sx0, h = sy1 - sy0;
     if (sx0 < 0) { dx -= sx0; w += sx0; sx0 = 0; }
     if (sy0 < 0) { dy -= sy0; h += sy0; sy0 = 0; }
     if (dx < 0) { sx0 -= dx; w += dx; dx = 0; }
     if (dy < 0) { sy0 -= dy; h += dy; dy = 0; }
+    int w0 = w, h0 = h;
     if (sx0 + w > s->w) w = s->w - sx0;
     if (sy0 + h > s->h) h = s->h - sy0;
     if (dx + w > d->w) w = d->w - dx;
     if (dy + h > d->h) h = d->h - dy;
+    if (getenv("HK_TRACE_CLIP") && (w != w0 || h != h0)) rt_log("[clip] dst #%d %dx%d at (%d,%d) src #%d %dx%d at (%d,%d) want %dx%d got %dx%d\n", idx_of(d), d->w, d->h, dx, dy, idx_of(s), s->w, s->h, sx0, sy0, w0, h0, w, h);
     if (w <= 0 || h <= 0) return;
     for (int y = 0; y < h; y++) {
         uint8_t *dr = mb + d->pixels + (uint32_t)((dy + y) * d->pitch + dx);

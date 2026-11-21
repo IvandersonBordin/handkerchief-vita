@@ -23,10 +23,19 @@ Main path: full static recompilation of `HDKWIN.EXE` (see [static-recomp.md](sta
   Key roles found by scripted key tests in A0 (2026-11-20, build/keytest): X shoots, A and Up jump,
   S crouches; Z, C, V, D, space, Shift, Ctrl, Alt and the mouse buttons showed no visible effect at that
   point. Menus confirm with Enter/space and go back with Z/X/C/Shift/Ctrl (0x4117D4).
-  Vita mapping (port/vita/main.c): Cross = X + space (shoot / confirm), Circle = A (jump), down = arrow + S
-  (crouch), Square = Z, Triangle = C, L = Shift, R = Ctrl, Start = Enter, Select = Esc.
+  The game's Key Configuration dialog (resource 1492) names the actions: Move Up/Down/Left/Right, Shoot & Bomb,
+  Turncoat Bomb, Switch & Rotation, Jump, Crouch (option "Move Up to Jump").
+  Vita mapping (port/vita/main.c): Cross = X + space (shoot / confirm), Square = A (jump), down = arrow + S
+  (crouch), Circle = Z and Triangle = C (probably Turncoat Bomb and Switch & Rotation, not verified),
+  L = Shift, R = Ctrl, Select = Esc. Start is the port's own pause (darkened frame with a pause sign; the
+  game's clocks skip the paused time through g_pause_qpc). On the title, Cross confirms.
+- Game menus are Win32 dialogs and are not implemented yet: Esc opens resource 1498 "Exit Handkerchief ?"
+  (CreateDialogParamA at 0x40E9D1) and F2 opens a configuration dialog; both first call
+  IDirectDraw::GetGDISurface (slot 14), which stops the run. Dialog IDs used by the game: 0x5D0-0x5DC
+  (1490 secret options, 1491 Game Configuration, 1492 Key Configuration, 1496 network lobby).
 - Ivan's console test (2026-11-20): the game plays correctly on the Vita, colours look right, Start enters
-  the stage, Select quits; requests were a jump button and shooting on Cross (done in the mapping above).
+  the stage, Select quits; requests were a jump button and shooting on Cross, then jump on Square and pause on Start (all done in
+  the mapping above). What looked like "Select quits" is the run stopping at GetGDISurface.
 - Missing: GDI text (speech bubbles are empty), sound, save/continue not checked.
 - CRT `memcpy`/`memmove` (`0x45E4B0`/`0x45F6C0`) are native; guest memory is 256 MB on PC (64 MB ran out
   when a 13.9 MB block was requested). Two double frees by the game are logged and ignored, as Windows does.

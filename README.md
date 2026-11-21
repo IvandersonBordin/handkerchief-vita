@@ -35,7 +35,7 @@ The switch brought a substantial productivity gain for this project in the autho
 
 How the project works with Claude Code today:
 
-- Three project subagents are defined in [`.claude/agents/`](.claude/agents/): **Gandalf** (coordination and evidence review), **Bruno** (x86/HDK reverse engineering) and **Carlos** (portable C and VitaSDK prototypes).
+- **Gandalf** (coordination and evidence review) is the main Claude Code session the author talks to. It delegates long, well-bounded tasks to the subagents in [`.claude/agents/`](.claude/agents/): **Bruno** (x86/HDK reverse engineering and the recompiler) and **Carlos** (runtime, Win32/DirectDraw emulation and VitaSDK builds) on Opus, and a read-only **tester** on Haiku for builds, test runs and screenshots.
 - Agents run **only when requested** in a Claude Code session; there is no scheduled automation.
 - Pushes and merges into `main` still require the author's explicit approval, and the existing validation rules still apply.
 

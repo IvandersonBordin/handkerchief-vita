@@ -38,7 +38,7 @@ int plat_pump_events(void) {
     return quit;
 }
 
-void plat_present_xrgb(const uint32_t *pixels, int width, int height, int pitch_bytes) {
+static void show_frame(const uint32_t *pixels, int width, int height, int pitch_bytes) {
     if (!g_ren) return;
     if (!g_tex) g_tex = SDL_CreateTexture(g_ren, SDL_PIXELFORMAT_XRGB8888, SDL_TEXTUREACCESS_STREAMING, width, height);
     SDL_UpdateTexture(g_tex, NULL, pixels, pitch_bytes);
@@ -47,10 +47,46 @@ void plat_present_xrgb(const uint32_t *pixels, int width, int height, int pitch_
     SDL_RenderPresent(g_ren);
 }
 
-// Pad mapping, from key tests in stage A0 on 2026-11-20 (docs/status.md): X shoots, A or Up jumps, S crouches.
-// Menus confirm with Enter or space and go back with Z/X/C (0x4117D4), and the game checks confirm first, so
-// Cross sends X + space: it shoots in play and confirms in menus. Circle = A (jump), down = arrow + S (crouch),
-// Square = Z, Triangle = C, L = Shift, R = Ctrl, Start = Enter, Select = Esc.
+// Start pauses: the last frame is shown darkened with a pause sign until Start is pressed again. The game's
+// clocks skip the paused time (g_pause_qpc, read by w32_qpc/w32_tick_ms) so it does not try to catch up.
+extern uint64_t g_pause_qpc;
+static void pause_loop(const uint32_t *pixels, int width, int height, int pitch_bytes) {
+    static uint32_t dim[480][640];
+    uint64_t t0 = SDL_GetPerformanceCounter();
+    for (int y = 0; y < height && y < 480; y++)
+        for (int x = 0; x < width && x < 640; x++)
+            dim[y][x] = (pixels[y * (pitch_bytes / 4) + x] >> 2) & 0x3f3f3fu;
+    for (int y = 200; y < 280; y++)
+        for (int x = 0; x < 24; x++) { dim[y][296 + x] = 0xffffffu; dim[y][320 + x] = 0xffffffu; }
+    SceCtrlData pad;
+    int released = 0;
+    for (;;) {
+        show_frame(&dim[0][0], 640, 480, 640 * 4);
+        sceCtrlPeekBufferPositive(0, &pad, 1);
+        if (!(pad.buttons & SCE_CTRL_START)) released = 1;
+        else if (released) break;
+        SDL_Delay(16);
+    }
+    while (sceCtrlPeekBufferPositive(0, &pad, 1) >= 0 && (pad.buttons & SCE_CTRL_START)) SDL_Delay(16);
+    g_pause_qpc += SDL_GetPerformanceCounter() - t0;
+}
+
+void plat_present_xrgb(const uint32_t *pixels, int width, int height, int pitch_bytes) {
+    static int start_was;
+    SceCtrlData pad;
+    sceCtrlPeekBufferPositive(0, &pad, 1);
+    int start = (pad.buttons & SCE_CTRL_START) != 0;
+    if (start && !start_was) { pause_loop(pixels, width, height, pitch_bytes); start = 0; }
+    start_was = start;
+    show_frame(pixels, width, height, pitch_bytes);
+}
+
+// Pad mapping. Key tests in stage A0 (2026-11-20, docs/status.md) show X shoots, A or Up jumps, S crouches; the
+// game's Key Configuration dialog (resource 1492) lists Shoot & Bomb, Turncoat Bomb, Switch & Rotation, Jump and
+// Crouch. Menus confirm with Enter or space and go back with Z/X/C (0x4117D4), checking confirm first, so Cross
+// sends X + space: it shoots in play and confirms in menus. Square = A (jump), down = arrow + S (crouch),
+// Circle = Z, Triangle = C (probably Turncoat Bomb and Switch & Rotation; not verified), L = Shift, R = Ctrl,
+// Select = Esc. Start is the port's own pause (plat_present_xrgb), not a game key.
 int plat_vk_down(int vk) {
     static SceCtrlData pad;
     static uint32_t last_frame = 0xffffffffu;
@@ -71,10 +107,9 @@ int plat_vk_down(int vk) {
     case 'S': return down;
     case 'X': return (b & SCE_CTRL_CROSS) != 0;
     case 0x20: return (b & SCE_CTRL_CROSS) != 0;
-    case 'A': return (b & SCE_CTRL_CIRCLE) != 0;
-    case 'Z': return (b & SCE_CTRL_SQUARE) != 0;
+    case 'A': return (b & SCE_CTRL_SQUARE) != 0;
+    case 'Z': return (b & SCE_CTRL_CIRCLE) != 0;
     case 'C': return (b & SCE_CTRL_TRIANGLE) != 0;
-    case 0x0D: return (b & SCE_CTRL_START) != 0;
     case 0x1B: return (b & SCE_CTRL_SELECT) != 0;
     case 0x10: return (b & SCE_CTRL_LTRIGGER) != 0;
     case 0x11: return (b & SCE_CTRL_RTRIGGER) != 0;

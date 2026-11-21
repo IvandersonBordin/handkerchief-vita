@@ -3,6 +3,7 @@
 #include "rt.h"
 
 unsigned g_frame;   // presented frame counter (read by file and timer diagnostics)
+uint64_t g_pause_qpc;   // performance-counter ticks spent in the port's pause screen (Vita Start)
 
 int rt_cpu_profile_thread(const char *label) { (void)label; return 0; }
 int movie_cocreate(CPU *c, uint32_t clsid, uint32_t riid, uint32_t out, uint32_t *hr) {

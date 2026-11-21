@@ -220,7 +220,8 @@ unsigned w32_hz(void) {   // no game logic (30 originally); SH3_HZ=60 to test a 
 }
 uint64_t w32_qpc(void) {
     static uint64_t calls;
-    if (!vtime()) return SDL_GetPerformanceCounter();
+    extern uint64_t g_pause_qpc;
+    if (!vtime()) return SDL_GetPerformanceCounter() - g_pause_qpc;
     return ((uint64_t)g_frame * 1000000 / w32_hz() + ++calls * 10) * SDL_GetPerformanceFrequency() / 1000000;
 }
 // Sleeps until QPC instant t to within ~1 ms (the caller finishes with a busy wait); nothing with the virtual clock.
@@ -231,7 +232,7 @@ void w32_sleep_until(uint64_t t) {
     uint32_t ms = (uint32_t)((t - now) * 1000 / f);
     if (ms >= 2) SDL_Delay(ms - 1);
 }
-uint32_t w32_tick_ms(void) { return vtime() ? (uint32_t)(w32_qpc() * 1000 / SDL_GetPerformanceFrequency()) : SDL_GetTicks(); }
+uint32_t w32_tick_ms(void) { return (uint32_t)(w32_qpc() * 1000 / SDL_GetPerformanceFrequency()); }   // pause-aware
 
 #ifndef __vita__
 #include <dirent.h>

@@ -90,7 +90,7 @@ Do not perform large refactors without approval.
 
 ## Coordination
 
-- Ivan sets goals and priorities. Gandalf (`.claude/agents/gandalf.md`) plans small task sequences, reviews evidence, and delegates to Bruno (reverse engineering) and Carlos (Vita/C implementation).
+- Ivan sets goals and priorities. Gandalf is the main Claude Code session Ivan talks to; it plans small task sequences, reviews evidence, and delegates to Bruno (reverse engineering) and Carlos (Vita/C implementation).
 - GitHub Issues are task records with acceptance criteria; they are not unconditional permission for sensitive actions. Inspect the relevant issue before starting work and do not invent additional requirements.
 - Keep an execution summary: evidence, tests, limitations, commit, and push status. Do not publish proprietary binaries, screenshots, or data from `original-data/`.
 - If blocked or facing material ambiguity, record it and ask Ivan to decide; do not replace evidence with assumptions.

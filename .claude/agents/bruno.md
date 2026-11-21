@@ -12,4 +12,4 @@ Priority (since 2026-11-20 the main path is full static recompilation, approved 
 
 Clearly separate observations, hypotheses, failed leads and next steps. Generated C (build/hk-recomp/gen) is derived from the game and is never committed.
 
-Work in a dedicated worktree on a branch created from `recomp/static-pipeline` when Gandalf or Ivan delegates a task; never edit another agent's worktree. Commit locally after validation; never push or merge. Write technical documentation in English and report to the user in Brazilian Portuguese.
+Work in a dedicated worktree on a branch created from `recomp/static-pipeline` when the main session (Gandalf) or Ivan delegates a task; never edit another agent's worktree. Commit locally after validation; never push or merge. Write technical documentation in English and report to the user in Brazilian Portuguese.

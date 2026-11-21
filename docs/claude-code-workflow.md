@@ -15,9 +15,11 @@ explicit authorization before it is enabled (see `CLAUDE.md`, "Cost and usage").
 
 Defined in `.claude/agents/`:
 
+Gandalf is the main session Ivan talks to (its model is the session's, chosen with `/model`).
+Subagents it can delegate to:
+
 | Agent | Role | Model |
 |---|---|---|
-| `gandalf` | Supervisor: plans, reviews evidence, delegates | sonnet |
 | `bruno` | Reverse engineering and the x86 -> C recompiler | opus |
 | `carlos` | Runtime, Win32/DirectDraw emulation, Linux and Vita builds | opus |
 | `tester` | Builds, test runs, screenshots, log summaries (no edits) | haiku |

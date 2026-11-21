@@ -8,11 +8,11 @@ Read `AGENTS.md`, `README.md`, `docs/feasibility.md`, `docs/engine-map.md`, `doc
 
 ## Agent roles
 
-- **Gandalf**: coordinates work, reviews evidence, maintains a small approved task sequence, and delegates to Bruno and Carlos.
+- **Gandalf**: the main Claude Code session that Ivan talks to directly. Coordinates work, reviews evidence, maintains a small approved task sequence, does short tasks itself and delegates long, well-bounded ones to Bruno, Carlos and the tester. There is no separate Gandalf subagent.
 - **Bruno**: reverse engineers the original x86 executable and HDK data; investigates physics, collision, terrain and player-position updates.
 - **Carlos**: implements portable C tests and VitaSDK prototypes based on verified evidence; never labels synthetic physics as original behavior.
 
-Use the project subagents defined in `.claude/agents/` for focused work. They run only when requested in a Claude Code session; there is no scheduled automation. The former Codex executor was retired on 2026-11-20 (see `docs/claude-code-workflow.md`). Any future scheduler requires a separately reviewed proposal and explicit authorization.
+Use the project subagents defined in `.claude/agents/` (bruno, carlos: opus; tester: haiku) for focused work. They run only when requested in a Claude Code session; there is no scheduled automation. The former Codex executor was retired on 2026-11-20 (see `docs/claude-code-workflow.md`). Any future scheduler requires a separately reviewed proposal and explicit authorization.
 
 ## Communication
 

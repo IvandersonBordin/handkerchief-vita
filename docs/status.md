@@ -37,7 +37,15 @@ Without `HK_HEADLESS` a window shows the game's primary surface.
 
 ## VPKs available for console tests
 
-None of the recompiled game yet. Earlier prototypes (local, outside Git): `build/vista-walk/vista_walk.vpk`,
-`build/recomp-*/` diagnostics (HKRC00001-00006, tested on the Vita on 2026-11-19).
-A Vita build of the recompiled game needs SDL2 for VitaSDK (`vdpm sdl2`, requires Ivan's approval)
-and a Vita platform layer (`port/vita/`).
+- `build/hk-vita/handkerchief.vpk` (local only, derived from HDKWIN.EXE: never publish), title `HKRC00010`,
+  SHA-256 `cbc3bc1026daea8fbfc788715db77de8259604560f0a1b705c5c159df65460b4`. Built 2026-11-20 with
+  `cmake -S port/vita -B build/hk-vita -DCMAKE_BUILD_TYPE=Release && cmake --build build/hk-vita -j8`;
+  the skill's check_vpk.py reports 0 errors. **Not yet run on the console.** Expected: intro and title
+  screen only (no input yet). Needs the player's game files in `ux0:data/handkerchief/` (HDKWIN.EXE,
+  BITMAP/, SYSTEM/, USER/, WAV/); log in `ux0:data/handkerchief/hklog.txt`.
+- Console tools: the Vita runs firmware 3.65 with vita-agent-use installed (VitaCompanion ports 1337/1338
+  refuse connections). Using the vita-agent-use pairing identity in build/vita-agent-identity needs Ivan's
+  explicit permission (protected by the project's deny rules).
+- Earlier prototypes: `build/vista-walk/vista_walk.vpk`, `build/recomp-*/` diagnostics (HKRC00001-00006).
+- SDL2 2.32.8 for VitaSDK was installed into ~/vitasdk from the official vitasdk-autobuild package
+  (SHA-256 checked) because the SDK's vdpm has no pacman client.

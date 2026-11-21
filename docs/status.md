@@ -59,7 +59,9 @@ Main path: full static recompilation of `HDKWIN.EXE` (see [static-recomp.md](sta
    with no free in between (gdb + SH3_VTIME=1). Why its bookkeeping goes wrong is still unknown; the fix is a
    load-time patch (hk_patch_data, port/hk/glue.c) that sets the threshold to 0, so every allocation goes to
    HeapAlloc and the port's heap. Verified: 3 min of A0 with walking, shooting and jumping, sound continuous,
-   no crash, no clipped samples (SDL disk audio driver). Console test pending.
+   no crash, no clipped samples (SDL disk audio driver). Installed on the console on 2026-11-21 (the first
+   attempt shipped without dsound.c: CMake's file(GLOB) had not re-run; now CONFIGURE_DEPENDS); it runs with
+   sound at ~50 FPS during the intro. Ivan's listening test pending.
 2. Win32 dialogs used by the game: 1498 "Exit Handkerchief ?" (Esc), 1491 Game Configuration and 1492 Key
    Configuration (F2); both start with IDirectDraw::GetGDISurface. The 4:3/16:9 option can move there.
 3. Native widescreen (requested by Ivan): a wider view of the world instead of stretching. Start from the

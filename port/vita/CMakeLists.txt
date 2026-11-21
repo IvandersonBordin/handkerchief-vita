@@ -20,8 +20,8 @@ set(VITA_MKSFOEX_FLAGS "${VITA_MKSFOEX_FLAGS} -d ATTRIBUTE2=12")   # 365 MB of m
 
 get_filename_component(ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../.." ABSOLUTE)
 set(GEN "${ROOT}/build/hk-recomp/gen")
-file(GLOB GEN_SRC "${GEN}/*.c")
-file(GLOB PORT_SRC "${ROOT}/port/rt/*.c" "${ROOT}/port/win32/*.c" "${ROOT}/port/hk/*.c")
+file(GLOB GEN_SRC CONFIGURE_DEPENDS "${GEN}/*.c")
+file(GLOB PORT_SRC CONFIGURE_DEPENDS "${ROOT}/port/rt/*.c" "${ROOT}/port/win32/*.c" "${ROOT}/port/hk/*.c")
 list(APPEND PORT_SRC "${ROOT}/port/third_party/tlsf/tlsf.c" "${ROOT}/port/vita/main.c")
 if(NOT GEN_SRC)
   message(FATAL_ERROR "No generated code in ${GEN}: run recomp/x86rec.py first")

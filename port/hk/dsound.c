@@ -33,6 +33,7 @@ typedef struct DSBuf {
     int32_t volume, pan;
     int nnotify;
     struct { uint32_t off, ev; } notify[32];
+    float lp[4];                // anti-imaging low-pass state (two one-pole stages, left and right)
     int *shared_refs;           // sample memory shared between duplicates
     struct DSBuf *parent;       // K_NOTIFY: the buffer it belongs to
 } DSBuf;
@@ -128,6 +129,12 @@ static void mix(void *ud, Uint8 *stream, int len) {
         const uint8_t *base = g_mem + b->mem;
         int stereo = b->ch > 1, bits16 = b->bits == 16;
         const float k16 = 1.f / 32768.f, k8 = 1.f / 128.f;
+        // Linear interpolation of 11/22 kHz samples up to 48 kHz leaves images above the source's Nyquist
+        // frequency, heard as hiss. Two one-pole low-pass stages at 0.45 x the voice's playback rate remove most
+        // of them (a sound card's reconstruction filter does this on Windows).
+        float rate_hz = (float)(b->freq ? b->freq : b->rate), a = 1.f;
+        if (rate_hz < 40000.f) a = 1.f - expf(-6.2831853f * 0.45f * rate_hz / OUT_RATE);
+        float z0 = b->lp[0], z1 = b->lp[1], z2 = b->lp[2], z3 = b->lp[3];
         for (int i = 0; i < n; i++) {
             uint32_t f = (uint32_t)(pos >> 16);
             float t = (float)(pos & 0xffffu) * (1.f / 65536.f);
@@ -151,8 +158,9 @@ static void mix(void *ud, Uint8 *stream, int len) {
                     l = r = (a + (c2 - a) * t) * k8;
                 }
             }
-            acc[2 * i] += l * gl;
-            acc[2 * i + 1] += r * gr;
+            z0 += a * (l - z0); z1 += a * (z0 - z1); z2 += a * (r - z2); z3 += a * (z2 - z3);
+            acc[2 * i] += z1 * gl;
+            acc[2 * i + 1] += z3 * gr;
             pos += st;
             if (pos >= end) {
                 if (b->looping) pos -= end;
@@ -160,6 +168,7 @@ static void mix(void *ud, Uint8 *stream, int len) {
             }
         }
         b->pos = (double)pos / 65536.0;
+        b->lp[0] = z0; b->lp[1] = z1; b->lp[2] = z2; b->lp[3] = z3;
         for (int q = 0; q < b->nnotify; q++) {   // position notifications crossed during this block
             uint32_t off = b->notify[q].off;
             if (off == 0xffffffffu) { if (!b->playing) w32_event_set(b->notify[q].ev, 1); continue; }
@@ -187,7 +196,7 @@ static void mix(void *ud, Uint8 *stream, int len) {
     SDL_UnlockMutex(mx);
     // Master gain and a block limiter: many loud voices at once (explosions, gunfire) used to drive the old
     // per-sample soft clipper into constant saturation, heard as distortion. The gain drops at once when a block
-    // would exceed the ceiling and recovers over ~0.3 s; a hard clip remains only as a safety net.
+    // would exceed the ceiling and recovers over ~1 s; a hard clip remains only as a safety net.
     static float env = 1.f;
     const float master = 0.55f, ceiling = 0.9f;   // 0.55: the limiter only acts on the loudest moments
     float peak = 0.f;
@@ -199,6 +208,18 @@ static void mix(void *ud, Uint8 *stream, int len) {
     if (target < env) g1 = target;
     else g1 = env + (target - env) * 0.05f;
     env = g1;
+    {   // Console evidence for long quiet stretches: limiter gain below 0.6, at most one line every 2 s.
+        static Uint64 t_last;
+        Uint64 now = SDL_GetPerformanceCounter();
+        if (g1 < 0.6f && now - t_last > 2 * SDL_GetPerformanceFrequency()) {
+            extern unsigned g_frame;
+            int v = 0, loud = 0;
+            for (int k = 1; k < MAX_OBJ; k++)
+                if (g_obj[k] && g_obj[k]->kind == K_BUF && g_obj[k]->playing) { v++; if (g_obj[k]->volume > -1000) loud++; }
+            rt_log("[mix] limiter gain %.2f (block peak %.2f) voices %d (%d above -10 dB) frame %u\n", g1, peak, v, loud, g_frame);
+            t_last = now;
+        }
+    }
     int16_t *out = (int16_t *)stream;
     for (int i = 0; i < n * 2; i++) {
         float g = (g0 + (g1 - g0) * (float)(i >> 1) / (float)n) * master;
@@ -346,6 +367,7 @@ static void buf_lock(CPU *c) {
 static void buf_play(CPU *c) {   // (this, reserved, priority, flags): DSBPLAY_LOOPING 1
     HOSTFN; BUFN(4);
     SDL_LockMutex(mx);
+    if (!b->playing) memset(b->lp, 0, sizeof b->lp);
     b->playing = 1;
     b->looping = ARG(4) & 1;
     SDL_UnlockMutex(mx);
@@ -426,6 +448,7 @@ static void ds_duplicate(CPU *c) {
     SDL_LockMutex(mx);
     *b = *o;
     b->playing = 0; b->pos = 0; b->nnotify = 0;
+    memset(b->lp, 0, sizeof b->lp);
     if (b->shared_refs) ++*b->shared_refs;
     W32(ARG(3), obj_wrap(b, K_BUF, g_vt_buf));
     SDL_UnlockMutex(mx);

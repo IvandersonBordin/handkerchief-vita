@@ -3,6 +3,7 @@
 // Structure follows port/pc/main.c; startup settings follow the vita-port skill (assets/vita_runtime.c).
 #include "rt.h"
 #include "plat.h"
+#include <psp2/ctrl.h>
 #include <psp2/io/stat.h>
 #include <psp2/power.h>
 #include <stdlib.h>
@@ -44,6 +45,36 @@ void plat_present_xrgb(const uint32_t *pixels, int width, int height, int pitch_
     SDL_RenderClear(g_ren);
     SDL_RenderCopy(g_ren, g_tex, NULL, NULL);
     SDL_RenderPresent(g_ren);
+}
+
+// Provisional pad mapping (the game's own key roles are not identified yet): d-pad and left stick = arrows,
+// Cross = Z, Circle = X, Square = C, Triangle = space, Start = Enter, Select = Esc, L = Shift, R = Ctrl.
+int plat_vk_down(int vk) {
+    static SceCtrlData pad;
+    static uint32_t last_frame = 0xffffffffu;
+    extern unsigned g_frame;
+    if (last_frame != g_frame) {   // one read per presented frame is enough for GetKeyState polling
+        static int init;
+        if (!init) { sceCtrlSetSamplingMode(SCE_CTRL_MODE_ANALOG); init = 1; }
+        sceCtrlPeekBufferPositive(0, &pad, 1);
+        last_frame = g_frame;
+    }
+    uint32_t b = pad.buttons;
+    switch (vk) {
+    case 0x25: return (b & SCE_CTRL_LEFT) || pad.lx < 64;
+    case 0x26: return (b & SCE_CTRL_UP) || pad.ly < 64;
+    case 0x27: return (b & SCE_CTRL_RIGHT) || pad.lx > 192;
+    case 0x28: return (b & SCE_CTRL_DOWN) || pad.ly > 192;
+    case 'Z': return (b & SCE_CTRL_CROSS) != 0;
+    case 'X': return (b & SCE_CTRL_CIRCLE) != 0;
+    case 'C': return (b & SCE_CTRL_SQUARE) != 0;
+    case 0x20: return (b & SCE_CTRL_TRIANGLE) != 0;
+    case 0x0D: return (b & SCE_CTRL_START) != 0;
+    case 0x1B: return (b & SCE_CTRL_SELECT) != 0;
+    case 0x10: return (b & SCE_CTRL_LTRIGGER) != 0;
+    case 0x11: return (b & SCE_CTRL_RTRIGGER) != 0;
+    default: return 0;
+    }
 }
 
 void rt_platform_fatal(const char *msg) { (void)msg; }   // already in the log; nothing to show it with

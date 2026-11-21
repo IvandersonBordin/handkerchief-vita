@@ -11,5 +11,7 @@ int plat_pump_events(void);   // 1 if the user asked to quit
 int plat_width(void);         // game resolution (640x480)
 int plat_height(void);
 SDL_Window *plat_sdl_window(void);
+// 1 while the Windows virtual key vk (VK_LEFT 0x25, 'Z' 0x5A, VK_RETURN 0x0D...) is held.
+int plat_vk_down(int vk);
 // Shows one 640x480 frame of 32-bit XRGB pixels (DirectDraw primary surface after palette conversion).
 void plat_present_xrgb(const uint32_t *pixels, int width, int height, int pitch_bytes);

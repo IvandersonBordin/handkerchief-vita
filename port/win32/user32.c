@@ -59,9 +59,23 @@ U(MessageBoxA) {
     if (!button) w32_set_last_error(c, 31); // ERROR_GEN_FAILURE; no implicit answer
     STDRET(4, button);
 }
+// Keyboard messages: each key the game uses becomes WM_KEYDOWN / WM_KEYUP on a state change (plat_vk_down),
+// queued for the window procedure like Windows does; GetKeyState keeps answering from the same state.
+static void post_key_changes(void) {
+    static const uint8_t keys[] = {0x25, 0x26, 0x27, 0x28, 0x0D, 0x1B, 0x20, 0x10, 0x11, 0x12, 0x71, 'Z', 'X', 'C'};
+    static uint8_t down[256];
+    for (unsigned i = 0; i < sizeof keys; i++) {
+        int vk = keys[i], d = plat_vk_down(vk) != 0;
+        if (d == down[vk]) continue;
+        down[vk] = (uint8_t)d;
+        w32_post_message(HWND_MAIN, d ? 0x100u : 0x101u, (uint32_t)vk, d ? 1u : 0xC0000001u);
+    }
+}
+
 U(PeekMessageA) {
     HOSTFN;
     uint32_t msg = ARG(1);
+    post_key_changes();
     if (plat_pump_events() || g_quit_posted) {
         memset(mb + msg, 0, 28);
         W32(msg + 4, 0x12); // WM_QUIT
@@ -138,6 +152,18 @@ U(GetMessageA) {   // blocking PeekMessage: WM_QUIT -> 0, otherwise a WM_NULL ev
     uint32_t msg = ARG(1);
     memset(mb + msg, 0, 28);
     if (plat_pump_events() || g_quit_posted) { W32(msg + 4, 0x12); STDRET(4, 0); }
+    post_key_changes();
+    // HDKWIN.EXE peeks with PM_NOREMOVE, then takes the message with GetMessageA (0x40EA33): it must come off the queue.
+    if (g_post_lock && g_nposted) {
+        SDL_LockMutex(g_post_lock);
+        if (g_nposted) {
+            W32(msg, g_posted[0].hwnd); W32(msg + 4, g_posted[0].msg); W32(msg + 8, g_posted[0].wp); W32(msg + 12, g_posted[0].lp);
+            memmove(&g_posted[0], &g_posted[1], (size_t)(--g_nposted) * sizeof g_posted[0]);
+            SDL_UnlockMutex(g_post_lock);
+            STDRET(4, 1);
+        }
+        SDL_UnlockMutex(g_post_lock);
+    }
     SDL_Delay(10);
     STDRET(4, 1);
 }
@@ -185,10 +211,11 @@ U(wvsprintfA) {
 }
 U(GetWindowThreadProcessId) { HOSTFN; if (ARG(2)) W32(ARG(2), 0x10); STDRET(2, 0x100); }
 // VK_LBUTTON is cross while the puzzle cursor is up (the game tests the low byte: 0xff80 when down, as Windows gives).
+// HDKWIN.EXE polls keys with GetKeyState (arrows at 0x4117DA-0x411850; Z/X/C, space, Ctrl at 0x4117D4;
+// Esc, Enter, Alt at 0x40EA7A): the platform answers from the real keyboard (PC) or pad (Vita).
 U(GetKeyState) {
     HOSTFN;
-    extern int sh3_vcursor_click(void);
-    STDRET(1, ARG(1) == 1 && sh3_vcursor_click() ? 0xff80u : 0u);
+    STDRET(1, plat_vk_down((int)(ARG(1) & 0xff)) ? 0xff80u : 0u);
 }
 U(FindWindowA) { STDRET(2, 0); }   // no other running instance
 U(IsIconic) { STDRET(1, 0); }

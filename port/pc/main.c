@@ -70,9 +70,56 @@ void plat_present_xrgb(const uint32_t *pixels, int width, int height, int pitch_
     SDL_RenderPresent(g_ren);
 }
 
+// HK_KEYS=frame:vk:frames[,...] (hex vk): scripted key presses for headless tests, e.g. 1600:0d:10 holds Enter
+// for 10 frames from presented frame 1600.
+static int scripted_key(int vk) {
+    extern unsigned g_frame;
+    const char *s = getenv("HK_KEYS");
+    while (s && *s) {
+        char *e;
+        unsigned at = (unsigned)strtoul(s, &e, 10);
+        if (*e != ':') break;
+        int key = (int)strtol(e + 1, &e, 16);
+        if (*e != ':') break;
+        unsigned len = (unsigned)strtoul(e + 1, &e, 10);
+        if (key == vk && g_frame >= at && g_frame < at + len) return 1;
+        s = *e == ',' ? e + 1 : e;
+    }
+    return 0;
+}
+
+int plat_vk_down(int vk) {
+    if (scripted_key(vk)) return 1;
+    const Uint8 *k = SDL_GetKeyboardState(NULL);
+    if (!k) return 0;
+    switch (vk) {
+    case 0x25: return k[SDL_SCANCODE_LEFT];
+    case 0x26: return k[SDL_SCANCODE_UP];
+    case 0x27: return k[SDL_SCANCODE_RIGHT];
+    case 0x28: return k[SDL_SCANCODE_DOWN];
+    case 0x0D: return k[SDL_SCANCODE_RETURN];
+    case 0x1B: return k[SDL_SCANCODE_ESCAPE];
+    case 0x20: return k[SDL_SCANCODE_SPACE];
+    case 0x10: return k[SDL_SCANCODE_LSHIFT] || k[SDL_SCANCODE_RSHIFT];
+    case 0x11: return k[SDL_SCANCODE_LCTRL] || k[SDL_SCANCODE_RCTRL];
+    case 0x12: return k[SDL_SCANCODE_LALT] || k[SDL_SCANCODE_RALT];
+    case 0x71: return k[SDL_SCANCODE_F2];
+    default:
+        if (vk >= 'A' && vk <= 'Z') return k[SDL_SCANCODE_A + (vk - 'A')];
+        return 0;
+    }
+}
+
 void rt_platform_fatal(const char *msg) {
     if (getenv("HK_HEADLESS")) return;
     SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Handkerchief (recomp)", msg, g_win);
+}
+
+// HK_DUMP_AFTER=seconds: logs where the main thread is (rt_dump_hang: host function and guest return addresses).
+static int dump_thread(void *arg) {
+    int secs = (int)(intptr_t)arg;
+    for (;;) { SDL_Delay((Uint32)secs * 1000u); rt_dump_hang(); }
+    return 0;
 }
 
 int main(int argc, char **argv) {
@@ -96,6 +143,7 @@ int main(int argc, char **argv) {
     if (r) rt_fatal("cannot load %s (%d)", exe, r);
     rt_fill_iat();
     rt_log("game loaded from %s\n", g_game_dir);
+    if (getenv("HK_DUMP_AFTER")) SDL_CreateThread(dump_thread, "hkdump", (void *)(intptr_t)atoi(getenv("HK_DUMP_AFTER")));
     rt_run_entry();
     SDL_Quit();
     return 0;

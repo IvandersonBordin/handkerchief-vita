@@ -16,9 +16,13 @@ Main path: full static recompilation of `HDKWIN.EXE` (see [static-recomp.md](sta
   (screenshots with `HK_SHOT=30,120,300,600`), then the ASK logo, then the full title screen
   (frame 1500): logo, background, three characters, menu NEW GAME / CONTINUE / NETWORK / EXIT.
   The copyright line is GDI text, logged but not drawn yet.
-- Next step: input. HDKWIN.EXE imports no DirectInput; keys arrive as window messages
-  (PeekMessageA/DispatchMessageA to the window procedure) plus GetKeyState. Map SDL keys (PC) and the
-  Vita pad to WM_KEYDOWN/WM_KEYUP, then start a NEW GAME and check stage A0.
+- Input works: GetKeyState answers from the keyboard (PC) or pad (Vita) and key changes are posted as
+  WM_KEYDOWN/WM_KEYUP (the game peeks with PM_NOREMOVE and takes messages with GetMessageA at 0x40EA33).
+  With Enter on the title (HK_KEYS=1300:0d:6) NEW GAME starts: "TERRITORY 'GOLD FISH'" card, then
+  stage A0 from System/a0.HDK with HUD, enemies and explosions (screenshots 1350-2200).
+  Provisional Vita mapping: d-pad/left stick = arrows, Cross = Z, Circle = X, Square = C,
+  Triangle = space, Start = Enter, Select = Esc, L = Shift, R = Ctrl.
+- Missing: GDI text (speech bubbles are empty), sound, save/continue not checked.
 - CRT `memcpy`/`memmove` (`0x45E4B0`/`0x45F6C0`) are native; guest memory is 256 MB on PC (64 MB ran out
   when a 13.9 MB block was requested). Two double frees by the game are logged and ignored, as Windows does.
 - Not done yet: text rendering (ExtTextOutA is only logged), keyboard/pad input, sound (DirectSound
@@ -38,10 +42,10 @@ Without `HK_HEADLESS` a window shows the game's primary surface.
 ## VPKs available for console tests
 
 - `build/hk-vita/handkerchief.vpk` (local only, derived from HDKWIN.EXE: never publish), title `HKRC00010`,
-  SHA-256 `cbc3bc1026daea8fbfc788715db77de8259604560f0a1b705c5c159df65460b4`. Built 2026-11-20 with
+  SHA-256 `9a28d273850441f91f3ed3870cfbb0cdef42aa1985fb335d56421ea24519aec3`. Built 2026-11-20 with
   `cmake -S port/vita -B build/hk-vita -DCMAKE_BUILD_TYPE=Release && cmake --build build/hk-vita -j8`;
-  the skill's check_vpk.py reports 0 errors. **Not yet run on the console.** Expected: intro and title
-  screen only (no input yet). Needs the player's game files in `ux0:data/handkerchief/` (HDKWIN.EXE,
+  the skill's check_vpk.py reports 0 errors. **Not yet run on the console.** Expected: intro, title and
+  stage A0 with the provisional pad mapping. Needs the player's game files in `ux0:data/handkerchief/` (HDKWIN.EXE,
   BITMAP/, SYSTEM/, USER/, WAV/); log in `ux0:data/handkerchief/hklog.txt`.
 - Console tools: the Vita runs firmware 3.65 with vita-agent-use installed (VitaCompanion ports 1337/1338
   refuse connections). Using the vita-agent-use pairing identity in build/vita-agent-identity needs Ivan's

@@ -1,5 +1,7 @@
 # Handkerchief — PS Vita Port (Research Project)
 
+![Handkerchief for PlayStation Vita](docs/media/cover.png)
+
 > **Work in progress.** An independent, non-commercial project that runs the original Windows game *Handkerchief* (OPUS / ASK, 1999-2000) natively on the PlayStation Vita, by statically recompiling its x86 executable to C. You must supply your own copy of the game.
 
 [Project status](docs/status.md) · [Static recompilation](docs/static-recomp.md) · [Save and stages](docs/save-and-stages.md)
@@ -20,6 +22,10 @@ The recompiled game runs on Linux and on a real PS Vita (PCH-1010, firmware 3.65
 | Save / continue | Works on both platforms, verified on the console |
 | Other stages | Territories A-J load (one area, e2, returns to the intro); a full playthrough has not been tested |
 | Port extras | Pause screen with FPS counter, aspect toggle and cheats (the game's own "Unrivaled Mode") |
+
+<p align="center"><img src="docs/media/gameplay.gif" alt="Title screen and stage A0 running in the port" width="480"></p>
+
+Screenshots are captured from the port running the original game data; the game's artwork belongs to its rights holders (OPUS Corp. / ASK Co., Ltd.).
 
 Known issues: the mix saturates in some heavy scenes, scene transitions pause briefly, a white line appears at one screen edge in A0, and native widescreen is not implemented yet.
 

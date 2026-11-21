@@ -84,6 +84,12 @@ Main path: full static recompilation of `HDKWIN.EXE` (see [static-recomp.md](sta
 
 ## Planned work (approved order)
 
+- Open items after Ivan's console tests (2026-11-21, build 74ca8c2): mix saturates at the first tower and near the
+  glucose machine (no silent blocks logged; Bruno investigating voices that keep playing); white line at the right
+  edge near the first billboard ladder (Carlos); scene transitions freeze briefly, worse later in the game (next:
+  measure load time on the console, then cache files in RAM / larger reads); full playthrough never tested (e2
+  returns to the intro). Pause-screen cheats on the Vita: L Unrivaled Mode flag 0x4AC84C, R invincible, Circle money.
+
 - Ivan's console test (2026-11-21, b702239): menu bar, save and continue work on the Vita. Requests: Select opens
   the menu directly (done), sound distorted like a speaker at maximum (master gain 0.7 + block limiter replace the
   per-sample soft clipper; PC: house explosion peaks 0.9 full scale, no clipped samples), and later a Vita-style

@@ -151,6 +151,7 @@ int plat_vk_down(int vk) {
     case 0x10: return k[SDL_SCANCODE_LSHIFT] || k[SDL_SCANCODE_RSHIFT];
     case 0x11: return k[SDL_SCANCODE_LCTRL] || k[SDL_SCANCODE_RCTRL];
     case 0x12: return k[SDL_SCANCODE_LALT] || k[SDL_SCANCODE_RALT];
+    case 0x70: return k[SDL_SCANCODE_F1];
     case 0x71: return k[SDL_SCANCODE_F2];   // Save This Game
     case 0x73: return k[SDL_SCANCODE_F4];   // Stop This Game
     case 0x79: return k[SDL_SCANCODE_F10];  // the game's menu bar (port: hk_menu_key)

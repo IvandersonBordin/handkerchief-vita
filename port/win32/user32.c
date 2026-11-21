@@ -80,7 +80,12 @@ static void timer_delivered(uint32_t id);
 // While a dialog is up, key presses go to it (hk_dlg_keys) instead of the game's window.
 static void post_key_changes(CPU *c) {
     post_due_timers();
-    static const uint8_t keys[] = {0x25, 0x26, 0x27, 0x28, 0x0D, 0x1B, 0x20, 0x10, 0x11, 0x12, 0x71, 0x73, 0x79, 'Z', 'X', 'C', 'A', 'S'};
+    // All letters: the input object keeps the last WM_KEYDOWN virtual key (0x411690 -> [0x4AA148+0x14]) and the game
+    // scene reads it for typed codes ('H','D','K' opens the Secret Option dialog 1490 at 0x451F5E; 'u'/'m' in that
+    // dialog's text). F1 and F4 are polled with GetKeyState (0x411878, 0x451F2B: "Stop this game ?"); F10 opens the port's menu bar.
+    static const uint8_t keys[] = {0x25, 0x26, 0x27, 0x28, 0x0D, 0x1B, 0x20, 0x10, 0x11, 0x12, 0x70, 0x71, 0x73, 0x79,
+                                   'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q',
+                                   'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'};
     static uint8_t down[256];
     uint8_t pressed[sizeof keys];
     int npressed = 0, dlg = hk_dlg_active();

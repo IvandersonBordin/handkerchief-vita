@@ -71,7 +71,8 @@ Main path: full static recompilation of `HDKWIN.EXE` (see [static-recomp.md](sta
   was verified headless. Fixes: DIALOGEX parsing, PostMessageA to dialogs delivered, no port navigation on 1500,
   all letters/F1/F4 posted (H D K in a stage opens Secret Option 1490). Test aid `HK_STAGE=<label>` starts NEW GAME
   in any stage file (hook in recomp/image_patches.py: regenerate the C); 32 stages of territories A-J load with no
-  FATAL, `e2` returns to the intro. On the Vita, Save/Stop are reached through the port's menu bar.
+  FATAL (`e2` "returning to the intro" is the game's own GAME OVER of the idle player, see
+  docs/save-and-stages.md). On the Vita, Save/Stop are reached through the port's menu bar.
   12 WAV files are missing from the player's data. The game's voice code handles that silently (Play 0x45C78E
   calls the loader 0x45C4C1 while the voice has no buffer and returns 0 when both ./wav/ and ./wav/8bit/ fail;
   the free-voice search 0x45CC88 sees status 0 and picks that voice again; no other buffer is touched), but it
@@ -88,7 +89,7 @@ Main path: full static recompilation of `HDKWIN.EXE` (see [static-recomp.md](sta
   glucose machine (no silent blocks logged; Bruno investigating voices that keep playing); white line at the right
   edge near the first billboard ladder (Carlos); scene transitions freeze briefly, worse later in the game (next:
   measure load time on the console, then cache files in RAM / larger reads); full playthrough never tested (e2
-  returns to the intro). Pause-screen cheats on the Vita: L Unrivaled Mode flag 0x4AC84C, R invincible, Circle money.
+  only showed GAME OVER of the idle player; verified exits a0_b->a0_c, a1_a->a2, b0->a1_a, 2026-11-21). Pause-screen cheats on the Vita: L Unrivaled Mode flag 0x4AC84C, R invincible, Circle money.
 
 - Ivan's console test (2026-11-21, b702239): menu bar, save and continue work on the Vita. Requests: Select opens
   the menu directly (done), sound distorted like a speaker at maximum (master gain 0.7 + block limiter replace the

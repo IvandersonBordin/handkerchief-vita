@@ -87,8 +87,26 @@ letters, which the pad does not send.
   `a0_a`, `a1`, `a2`, `b0`, `b0_a`, `b1`, `b2`, `c0`, `c0_a`, `c1`, `c2`, `d0`, `d0_a`, `d1`, `d2`, `e0`, `e1`, `f0`,
   `f1`, `f2`, `g0`, `g1`, `g2`, `h0`, `h1`, `h2`, `i0`, `i1`, `i2`, `j0`, `j0_a` load and draw their own
   graphics (territory emblem in the HUD, rain in `b0`, night sky with red moon in `j0`) with no FATAL and no new
-  missing import. `e2` loads, plays `X_NEXT.wav` and returns to the intro (not a crash; cause not determined,
-  possibly the game's own progression check). Only idle loading was tested, not play through the stages.
+  missing import. Only idle loading was tested, not play through the stages.
+- `e2` "returning to the intro" is the game's own GAME OVER (verified 2026-11-21): the idle player is shot by the
+  enemy on the billboard tower, frames 1800-2000 show the grey "GAME OVER" screen, then the game restarts the
+  startup sequence 0x4540C2 (XSIV logo, `HdkOPUS.BMP` with sound 0x5E `X_NEXT`, `HdkASK.BMP`, title). `X_NEXT`
+  belongs to that OPUS logo, not to `e2`. With Unrivaled Mode ticked the same run stays in `e2` past frame 3200.
+  Neither the `HK_STAGE` shortcut nor the port is the cause; normal play reaches `e2` from `e1`/`e1_a`.
+- Invincibility: Unrivaled Mode (checkbox 1417 -> 0x4AC84C, read at 0x4154FC) enables it at once, because the
+  invincibility flag 0x47BCD8 is initialised to 1 in `.data`; 'u' (0x455126) XORs 0x47BCD8, so the first 'u'
+  turns invincibility OFF (HUD "INVINCIBLE [OFF]"). The checks at 0x435A1F/0x435AA4 need both flags.
+- Area exits (static reading of the `EXIT_0` block of each stage file, `CExit` records): each record holds a target
+  label pattern and an entry point name, e.g. `a0_b`: `??_-`>`r0` at x=16 and `??_+`>`l0` at x=1424 (left and right
+  edges). In the pattern `?` keeps the current character and `+`/`-` step it, so the chain is linear: `a0` ->
+  `a0_a`..`a0_e` -> `a1` (sky) -> `a1_a`, whose right edge has two exits (upper y=280 -> `b0` `l0`, lower y=880 ->
+  `a2`); `a2` (boss) has `CExitFlg` records (flag-gated, `def`/`exit0`) and two `b0`>`0` exits at y=864. `b0`'s left
+  edge leads back to `a1_a` `r0`. Each territory repeats this up to `j0`; `e2` exits to `f0` (`+0`>`0`).
+- Transitions verified in the port (2026-11-21, headless, scripted keys, Unrivaled Mode): CONTINUE slot 1 (`a0_b`)
+  + hold Right -> `a0_c` loads (working state merged into `User00.HDK`); `HK_STAGE=a1_a` + Right -> `a2` (boss
+  "KeyMan" in the HUD); `HK_STAGE=b0` + Left -> `a1_a` (territory emblem changes from B to A). No FATAL, hang or
+  missing import. Not reached: the boss victory in `a2` and the forward `a2`/`a1_a` -> `b0` exit (a 12000-frame
+  scripted fight with fire and jumps earned money but did not win). Holding Right stops at the bunker in `a0_c`.
 - Missing sounds in the player's data: `A_BOMB_1`, `A_MGUN_0`, `A_MGUN_1`, `B_LSER_0`, `C_BUND_0`, `F_TANK`,
   `I_NOT`, `I_USE`, `J_SCRM_0`, `J_SCRM_1`, `L_INVI`, `Y_LAST` (.wav, neither in `WAV/` nor `WAV/8bit/`). The
   game retries the open every time it plays one (the log shows about as many failed `malloc(0xFFFFFFFF)`): ~50 failed opens/s in A0

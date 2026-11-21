@@ -189,12 +189,15 @@ static void mix(void *ud, Uint8 *stream, int len) {
     // per-sample soft clipper into constant saturation, heard as distortion. The gain drops at once when a block
     // would exceed the ceiling and recovers over ~0.3 s; a hard clip remains only as a safety net.
     static float env = 1.f;
-    const float master = 0.7f, ceiling = 0.9f;
+    const float master = 0.55f, ceiling = 0.9f;   // 0.55: the limiter only acts on the loudest moments
     float peak = 0.f;
     for (int i = 0; i < n * 2; i++) { float m = fabsf(acc[i]) * master; if (m > peak) peak = m; }
     float target = peak > ceiling ? ceiling / peak : 1.f, g0 = env, g1;
-    if (target < env) g0 = g1 = target;          // attack: this whole block at the lower gain
-    else g1 = env + (target - env) * 0.15f;      // release
+    // Gain changes are ramped across the block (a step at a block boundary clicks); an attack ramp can let the
+    // first samples of a block overshoot, which the hard clip below catches. Release ~1 s, so the level does
+    // not pump up and down between shots.
+    if (target < env) g1 = target;
+    else g1 = env + (target - env) * 0.05f;
     env = g1;
     int16_t *out = (int16_t *)stream;
     for (int i = 0; i < n * 2; i++) {

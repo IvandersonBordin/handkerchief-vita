@@ -66,6 +66,13 @@ Main path: full static recompilation of `HDKWIN.EXE` (see [static-recomp.md](sta
   (build/gameplay-reference/overview.jpg, first row) shows it too. HK_TRACE_PIX=300,305,1530 shows the game
   drawing it with an opaque BltFast (call at 0x408D59, element bit 15 clear) of black 40x20 tiles from
   HdkMAPb0.BMP (surface #9); the surface has its colour key, the game just does not ask for it there.
+- Save/continue and other stages (2026-11-21, Bruno, details in [save-and-stages.md](save-and-stages.md)): CONTINUE
+  (dialog 1500 GAME DATA, a DIALOGEX template) loads a slot, F2 in a stage saves into a slot, and the round trip
+  was verified headless. Fixes: DIALOGEX parsing, PostMessageA to dialogs delivered, no port navigation on 1500,
+  all letters/F1/F4 posted (H D K in a stage opens Secret Option 1490). Test aid `HK_STAGE=<label>` starts NEW GAME
+  in any stage file (hook in recomp/image_patches.py: regenerate the C); 32 stages of territories A-J load with no
+  FATAL, `e2` returns to the intro. On the Vita, Save/Stop are reached through the port's menu bar.
+  12 WAV files are missing from the player's data and the game retries opening them on every play.
 - Old test apps HKRC00005-00009 were uninstalled by Ivan from the LiveArea (vita-agent-use `content preview`
   fails with firmware error 0xFFFEFFF2 on this console).
 - Ivan's feedback (2026-11-20): the game runs smoothly on the Vita; stretched 16:9 makes text easier to read

@@ -13,8 +13,12 @@ Main path: full static recompilation of `HDKWIN.EXE` (see [static-recomp.md](sta
   bitmaps and `System/t0.HDK`. The actor update chain studied by Bruno (`0x418E3C`, `0x4196E5`,
   `0x42DBD5`) runs.
 - The intro plays correctly on Linux: XSIV Games logo, fade, OPUS Corp. logo, with the right palette
-  (screenshots with `HK_SHOT=30,120,300,600`). The title loop then draws the copyright text every frame
-  (text itself is not rendered yet).
+  (screenshots with `HK_SHOT=30,120,300,600`), then the ASK logo, then the full title screen
+  (frame 1500): logo, background, three characters, menu NEW GAME / CONTINUE / NETWORK / EXIT.
+  The copyright line is GDI text, logged but not drawn yet.
+- Next step: input. HDKWIN.EXE imports no DirectInput; keys arrive as window messages
+  (PeekMessageA/DispatchMessageA to the window procedure) plus GetKeyState. Map SDL keys (PC) and the
+  Vita pad to WM_KEYDOWN/WM_KEYUP, then start a NEW GAME and check stage A0.
 - CRT `memcpy`/`memmove` (`0x45E4B0`/`0x45F6C0`) are native; guest memory is 256 MB on PC (64 MB ran out
   when a 13.9 MB block was requested). Two double frees by the game are logged and ignored, as Windows does.
 - Not done yet: text rendering (ExtTextOutA is only logged), keyboard/pad input, sound (DirectSound

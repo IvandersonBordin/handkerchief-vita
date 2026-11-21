@@ -138,6 +138,9 @@ K(MulDiv) {
     int64_t r = (p >= 0) == (d > 0) ? (p + (d > 0 ? d : -d) / 2) / d : (p - (d > 0 ? d : -d) / 2) / d;
     STDRET(3, (uint32_t)(int32_t)r);
 }
+// HK_TRACE_LOAD=1: per-frame file-load counters (all threads), logged by hk_load_trace_frame() when a frame took > 60 ms.
+uint64_t g_lt_open_t, g_lt_read_t, g_lt_dec_t, g_lt_read_n, g_lt_read_b, g_lt_open_n;
+int g_trace_load;
 uint64_t g_t_sleep, g_t_gl, g_t_swap, g_t_io, g_t_wait, g_io_bytes;   // diagnostics: main thread disk read / object wait
 K(Sleep) {
     HOSTFN;
@@ -452,6 +455,7 @@ K(WaitForMultipleObjects) {
 #define PF_MAX 1310720u
 typedef struct {
     FILE *f; char path[600]; int ro, pfreuse;
+    int small;    // Vita: read-only file <= 64 KB, fully buffered (one syscall per load instead of one per small read)
     int commit;   // written to path + ".tmp": CloseHandle swaps it in (safe_write.h)
     uint8_t *pf; uint32_t pfcap, pfwant; long pfpos; SDL_Thread *th;
     SDL_atomic_t pfgot, pfdone, pfabort;
@@ -555,7 +559,85 @@ static int wav_missing(const char *gp, int add) {
     SDL_UnlockMutex(g_wav_miss_mx);
     return hit;
 }
+// Music preload. The game reads each background track whole in ONE ReadFile on its main thread when a stage (or boss)
+// starts: Y_STAGE.wav is 6.3 MB = ~500 ms of frozen game at ux0 speed (12 MB/s) on the Vita, ~0 on a PC. After the
+// first frame a background thread reads the few big music files into RAM (~16 MB); ReadFile serves a request that
+// lies inside a preloaded file from memory (a memcpy). Only immutable read-only game files are preloaded.
+// SH3_NO_PRELOAD=1 disables it (to compare). If the thread has not finished with a file yet, ReadFile waits for it.
+typedef struct { const char *name; char path[600]; uint8_t *data; size_t size; SDL_atomic_t state; } Preload;   // state 0 pending, 1 done, 2 failed
+static Preload s_pre[] = {{"Y_DEMO"}, {"Y_MENU"}, {"Y_STAGE"}, {"Y_BOSS"}};
+#define NPRE ((int)(sizeof s_pre / sizeof s_pre[0]))
+static int s_pre_on;
+static int preload_thread(void *arg) {
+    (void)arg;
+    for (int i = 0; i < NPRE; i++) {
+        Preload *p = &s_pre[i];
+        FILE *f = fopen(p->path, "rb");
+        if (f) {
+            fseek(f, 0, SEEK_END);
+            long n = ftell(f);
+            fseek(f, 0, SEEK_SET);
+            uint8_t *d = n > 0 ? malloc((size_t)n) : NULL;
+            if (d && fread(d, 1, (size_t)n, f) == (size_t)n) { p->data = d; p->size = (size_t)n; }
+            else free(d);
+            fclose(f);
+        }
+        SDL_AtomicSet(&p->state, p->data ? 1 : 2);
+    }
+    return 0;
+}
+static void preload_start(void) {
+    const char *off = getenv("SH3_NO_PRELOAD");
+    if (off && *off == '1') return;
+    for (int i = 0; i < NPRE; i++) {
+        char g[64];
+        snprintf(g, sizeof g, "./wav/%s.wav", s_pre[i].name);
+        w32_host_path(g, s_pre[i].path, sizeof s_pre[i].path);
+    }
+    s_pre_on = 1;
+    SDL_Thread *t = SDL_CreateThread(preload_thread, "hkpreload", NULL);
+    if (t) SDL_DetachThread(t);
+    else s_pre_on = 0;
+}
+// The preloaded bytes of the file at host path `path` when [pos, pos + n) lies inside it; NULL otherwise.
+static const uint8_t *preload_get(const char *path, long pos, uint32_t n) {
+    if (!s_pre_on || pos < 0) return NULL;
+    for (int i = 0; i < NPRE; i++) {
+        Preload *p = &s_pre[i];
+        if (strcmp(p->path, path)) continue;
+        while (SDL_AtomicGet(&p->state) == 0) SDL_Delay(1);
+        if (SDL_AtomicGet(&p->state) != 1 || (uint64_t)pos + n > p->size) return NULL;
+        return p->data + pos;
+    }
+    return NULL;
+}
+// Called by the DirectDraw present once per frame (main thread).
+void hk_load_trace_frame(void) {
+    static int started;
+    if (!started) { started = 1; preload_start(); }
+    static uint64_t last, tw0;
+    static int init;
+    if (!init) { const char *e = getenv("HK_TRACE_LOAD"); g_trace_load = e && *e == '1'; init = 1; }
+    if (!g_trace_load) return;
+    uint64_t now = SDL_GetPerformanceCounter(), f = SDL_GetPerformanceFrequency();
+    double ms = (now - last) * 1000.0 / f;
+    extern unsigned g_frame;
+    if (last && (ms > 60.0 || g_lt_read_n || g_lt_open_n)) {
+        double io = g_lt_read_t * 1000.0 / f, op = g_lt_open_t * 1000.0 / f, dc = g_lt_dec_t * 1000.0 / f, wt = (g_t_wait - tw0) * 1000.0 / f;
+        rt_log("[load] frame %u: %.0f ms; opens %llu %.1f ms, reads %llu %.2f MB %.1f ms, bmp decode %.1f ms, wait %.1f ms, other %.1f ms\n", g_frame, ms,
+               (unsigned long long)g_lt_open_n, op, (unsigned long long)g_lt_read_n, g_lt_read_b / 1048576.0, io, dc, wt, ms - io - op - dc - wt);
+    }
+    g_lt_open_t = g_lt_read_t = g_lt_dec_t = g_lt_read_n = g_lt_read_b = g_lt_open_n = 0;
+    tw0 = g_t_wait;
+    last = SDL_GetPerformanceCounter();
+}
+static K(CreateFileA_impl);
 K(CreateFileA) {
+    uint64_t t0 = SDL_GetPerformanceCounter();
+    imp_KERNEL32_CreateFileA_impl(c);
+    if (g_trace_load) { __atomic_fetch_add(&g_lt_open_t, SDL_GetPerformanceCounter() - t0, __ATOMIC_RELAXED); __atomic_fetch_add(&g_lt_open_n, 1, __ATOMIC_RELAXED); }
+}
+static K(CreateFileA_impl) {
     HOSTFN;
     char hp[600];
     const char *gp = GSTR(ARG(1));
@@ -596,7 +678,14 @@ K(CreateFileA) {
     // Read-only files are unbuffered: read_direct reads the descriptor itself, and a buffered newlib FILE
     // moves the descriptor on its own (fseek reads a whole block ahead), so a second direct read on the same handle
     // started at the end of the file and returned 0 bytes (data/arc.arc: 17232 bytes read as 16384 + 16384).
-    if (fl->ro) setvbuf(f, NULL, _IONBF, 0);
+    // Small files (the 25 KB stage .HDK, opened ~10 times per area load, ~1800 tiny reads per load) get a buffer as large
+    // as the file instead: the loader's tiny reads no longer each cost a ux0 syscall. Never read_direct (fl->small).
+    if (fl->ro) {
+        struct stat st;   // before any I/O on the stream: setvbuf must come first
+        long fsz = fstat(fileno(f), &st) ? -1 : (long)st.st_size;
+        if (fsz > 0 && fsz <= 65536 && !setvbuf(f, NULL, _IOFBF, (size_t)((fsz + 4095) & ~4095L))) fl->small = 1;
+        else setvbuf(f, NULL, _IONBF, 0);
+    }
 #endif
     snprintf(fl->path, sizeof fl->path, "%s", hp);
     // Only immutable game archives may retain a completed stream block.
@@ -843,11 +932,17 @@ K(ReadFile) {
         // A short audio tail can already lie in the full-sized pending job.
         // Accepting that exact range needs no new allocation or prediction;
         // pf_take still rejects incomplete jobs and partial EOF as before.
-        if (use_pf && ((c==g_main_cpu && (headhit=pf_head_take(f,pos0,mb+buf,n))) || pf_take(f, pos0, mb + buf, n))) {
+        const uint8_t *pre = f->ro && n >= PF_MIN ? preload_get(f->path, pos0, n) : NULL;
+        if (pre) {
+            memcpy(mb + buf, pre, n);
             got = n; pfhit = 1;
             errno = 0;
             if (fseek(f->f, pos0 + (long)n, SEEK_SET)) io_error = errno ? errno : EIO;
-        } else if (n >= 16384) got = read_direct(f->f, mb + buf, n, &io_error);
+        } else if (use_pf && ((c==g_main_cpu && (headhit=pf_head_take(f,pos0,mb+buf,n))) || pf_take(f, pos0, mb + buf, n))) {
+            got = n; pfhit = 1;
+            errno = 0;
+            if (fseek(f->f, pos0 + (long)n, SEEK_SET)) io_error = errno ? errno : EIO;
+        } else if (n >= 16384 && !f->small) got = read_direct(f->f, mb + buf, n, &io_error);
         else {
             errno = 0;
             got = (uint32_t)fread(mb + buf, 1, n, f->f);
@@ -862,6 +957,7 @@ K(ReadFile) {
         if (got < n) SDL_memset(mb + buf + got, 0, n - got);
     }
     uint64_t d_io = SDL_GetPerformanceCounter() - t_io;
+    if (g_trace_load) { __atomic_fetch_add(&g_lt_read_t, d_io, __ATOMIC_RELAXED); __atomic_fetch_add(&g_lt_read_n, 1, __ATOMIC_RELAXED); __atomic_fetch_add(&g_lt_read_b, got, __ATOMIC_RELAXED); }
     if (c == g_main_cpu) { g_t_io += d_io; g_io_bytes += got; }
     static int io_tail_profile = -1;
     if (io_tail_profile < 0) { const char *e = getenv("SH3_IO_TAIL_PROFILE"); io_tail_profile = e && !strcmp(e,"1"); }

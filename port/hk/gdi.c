@@ -119,6 +119,8 @@ U(LoadImageA) {
     if (type != 0) { rt_log("[gdi] LoadImageA type %u not supported\n", type); STDRET(6, 0); }
     if (flags & 0x10u) {   // LR_LOADFROMFILE
         char hp[600];
+        extern uint64_t g_lt_dec_t, g_lt_read_t, g_lt_read_n, g_lt_read_b, g_lt_open_t, g_lt_open_n; extern int g_trace_load;
+        uint64_t t0 = SDL_GetPerformanceCounter();
         w32_host_path(GSTR(name), hp, sizeof hp);
         FILE *f = fopen(hp, "rb");
         if (!f) { rt_log("[gdi] LoadImageA: cannot open %s\n", hp); STDRET(6, 0); }
@@ -127,10 +129,16 @@ U(LoadImageA) {
         fseek(f, 0, SEEK_SET);
         uint8_t *d = n > 14 ? malloc((size_t)n) : NULL;
         uint32_t h = 0;
-        if (d && fread(d, 1, (size_t)n, f) == (size_t)n && d[0] == 'B' && d[1] == 'M')
+        int ok = d && fread(d, 1, (size_t)n, f) == (size_t)n;
+        uint64_t t1 = SDL_GetPerformanceCounter();
+        if (ok && d[0] == 'B' && d[1] == 'M')
             h = bmp_from_dib(d + 14, (uint32_t)n - 14, GSTR(name));
         free(d);
         fclose(f);
+        if (g_trace_load) {   // open+read of the whole file counts as I/O, the rest as decode
+            uint64_t t2 = SDL_GetPerformanceCounter();
+            g_lt_read_t += t1 - t0; g_lt_read_n++; g_lt_read_b += (uint64_t)n; g_lt_open_n++; g_lt_dec_t += t2 - t1;
+        }
         STDRET(6, h);
     }
     uint32_t size = 0, data = w32_resource(name, 2, &size);   // RT_BITMAP

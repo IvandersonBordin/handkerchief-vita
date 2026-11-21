@@ -272,6 +272,8 @@ static void present_primary(void) {
     plat_present_xrgb(&frame[0][0], 640, 480, 640 * 4);
     extern unsigned g_frame;
     g_frame++;
+    void hk_load_trace_frame(void);
+    hk_load_trace_frame();
 }
 void hk_dd_present(void) { present_primary(); }
 

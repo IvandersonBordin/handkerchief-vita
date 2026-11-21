@@ -68,6 +68,8 @@ When applying the `vita-port` skill to this project, consult the [recompilation 
 - There is no scheduled automation. Agents run only when Ivan requests them in a Claude Code session. Enabling any scheduler requires a separately reviewed proposal and Ivan's explicit authorization.
 - Claude Code usage limits are shared with Ivan's interactive use. Avoid polling, idle agent calls and repeated investigations. On a usage-limit error, stop cleanly and do not retry until Ivan confirms the quota has renewed.
 - Reuse recorded evidence. If a task depends on hardware, a decision, or missing information, record the blocker once and wait for a change. Do not repeat investigations, tests, or commits solely to record another waiting cycle.
+- Claude cannot see the remaining Claude Code quota. After every milestone, update `docs/status.md` (where the work stopped, how to resume, which VPKs exist for console tests) and commit it, so a quota stop never loses the state. Ivan can check usage with `/usage` in Claude Code.
+- Prefer local builds, scripts and logs over model calls; do not spawn subagents for work the main session can do directly.
 
 ## Validation and Publication
 

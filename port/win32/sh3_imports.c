@@ -320,25 +320,4 @@ void imp_OLEAUT32_ord6(CPU *c) { HOSTFN; if (ARG(1)) gheap_free(ARG(1) - 4); STD
 void imp_IMM32_ImmGetContext(CPU *c) { STDRET(1, 0); }
 void imp_IMM32_ImmAssociateContext(CPU *c) { STDRET(2, 0); }
 
-// ---------- GDI32: device contexts and DIB sections, no text rendering yet ----------
-#define FAKE_GDI 0x0001f000u
-G(CreateCompatibleDC) { ONCE("CreateCompatibleDC"); STDRET(1, FAKE_GDI + 0x10); }
-G(DeleteDC) { STDRET(1, 1); }
-G(CreateDIBSection) {   // (hdc, BITMAPINFO *, usage, bits **, section, offset): real pixel memory, nothing draws into it yet
-    HOSTFN;
-    ONCE("CreateDIBSection");
-    uint32_t bmi = ARG(2);
-    int32_t w = (int32_t)R32(bmi + 4), h = (int32_t)R32(bmi + 8);
-    uint32_t bpp = R16(bmi + 14), bytes = (uint32_t)((w * (int32_t)bpp + 31) / 32 * 4) * (uint32_t)(h < 0 ? -h : h);
-    uint32_t bits = gheap_calloc(bytes ? bytes : 4);
-    if (ARG(4)) W32(ARG(4), bits);
-    rt_log("CreateDIBSection %dx%d %u bpp -> %08x\n", w, h, bpp, bits);
-    STDRET(6, bits ? FAKE_GDI + 0x20 : 0);
-}
-G(CreateFontIndirectA) { ONCE("CreateFontIndirectA"); STDRET(1, FAKE_GDI + 0x30); }
-G(GetStockObject) { STDRET(1, FAKE_GDI + 0x40); }
-G(SelectObject) { STDRET(2, FAKE_GDI + 0x40); }
-G(GetObjectA) { ONCE("GetObjectA"); STDRET(3, 0); }
-G(SetBkColor) { STDRET(2, 0); }
-G(SetTextColor) { STDRET(2, 0); }
-G(SetBkMode) { STDRET(2, 1); }
+// GDI32: implemented for Handkerchief in port/hk/gdi.c

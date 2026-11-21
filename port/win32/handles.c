@@ -233,6 +233,38 @@ void w32_sleep_until(uint64_t t) {
 }
 uint32_t w32_tick_ms(void) { return vtime() ? (uint32_t)(w32_qpc() * 1000 / SDL_GetPerformanceFrequency()) : SDL_GetTicks(); }
 
+#ifndef __vita__
+#include <dirent.h>
+#include <sys/stat.h>
+// Windows and the Vita ignore case in file names; Linux does not. Each missing path component is replaced by
+// the directory entry that matches it ignoring case (the game asks for "bitmap/HdkSYS00.BMP", the copy has BITMAP/...).
+static void host_fix_case(char *path) {
+    struct stat st;
+    if (stat(path, &st) == 0) return;
+    for (char *p = path + 1; ; p++) {
+        if (*p != '/' && *p != 0) continue;
+        char saved = *p;
+        *p = 0;
+        if (stat(path, &st) != 0) {
+            char *slash = strrchr(path, '/');
+            const char *dirpath = slash && slash != path ? path : ".";
+            char *name = slash ? slash + 1 : path;
+            if (slash) *slash = 0;
+            DIR *d = opendir(slash ? dirpath : ".");
+            struct dirent *e;
+            int found = 0;
+            while (d && (e = readdir(d)))
+                if (!SDL_strcasecmp(e->d_name, name) && strlen(e->d_name) == strlen(name)) { memcpy(name, e->d_name, strlen(name)); found = 1; break; }
+            if (d) closedir(d);
+            if (slash) *slash = '/';
+            if (!found) { *p = saved; return; }
+        }
+        *p = saved;
+        if (!saved) return;
+    }
+}
+#endif
+
 void w32_host_path(const char *g, char *out, size_t n) {
     // NULL guest path: an empty host path, so the file call fails as on Windows instead of crashing.
     if (!g) { if (n) out[0] = 0; return; }
@@ -245,4 +277,7 @@ void w32_host_path(const char *g, char *out, size_t n) {
     while (p[0] == '.' && p[1] == '/') p += 2;
     if (p[0] && p[1] == ':') { SDL_snprintf(out, n, "%s", p); return; }
     SDL_snprintf(out, n, "%s/%s", g_game_dir, p);
+#ifndef __vita__
+    host_fix_case(out);
+#endif
 }

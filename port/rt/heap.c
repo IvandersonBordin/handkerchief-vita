@@ -57,12 +57,27 @@ void gheap_report(void) {
 }
 #endif
 
+static uint8_t *g_live;   // see live_set below
 void gheap_init(uint32_t base, uint32_t size) {
     g_tlsf = tlsf_create_with_pool(g_mem + base, size);
+    g_live = calloc(((uint64_t)base + size) / 64 + 1, 1);
     g_heap_lock = SDL_CreateMutex();
 }
 
 static uint32_t to_g(void *p) { return p ? GADDR(p) : 0; }
+
+// Live block starts (one bit per 8-byte granule, TLSF's alignment). Windows' HeapFree fails on a block that is not
+// allocated instead of corrupting the heap; HDKWIN.EXE frees one block twice while loading the title screen, so a
+// free of a non-live address is logged and ignored rather than handed to TLSF.
+static void live_set(void *p, int on) {
+    if (!p || !g_live) return;
+    uint32_t i = GADDR(p) >> 3;
+    if (on) g_live[i >> 3] |= (uint8_t)(1u << (i & 7)); else g_live[i >> 3] &= (uint8_t)~(1u << (i & 7));
+}
+static int live_get(uint32_t a) {
+    uint32_t i = a >> 3;
+    return (a & 7) == 0 && g_live && (g_live[i >> 3] >> (i & 7)) & 1;
+}
 uint64_t g_heap_used, g_heap_peak;
 uint64_t gheap_used_snapshot(void) {
     if (!g_heap_lock) return 0;
@@ -90,6 +105,7 @@ uint32_t gheap_alloc(uint32_t size) {
     SDL_LockMutex(g_heap_lock);
     void *p = tlsf_malloc(g_tlsf, size ? size : 1);
     track(p, 1);
+    live_set(p, 1);
     if (!p) {
         tlsf_walk_pool(tlsf_get_pool(g_tlsf), count_free_block, &free_stats);
         /* Diagnostic only: capture the first fragmented pool on demand.*/
@@ -119,6 +135,7 @@ uint32_t gheap_alloc_aligned(uint32_t size, uint32_t align) {
     SDL_LockMutex(g_heap_lock);
     void *p = tlsf_memalign(g_tlsf, align, size ? size : 1);
     track(p, 1);
+    live_set(p, 1);
     SDL_UnlockMutex(g_heap_lock);
     return to_g(p);
 }
@@ -126,15 +143,24 @@ uint32_t gheap_alloc_aligned(uint32_t size, uint32_t align) {
 void gheap_free(uint32_t a) {
     if (!a) return;
     SDL_LockMutex(g_heap_lock);
+    if (!live_get(a)) {
+        SDL_UnlockMutex(g_heap_lock);
+        static int n;
+        if (n++ < 20) rt_log("[heap] free of non-allocated 0x%08x ignored\n", a);
+        return;
+    }
     track(g_mem + a, -1);
+    live_set(g_mem + a, 0);
     tlsf_free(g_tlsf, g_mem + a);
     SDL_UnlockMutex(g_heap_lock);
 }
 
 uint32_t gheap_realloc(uint32_t a, uint32_t size) {
     SDL_LockMutex(g_heap_lock);
-    if (a) track(g_mem + a, -1);
+    if (a && !live_get(a)) { SDL_UnlockMutex(g_heap_lock); rt_log("[heap] realloc of non-allocated 0x%08x\n", a); return 0; }
+    if (a) { track(g_mem + a, -1); live_set(g_mem + a, 0); }
     void *p = tlsf_realloc(g_tlsf, a ? g_mem + a : NULL, size);
+    live_set(p ? p : (a && size ? g_mem + a : NULL), 1);
     /* TLSF frees the original block and returns NULL for size zero.*/
     track(p ? p : (a && size ? g_mem + a : NULL), 1);
     SDL_UnlockMutex(g_heap_lock);

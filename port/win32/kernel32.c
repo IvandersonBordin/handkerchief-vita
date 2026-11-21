@@ -1122,6 +1122,14 @@ int w32_load_string(uint32_t id, char *out, size_t cap) {
     if (!entry) { if (cap) out[0] = 0; return 0; }
     return rsrc_string_from_block(mb + 0x400000 + R32(entry), R32(entry + 4), id & 15, out, cap);
 }
+// Data of resource (name, type) of the image as a guest address, size in *size; 0 if absent (port/hk/gdi.c).
+uint32_t w32_resource(uint32_t name, uint32_t type, uint32_t *size) {
+    HOSTFN;
+    uint32_t e = rsrc_find(name, type, 0);
+    if (!e) return 0;
+    *size = R32(e + 4);
+    return 0x400000 + R32(e);
+}
 K(FindResourceA) { HOSTFN; STDRET(3, rsrc_find(ARG(2), ARG(3), 0)); }
 K(FindResourceW) { HOSTFN; STDRET(3, rsrc_find(ARG(2), ARG(3), 1)); }
 K(LoadResource) { HOSTFN; STDRET(2, ARG(2)); }

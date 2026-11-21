@@ -31,7 +31,37 @@ int plat_pump_events(void) {
     return quit;
 }
 
+// HK_SHOT=N[,M...]: writes shot_N.ppm (in the working folder) when frame N is presented.
+static void maybe_shot(const uint32_t *pixels, int width, int height, int pitch_bytes) {
+    static unsigned n;
+    const char *list = getenv("HK_SHOT");
+    n++;
+    for (const char *s = list; s && *s;) {
+        char *end;
+        unsigned want = (unsigned)strtoul(s, &end, 10);
+        if (end == s) break;
+        if (want == n) {
+            char path[64];
+            snprintf(path, sizeof path, "shot_%u.ppm", n);
+            FILE *f = fopen(path, "wb");
+            if (f) {
+                fprintf(f, "P6 %d %d 255\n", width, height);
+                for (int y = 0; y < height; y++)
+                    for (int x = 0; x < width; x++) {
+                        uint32_t v = pixels[y * (pitch_bytes / 4) + x];
+                        unsigned char rgb[3] = {(unsigned char)(v >> 16), (unsigned char)(v >> 8), (unsigned char)v};
+                        fwrite(rgb, 1, 3, f);
+                    }
+                fclose(f);
+                rt_log("[shot] %s\n", path);
+            }
+        }
+        s = *end == ',' ? end + 1 : end;
+    }
+}
+
 void plat_present_xrgb(const uint32_t *pixels, int width, int height, int pitch_bytes) {
+    maybe_shot(pixels, width, height, pitch_bytes);
     if (!g_ren) return;
     if (!g_tex) g_tex = SDL_CreateTexture(g_ren, SDL_PIXELFORMAT_XRGB8888, SDL_TEXTUREACCESS_STREAMING, width, height);
     SDL_UpdateTexture(g_tex, NULL, pixels, pitch_bytes);
@@ -48,6 +78,7 @@ void rt_platform_fatal(const char *msg) {
 int main(int argc, char **argv) {
     const char *dir = argc > 1 ? argv[1] : getenv("HK_GAME_DIR") ? getenv("HK_GAME_DIR") : "original-data";
     SDL_strlcpy(g_game_dir, dir, sizeof g_game_dir);
+    SDL_SetHint(SDL_HINT_NO_SIGNAL_HANDLERS, "1");   // keep default SIGINT/SIGTERM: `timeout` must stop test runs
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_TIMER | SDL_INIT_EVENTS)) {
         fprintf(stderr, "SDL_Init: %s\n", SDL_GetError());
         return 1;
@@ -58,7 +89,7 @@ int main(int argc, char **argv) {
         g_ren = g_win ? SDL_CreateRenderer(g_win, -1, SDL_RENDERER_PRESENTVSYNC) : NULL;
         if (g_ren) SDL_RenderSetLogicalSize(g_ren, 640, 480);
     }
-    if (rt_init(64u << 20)) rt_fatal("guest memory: allocation failed");
+    if (rt_init(256u << 20)) rt_fatal("guest memory: allocation failed");
     char exe[600];
     SDL_snprintf(exe, sizeof exe, "%s/HDKWIN.EXE", g_game_dir);
     int r = rt_load_exe(exe);

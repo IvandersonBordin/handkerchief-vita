@@ -95,7 +95,6 @@ A(RegDeleteValueA) {
 }
 
 // ---------- GDI32 / IMM32 ----------
-void imp_GDI32_DeleteObject(CPU *c) { STDRET(1, 1); }
 void imp_IMM32_ImmAssociateContextEx(CPU *c) { STDRET(3, 1); }
 
 // ---------- WINMM ----------

@@ -46,7 +46,10 @@ def hook_code(native):
 
 
 IMAGE_PATCHES = []
-ADDR_OVERRIDES = {}
+# MSVC CRT memcpy (0x45E4B0) and memmove (0x45F6C0): same prologue (overlap test at +0x14), then copies through
+# computed jump tables the recompiler cannot follow (first run stopped on an indirect jump to 0x45F97C).
+# Ghidra leaves them unnamed (FUN_...), so they are matched by address. Native versions: port/rt/natives.c.
+ADDR_OVERRIDES = {0x45E4B0: "nat_memcpy", 0x45F6C0: "nat_memmove"}
 ADDR_WRAPS = {}
 HOOKS = {}
 ABI_NATIVES = set()

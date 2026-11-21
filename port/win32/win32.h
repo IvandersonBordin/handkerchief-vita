@@ -34,6 +34,7 @@ void w32_trace_sync(const char *what, uint32_t h, uint32_t extra);
 void w32_event_set(uint32_t h, int v);   // SetEvent/ResetEvent from any thread
 void w32_event_pulse(uint32_t h);        // PulseEvent
 void w32_host_path(const char *gpath, char *out, size_t n);
+uint32_t w32_resource(uint32_t name, uint32_t type, uint32_t *size);   // image resource data (guest address)
 void w32_post_message(uint32_t hwnd, uint32_t msg, uint32_t wp, uint32_t lp);   // to the window procedure, any thread
 uint32_t w32_tick_ms(void);
 uint64_t w32_qpc(void);

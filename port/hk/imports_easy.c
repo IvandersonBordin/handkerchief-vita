@@ -61,8 +61,10 @@ U(LoadCursorA) { HOSTFN; STDRET(2, 0x00020001u); }
 U(LoadMenuA) { HOSTFN; STDRET(2, 0x00030001u); }
 U(SetMenu) { HOSTFN; STDRET(2, 1); }
 U(DestroyMenu) { HOSTFN; STDRET(1, 1); }
-U(EnableWindow) { HOSTFN; STDRET(2, 0); }
-U(IsWindowEnabled) { HOSTFN; STDRET(1, 1); }
+int hk_dlg_enable(uint32_t hwnd, int on);   // port/hk/dialog.c
+int hk_dlg_enabled(uint32_t hwnd);
+U(EnableWindow) { HOSTFN; int was = hk_dlg_enable(ARG(1), (int)ARG(2)); STDRET(2, was > 0 ? 1u : 0u); }
+U(IsWindowEnabled) { HOSTFN; int e = hk_dlg_enabled(ARG(1)); STDRET(1, e < 0 ? 1u : (uint32_t)e); }
 U(WaitMessage) { HOSTFN; SDL_Delay(1); STDRET(0, 1); }
 U(OemToCharA) { HOSTFN; if (ARG(1) != ARG(2)) memmove(mb + ARG(2), mb + ARG(1), strlen((char *)mb + ARG(1)) + 1); STDRET(2, 1); }
 U(CharToOemA) { HOSTFN; if (ARG(1) != ARG(2)) memmove(mb + ARG(2), mb + ARG(1), strlen((char *)mb + ARG(1)) + 1); STDRET(2, 1); }

@@ -267,6 +267,8 @@ static void present_primary(void) {
         const uint8_t *row = mb + p->pixels + (uint32_t)(y * p->pitch);
         for (int x = 0; x < 640 && x < p->w; x++) frame[y][x] = lut[row[x]];
     }
+    void hk_dlg_overlay(uint32_t *fb);   // port/hk/dialog.c: open dialogs on top of the game
+    hk_dlg_overlay(&frame[0][0]);
     plat_present_xrgb(&frame[0][0], 640, 480, 640 * 4);
     extern unsigned g_frame;
     g_frame++;
@@ -492,6 +494,16 @@ const uint8_t *hk_dd_primary_palette(void) {
 // ---------- clipper: one window covering the whole screen, nothing to clip ----------
 static void clip_set_hwnd(CPU *c) { HOSTFN; STDRET(3, DD_OK); }        // (this, flags, hwnd)
 static void clip_set_list(CPU *c) { HOSTFN; STDRET(3, DD_OK); }        // (this, rgndata, flags)
+// GetGDISurface(this, out): the primary is the surface GDI draws on (the game pauses with it before dialogs).
+static void dd_get_gdi_surface(CPU *c) {
+    HOSTFN;
+    if (!g_primary) { W32(ARG(2), 0); STDRET(2, 0x887600FFu); }   // DDERR_NOTFOUND
+    g_obj[g_primary].refs++;
+    W32(ARG(2), g_obj[g_primary].guest);
+    STDRET(2, DD_OK);
+}
+static void dd_flip_to_gdi(CPU *c) { HOSTFN; STDRET(1, DD_OK); }
+
 static void clip_get_hwnd(CPU *c) { HOSTFN; W32(ARG(2), 0x00010010u); STDRET(2, DD_OK); }
 static void clip_changed(CPU *c) { HOSTFN; if (ARG(2)) W32(ARG(2), 0); STDRET(2, DD_OK); }
 
@@ -500,7 +512,8 @@ static void build_vtables(void) {
         {0, com_qi, "IDirectDraw::QueryInterface"}, {1, com_addref, "IDirectDraw::AddRef"},
         {2, com_release, "IDirectDraw::Release"}, {4, dd_create_clipper, "IDirectDraw::CreateClipper"},
         {5, dd_create_palette, "IDirectDraw::CreatePalette"}, {6, dd_create_surface, "IDirectDraw::CreateSurface"},
-        {11, dd_get_caps, "IDirectDraw::GetCaps"}, {12, dd_get_display_mode, "IDirectDraw::GetDisplayMode"},
+        {10, dd_flip_to_gdi, "IDirectDraw::FlipToGDISurface"}, {11, dd_get_caps, "IDirectDraw::GetCaps"},
+        {14, dd_get_gdi_surface, "IDirectDraw::GetGDISurface"}, {12, dd_get_display_mode, "IDirectDraw::GetDisplayMode"},
         {19, dd_restore_mode, "IDirectDraw::RestoreDisplayMode"}, {20, dd_set_coop, "IDirectDraw::SetCooperativeLevel"},
         {21, dd_set_mode, "IDirectDraw::SetDisplayMode"}, {22, dd_wait_vblank, "IDirectDraw::WaitForVerticalBlank"},
         {0, NULL, NULL}};

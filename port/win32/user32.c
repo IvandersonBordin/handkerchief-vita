@@ -31,8 +31,21 @@ U(CreateWindowExA) {
     rt_apply_res();
     STDRET(12, HWND_MAIN);
 }
-U(DestroyWindow) { STDRET(1, 1); }
-U(ShowWindow) { plat_show_window(); STDRET(2, 1); }
+// Dialogs (port/hk/dialog.c) have their own window handles.
+int hk_dlg_destroy(CPU *c, uint32_t hwnd);
+int hk_dlg_show(uint32_t hwnd, int cmd);
+int hk_dlg_set_focus(uint32_t hwnd);
+int hk_dlg_active(void);
+void hk_dlg_keys(CPU *c, const uint8_t *pressed_vks, int n);
+void hk_dlg_refresh(void);
+U(DestroyWindow) { HOSTFN; hk_dlg_destroy(c, ARG(1)); STDRET(1, 1); }
+U(ShowWindow) {
+    HOSTFN;
+    int was = hk_dlg_show(ARG(1), (int)ARG(2));
+    if (was >= 0) STDRET(2, (uint32_t)was);
+    plat_show_window();
+    STDRET(2, 1);
+}
 U(UpdateWindow) { STDRET(1, 1); }
 U(GetWindowPlacement) {
     HOSTFN;
@@ -63,22 +76,28 @@ U(MessageBoxA) {
 // queued for the window procedure like Windows does; GetKeyState keeps answering from the same state.
 static void post_due_timers(void);
 static void timer_delivered(uint32_t id);
-static void post_key_changes(void) {
+// While a dialog is up, key presses go to it (hk_dlg_keys) instead of the game's window.
+static void post_key_changes(CPU *c) {
     post_due_timers();
     static const uint8_t keys[] = {0x25, 0x26, 0x27, 0x28, 0x0D, 0x1B, 0x20, 0x10, 0x11, 0x12, 0x71, 'Z', 'X', 'C', 'A', 'S'};
     static uint8_t down[256];
+    uint8_t pressed[sizeof keys];
+    int npressed = 0, dlg = hk_dlg_active();
     for (unsigned i = 0; i < sizeof keys; i++) {
         int vk = keys[i], d = plat_vk_down(vk) != 0;
         if (d == down[vk]) continue;
         down[vk] = (uint8_t)d;
+        if (dlg) { if (d) pressed[npressed++] = (uint8_t)vk; continue; }
         w32_post_message(HWND_MAIN, d ? 0x100u : 0x101u, (uint32_t)vk, d ? 1u : 0xC0000001u);
     }
+    if (dlg) hk_dlg_keys(c, pressed, npressed);
 }
 
 U(PeekMessageA) {
     HOSTFN;
     uint32_t msg = ARG(1);
-    post_key_changes();
+    post_key_changes(c);
+    hk_dlg_refresh();
     if (plat_pump_events() || g_quit_posted) {
         memset(mb + msg, 0, 28);
         W32(msg + 4, 0x12); // WM_QUIT
@@ -160,7 +179,8 @@ U(GetMessageA) {   // blocking PeekMessage: WM_QUIT -> 0, otherwise a WM_NULL ev
     uint32_t msg = ARG(1);
     memset(mb + msg, 0, 28);
     if (plat_pump_events() || g_quit_posted) { W32(msg + 4, 0x12); STDRET(4, 0); }
-    post_key_changes();
+    post_key_changes(c);
+    hk_dlg_refresh();
     // HDKWIN.EXE peeks with PM_NOREMOVE, then takes the message with GetMessageA (0x40EA33): it must come off the queue.
     if (g_post_lock && g_nposted) {
         SDL_LockMutex(g_post_lock);
@@ -228,7 +248,7 @@ U(GetKeyState) {
 }
 U(FindWindowA) { STDRET(2, 0); }   // no other running instance
 U(IsIconic) { STDRET(1, 0); }
-U(SetFocus) { HOSTFN; STDRET(1, ARG(1)); }
+U(SetFocus) { HOSTFN; hk_dlg_set_focus(ARG(1)); STDRET(1, ARG(1)); }
 U(SetForegroundWindow) { STDRET(1, 1); }
 U(SetWindowPos) { STDRET(7, 1); }
 U(AdjustWindowRectEx) { STDRET(4, 1); }
@@ -290,3 +310,22 @@ U(LoadStringA) {   // (hInstance, id, buffer, buffer size): from the image's str
 }
 U(DrawTextA) { ONCE("DrawTextA"); STDRET(5, 16); }
 U(DrawTextW) { ONCE("DrawTextW"); STDRET(5, 16); }
+
+// One pass of a modal dialog's message loop (DialogBoxParamA, port/hk/dialog.c): keys go to the dialog, timers
+// and posted messages are dispatched as Windows' modal loop does.
+void w32_modal_step(CPU *c) {
+    if (plat_pump_events()) g_quit_posted = 1;
+    post_key_changes(c);
+    for (int guard = 0; guard < 32 && g_post_lock && g_nposted; guard++) {
+        SDL_LockMutex(g_post_lock);
+        if (!g_nposted) { SDL_UnlockMutex(g_post_lock); break; }
+        uint32_t m[4] = {g_posted[0].hwnd, g_posted[0].msg, g_posted[0].wp, g_posted[0].lp};
+        memmove(&g_posted[0], &g_posted[1], (size_t)(--g_nposted) * sizeof g_posted[0]);
+        SDL_UnlockMutex(g_post_lock);
+        if (m[1] == 0x113) {
+            timer_delivered(m[2]);
+            for (int i = 0; i < 16; i++)
+                if (g_timers[i].used && g_timers[i].id == m[2] && g_timers[i].proc) rt_guest_call(c, g_timers[i].proc, 4, m[0], 0x113u, m[2], w32_tick_ms());
+        } else if (m[1] != 0x100 && m[1] != 0x101 && g_wndproc) rt_guest_call(c, g_wndproc, 4, m[0], m[1], m[2], m[3]);
+    }
+}

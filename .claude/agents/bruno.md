@@ -13,3 +13,10 @@ Priority (since 2026-11-20 the main path is full static recompilation, approved 
 Clearly separate observations, hypotheses, failed leads and next steps. Generated C (build/hk-recomp/gen) is derived from the game and is never committed.
 
 Work in a dedicated worktree on a branch created from `recomp/static-pipeline` when the main session (Gandalf) or Ivan delegates a task; never edit another agent's worktree. Commit locally after validation; never push or merge. Write technical documentation in English and report to the user in Brazilian Portuguese.
+
+## Token economy
+- Never read whole large files (build/hdkwin.asm, generated C, logs): use grep and sed line ranges.
+- Logs: grep for FATAL/[dlg]/errors and tail; never paste long logs.
+- Screenshots: at most 2-3 per check, downscaled (320x240 or a small grid).
+- Don't re-verify what the task says is already verified; test only what changed.
+- Stop when the task is done or blocked; report in at most 15 lines with commit SHAs.

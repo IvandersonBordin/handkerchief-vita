@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "deny": [
+      "Edit(**/original-data/**)",
+      "Write(**/original-data/**)",
+      "Read(**/.codex/auth.json)",
+      "Read(**/.claude/.credentials.json)",
+      "Read(**/build/vita-agent-identity/**)",
+      "Bash(git push --force*)",
+      "Bash(git reset --hard*)",
+      "Bash(sudo *)"
+    ],
+    "ask": [
+      "Bash(git push*)",
+      "Bash(git merge*)"
+    ]
+  }
+}

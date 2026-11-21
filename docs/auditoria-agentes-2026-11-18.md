@@ -1,5 +1,7 @@
 # Auditoria noturna de Bruno e Carlos — 18/11/2026
 
+> Historical record. The Codex executor described here was retired on 2026-11-20; see [claude-code-workflow.md](claude-code-workflow.md).
+
 ## Evidências e correções
 
 Conferidos ExecStart e TimersMonotonic das quatro unidades de usuário, o launcher real, o publicador, os estados persistentes e os logs do journal. O executor instalado era idêntico ao arquivo versionado antes da edição. A substituição foi atômica e a nova cópia também foi comparada com o repositório. Os serviços e timers seguiram sem reinício.

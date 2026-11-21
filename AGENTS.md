@@ -12,7 +12,7 @@ graphics API, or asset formats.
 - OS: Manjaro KDE Linux
 - Shell: Zsh
 - Editor: Visual Studio Code
-- AI Agent: OpenAI Codex
+- AI Agent: Claude Code (see [docs/claude-code-workflow.md](docs/claude-code-workflow.md))
 - Version Control: Git
 - Target Platform: PlayStation Vita
 - Porting Skill: vita-port (.agents/skills/vita-port/SKILL.md)
@@ -31,7 +31,6 @@ graphics API, or asset formats.
 - When an agent finishes a step and must wait for another task, agent review, or technical dependency, write **Aguardando automaticamente:** and explain why. Do not request a response from Ivan when no user action is needed.
 - **Only when human action is essential**, begin the message with the exact phrase **Ivan, preciso de você.** Then state the decision, authorization, information, or physical Vita test needed and why.
 - Do not use that phrase for ordinary progress updates, inter-agent reviews, pending tasks, or automatic waits.
-- The `CONTINUAR:` and `AGUARDAR:` markers may remain at the end of technical logs when needed by the local executor, but must be accompanied by the clear explanation above. They are internal signals, not commands for Ivan to type.
 - These communication rules do not override authorization, quota, scope, or validation requirements.
 
 ## Safety
@@ -66,12 +65,11 @@ When applying the `vita-port` skill to this project, consult the [recompilation 
 
 ## Token Usage and Quota Control — Priority Rules
 
-- Timers check locally every five minutes for authorized work. The normal interval between model calls is five minutes. After publishing changes beyond the activity log, allow one continuation on the next trigger if there is a concrete, previously authorized next action. Then restore the normal interval.
-- An agent ends its summary with `CONTINUAR: <concrete action>` or `AGUARDAR: <dependency or completion>`. An explicit wait or a cycle without a new commit suspends calls until coordination records a new task or evidence and removes that agent's state file (`bruno.schedule` or `carlos.schedule` in the quota-lock directory).
-- Before calling Codex, the executor must check the shared quota lock locally. If either agent receives a `usage limit` error, block further calls from both agents. Resume manually only after confirming quota renewal and receiving Ivan's request.
+- There is no scheduled automation. Agents run only when Ivan requests them in a Claude Code session. Enabling any scheduler requires a separately reviewed proposal and Ivan's explicit authorization.
+- Claude Code usage limits are shared with Ivan's interactive use. Avoid polling, idle agent calls and repeated investigations. On a usage-limit error, stop cleanly and do not retry until Ivan confirms the quota has renewed.
 - Reuse recorded evidence. If a task depends on hardware, a decision, or missing information, record the blocker once and wait for a change. Do not repeat investigations, tests, or commits solely to record another waiting cycle.
 
-## Automatic Validation and Publication
+## Validation and Publication
 
 After each implementation or documentation task in this project:
 
@@ -79,20 +77,18 @@ After each implementation or documentation task in this project:
 2. Run `git diff --check`, review the diff, and inspect created, modified, and deleted files. Also inspect staged content with `git diff --cached` and `git diff --cached --check` before committing.
 3. Stage only files belonging to the task. Avoid `git add .`. Exclude `original-data/`, `build/`, commercial executables, temporary files, credentials, and secrets.
 4. If errors, unexpected changes, or security concerns arise, stop publication and notify the user.
-5. Once checks pass, create a descriptive commit and run `git push origin main`. Authorization covers normal commits and pushes for requested project tasks.
+5. Once checks pass, create a descriptive commit. Agents commit only on their own branch and worktree. `git push` and merges into `main` require Ivan's explicit approval.
 6. Preserve user changes and history. Authorization excludes destructive operations, `push --force`, `reset --hard`, and history rewriting. If the push is rejected, stop and report the conflict.
-7. On completion, report the commit SHA, checks performed, push result, and Git status.
+7. On completion, report the commit SHA, checks performed, push status, and Git status.
 
 ## Scope Control
 Do not start unrelated tasks.
 Do not create multiple agents unless explicitly requested.
 Do not perform large refactors without approval.
 
-## Coordination Between ChatGPT and Local Codex
+## Coordination
 
-- ChatGPT in the browser serves as project lead: it defines goals, priorities, acceptance criteria, and reviews deliverables using GitHub Issues.
-- Codex in VS Code is the local executor: it reads the assigned issue, inspects local files, implements changes, runs tests, and reports evidence.
-- Before starting new work, inspect the specified GitHub issue and follow its acceptance criteria. Do not invent additional requirements.
-- Keep an execution summary in the issue: evidence, tests, limitations, commit, and push result. Do not publish proprietary binaries, screenshots, or data from `original-data/` in the issue.
-- For every task that changes files, follow the automatic validation and publication procedure above. If blocked or facing material ambiguity, record it in the issue and ask the user to decide; do not replace evidence with assumptions.
-- ChatGPT cannot control or automatically start this local Codex session. Execution requires an active VS Code session and appropriate authorization.
+- Ivan sets goals and priorities. Gandalf (`.claude/agents/gandalf.md`) plans small task sequences, reviews evidence, and delegates to Bruno (reverse engineering) and Carlos (Vita/C implementation).
+- GitHub Issues are task records with acceptance criteria; they are not unconditional permission for sensitive actions. Inspect the relevant issue before starting work and do not invent additional requirements.
+- Keep an execution summary: evidence, tests, limitations, commit, and push status. Do not publish proprietary binaries, screenshots, or data from `original-data/`.
+- If blocked or facing material ambiguity, record it and ask Ivan to decide; do not replace evidence with assumptions.

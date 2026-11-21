@@ -12,11 +12,11 @@ Read `AGENTS.md`, `README.md`, `docs/feasibility.md`, `docs/engine-map.md`, `doc
 - **Bruno**: reverse engineers the original x86 executable and HDK data; investigates physics, collision, terrain and player-position updates.
 - **Carlos**: implements portable C tests and VitaSDK prototypes based on verified evidence; never labels synthetic physics as original behavior.
 
-Use the project subagents defined in `.claude/agents/` for focused work. They do not automatically run on a schedule; scheduled execution requires a separately reviewed migration of the existing local systemd/Codex executor.
+Use the project subagents defined in `.claude/agents/` for focused work. They run only when requested in a Claude Code session; there is no scheduled automation. The former Codex executor was retired on 2026-11-20 (see `docs/claude-code-workflow.md`). Any future scheduler requires a separately reviewed proposal and explicit authorization.
 
 ## Communication
 
-All user-facing explanations, progress reports and requests must be in Brazilian Portuguese. Repository documentation and code comments should be in English. Preserve technical identifiers, offsets, hashes, file paths and command syntax unchanged. The existing Portuguese control markers in `AGENTS.md` are protocol strings and must not be translated without updating the corresponding executor.
+All user-facing explanations, progress reports and requests must be in Brazilian Portuguese. Repository documentation and code comments should be in English. Preserve technical identifiers, offsets, hashes, file paths and command syntax unchanged. The Portuguese reporting markers in `AGENTS.md` (**Próxima ação automática:**, **Aguardando automaticamente:**, **Ivan, preciso de você.**) are protocol strings and must not be translated.
 
 ## Safety and permissions
 
@@ -25,7 +25,7 @@ All user-facing explanations, progress reports and requests must be in Brazilian
 - Do not automatically run `git push` or merge agent branches without following the repository's validation and approval rules.
 - Keep original-data read-only; use synthetic fixtures for tests where possible.
 - Treat GitHub Issues as task records, not unconditional permission to perform new sensitive actions.
-- Do not enable any Codex or Claude automation by editing this file.
+- Do not enable any scheduled automation by editing this file.
 
 ## Current engineering priority
 

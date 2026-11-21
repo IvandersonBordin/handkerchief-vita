@@ -1,5 +1,7 @@
 # Auditoria técnica de Gandalf — 19/11/2026
 
+> Historical record. The Codex executor described here was retired on 2026-11-20; see [claude-code-workflow.md](claude-code-workflow.md).
+
 ## A. Inventário
 
 | Base inspecionada | Estado observado |

@@ -44,12 +44,17 @@ Without `HK_HEADLESS` a window shows the game's primary surface.
 - `build/hk-vita/handkerchief.vpk` (local only, derived from HDKWIN.EXE: never publish), title `HKRC00010`,
   SHA-256 `9a28d273850441f91f3ed3870cfbb0cdef42aa1985fb335d56421ea24519aec3`. Built 2026-11-20 with
   `cmake -S port/vita -B build/hk-vita -DCMAKE_BUILD_TYPE=Release && cmake --build build/hk-vita -j8`;
-  the skill's check_vpk.py reports 0 errors. **Not yet run on the console.** Expected: intro, title and
+  the skill's check_vpk.py reports 0 errors. **Installed and run on the console on 2026-11-20** (PCH-1010,
+  firmware 3.65, via vita-agent-use): it boots and stays up at about 26 FPS (one CPU core at 100%,
+  233 MB of 383 MB USER_RW used); Start on the title loads HdkSKY00.BMP (NEW GAME begins). Stage A0
+  was not reached within 15 s before the app was closed; vita-agent-use screen capture returns
+  frame_unavailable for this app, so the screen was not observed remotely. Expected: intro, title and
   stage A0 with the provisional pad mapping. Needs the player's game files in `ux0:data/handkerchief/` (HDKWIN.EXE,
   BITMAP/, SYSTEM/, USER/, WAV/); log in `ux0:data/handkerchief/hklog.txt`.
-- Console tools: the Vita runs firmware 3.65 with vita-agent-use installed (VitaCompanion ports 1337/1338
-  refuse connections). Using the vita-agent-use pairing identity in build/vita-agent-identity needs Ivan's
-  explicit permission (protected by the project's deny rules).
+- Console tools: vita-agent-use (Ivan authorized the identity in build/vita-agent-identity on 2026-11-20 to
+  connect, upload, install HKRC00010 and capture the screen). Game data is in ux0:data/handkerchief/
+  (all files verified except XSIVGA~1.AVI: the Vita refuses '~' in the name; no import plays video).
+  Upload tip: give `--transfer-state` a fresh file outside the identity folder after an interrupted upload.
 - Earlier prototypes: `build/vista-walk/vista_walk.vpk`, `build/recomp-*/` diagnostics (HKRC00001-00006).
 - SDL2 2.32.8 for VitaSDK was installed into ~/vitasdk from the official vitasdk-autobuild package
   (SHA-256 checked) because the SDK's vdpm has no pacman client.

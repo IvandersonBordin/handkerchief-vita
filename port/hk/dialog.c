@@ -31,6 +31,7 @@ typedef struct {
     char text[160];
     int checked, enabled, visible;
     int nitems, cursel, top;
+    int limit;               // EM_LIMITTEXT (0: the port's 159-character buffer)
     char (*items)[48];
     uint32_t *itemdata;
 } Ctl;
@@ -307,6 +308,16 @@ static void text_box(uint32_t *fb, int x, int y, int w, int h, const char *s, in
     }
 }
 
+// EDIT controls take text: typed on a keyboard while focused (PC), or through the system keyboard (Vita IME),
+// opened by pressing the control (Cross). ES_READONLY (0x800) controls only show text.
+static Ctl *g_ime_ctl;   // the EDIT the system keyboard is editing
+static int editing(const Ctl *t) { return t->cls == C_EDIT && t->enabled && t->visible && !(t->style & 0x800u); }
+static int edit_limit(const Ctl *t) { return t->limit > 0 && t->limit < 159 ? t->limit : 159; }
+static void set_edit_text(Ctl *t, const char *s) {
+    snprintf(t->text, sizeof t->text, "%s", s);
+    if ((int)strlen(t->text) > edit_limit(t)) t->text[edit_limit(t)] = 0;
+}
+
 static const char *item_text(const Ctl *t, int i) { return i >= 0 && i < t->nitems ? t->items[i] : ""; }
 
 static void draw_ctl(uint32_t *fb, const Dlg *d, const Ctl *t, int focused) {
@@ -364,12 +375,17 @@ static void draw_ctl(uint32_t *fb, const Dlg *d, const Ctl *t, int focused) {
         if ((t->style & 0x1fu) == 0xEu) break;                                                 // SS_BITMAP
         text_box(fb, x, y, w, h, t->text, (int)(t->style & 3u), (t->style & 0x200u) != 0, ink);   // SS_CENTERIMAGE: vertically centred
         break;
-    case C_EDIT:
+    case C_EDIT: {
         fill(fb, x, y, w, h, t->enabled ? C_LIGHT : C_FACE);
         frame(fb, x, y, w, h, C_SHADOW, C_LIGHT);
-        put_text(fb, x + 3, ty, t->text, C_DARK, x + w - 2);
+        int a = (int)(t->style & 3u), tw = text_w(t->text);   // ES_CENTER 1, ES_RIGHT 2
+        int tx = a == 1 ? x + (w - tw) / 2 : a == 2 ? x + w - 3 - tw : x + 3;
+        if (tx < x + 3) tx = x + 3;
+        put_text(fb, tx, ty, t->text, C_DARK, x + w - 2);
+        if (focused && editing(t)) fill(fb, tx + tw + 1 < x + w - 2 ? tx + tw + 1 : x + w - 3, ty, 1, font()->cell, C_DARK);   // caret
         if (focused) frame(fb, x - 2, y - 2, w + 4, h + 4, C_FOCUS, C_FOCUS);
         break;
+    }
     case C_COMBO:
         fill(fb, x, y, w, h, t->enabled ? C_LIGHT : C_FACE);
         frame(fb, x, y, w, h, C_SHADOW, C_LIGHT);
@@ -418,11 +434,13 @@ static void draw_drop(uint32_t *fb, const Dlg *d, const Ctl *t) {
 #define HINT_DROP "Up/Down: choose   Cross: select   Circle: back"
 #define HINT_DLG "D-pad: move   Cross: select   Triangle: OK   Circle: cancel"
 #define HINT_LIST "Up/Down: choose   Cross: keep   Circle: undo"
+#define HINT_EDIT "Cross: type text   Triangle: OK   Circle: cancel"
 #else
 #define HINT_BAR "Left/Right: menu   Enter: open   Esc/F10: close"
 #define HINT_DROP "Up/Down: choose   Enter: select   Esc: back"
 #define HINT_DLG "Arrows: move   Space: select   Enter: OK   Esc: cancel"
 #define HINT_LIST "Up/Down: choose   Enter/Space: keep   Esc: undo"
+#define HINT_EDIT "Type text   Backspace: erase   Enter: OK   Esc: cancel"
 #endif
 static void menu_draw(uint32_t *fb) {
     const int bh = 20;
@@ -482,6 +500,7 @@ void hk_dlg_overlay(uint32_t *fb) {
         if (d->drop && d->focus >= 0) draw_drop(fb, d, &d->ctl[d->focus]);
         if (d == top_dlg()) {
             const char *hint = d->drop ? HINT_LIST : HINT_DLG;
+            if (d->focus >= 0 && editing(&d->ctl[d->focus])) hint = g_ime_ctl ? "System keyboard open" : HINT_EDIT;
             int hy = d->y + d->h + 4 < 466 ? d->y + d->h + 4 : 466;
             for (int j = 1; j < MAX_DLG; j++)   // over another dialog: at the bottom of the screen instead
                 if (&g_dlg[j] != d && g_dlg[j].used && g_dlg[j].visible && hy + 14 > g_dlg[j].y && hy < g_dlg[j].y + g_dlg[j].h) hy = 466;
@@ -537,6 +556,7 @@ static Dlg *dlg_create(CPU *c, uint32_t res, uint32_t proc, uint32_t param, int 
     return d;
 }
 static void dlg_free(Dlg *d) {
+    plat_text_enable(0);
     for (int i = 0; i < MAX_CTL; i++) { free(d->ctl[i].items); free(d->ctl[i].itemdata); d->ctl[i].items = NULL; d->ctl[i].itemdata = NULL; }
     d->used = 0; d->visible = 0;
     void hk_dd_present(void);
@@ -627,6 +647,16 @@ static void dlg_input(CPU *c, int keys) {
         keys |= K_OK;
     }
     if (keys & K_OK) {
+        if (f && editing(f) && !plat_has_keyboard()) {
+            const char *title = d->title;   // the group box around the control names it ("SAVE DATA" in 1499)
+            for (int i = 0; i < d->n; i++) {
+                Ctl *g = &d->ctl[i];
+                if (g->cls == C_BUTTON && btype(g) == 7 && g->text[0] && f->x >= g->x && f->y >= g->y &&
+                    f->x + f->w <= g->x + g->w && f->y + f->h <= g->y + g->h) title = g->text;
+            }
+            if (plat_text_open(title, f->text, edit_limit(f))) g_ime_ctl = f;
+            return;
+        }
         if (f && f->cls == C_COMBO) { if (f->enabled && f->nitems) { d->drop = 1; d->drop_orig = f->cursel; } return; }
         if (f) click(c, d, f);
         return;
@@ -687,8 +717,38 @@ static void menu_input(int keys) {
 // Key transitions while a dialog is up: called by USER32's message functions instead of posting WM_KEYDOWN.
 // Several keys pressed together (pad Cross sends X and space) count as one action.
 void hk_dlg_keys(CPU *c, const uint8_t *pressed_vks, int n) {
+    Dlg *d = top_dlg();
+    if (g_ime_ctl) {   // the system keyboard is up: wait for it, the pad belongs to it
+        char buf[160];
+        int st = plat_text_status(buf, sizeof buf);
+        if (st) {
+            Ctl *t = g_ime_ctl;
+            g_ime_ctl = NULL;
+            if (st == 1 && d && t >= d->ctl && t < d->ctl + d->n) {
+                set_edit_text(t, buf);
+                command(c, d, t, 0x300u);   // EN_CHANGE
+            }
+            rt_log("[dlg] system keyboard closed (%s)\n", st == 1 ? "text accepted" : "cancelled");
+        }
+        refresh();
+        return;
+    }
+    Ctl *f = d && d->focus >= 0 ? &d->ctl[d->focus] : NULL;
+    int typing = f && editing(f) && plat_has_keyboard();
+    plat_text_enable(typing);
+    if (typing) {   // PC: typed characters go into the focused EDIT; letters and space no longer act as dialog keys
+        char buf[64];
+        int m = plat_text_typed(buf, sizeof buf), changed = 0;
+        for (int i = 0; i < m; i++) {
+            size_t len = strlen(f->text);
+            if (buf[i] == '\b') { if (len) { f->text[len - 1] = 0; changed = 1; } }
+            else if ((int)len < edit_limit(f)) { f->text[len] = buf[i]; f->text[len + 1] = 0; changed = 1; }
+        }
+        if (changed) command(c, d, f, 0x300u);   // EN_CHANGE
+    }
     int keys = 0;
-    for (int i = 0; i < n; i++)
+    for (int i = 0; i < n; i++) {
+        if (typing && (pressed_vks[i] == 0x20 || (pressed_vks[i] >= 'A' && pressed_vks[i] <= 'Z'))) continue;
         switch (pressed_vks[i]) {
         case 0x26: keys |= K_UP; break;
         case 0x28: keys |= K_DOWN; break;
@@ -699,6 +759,7 @@ void hk_dlg_keys(CPU *c, const uint8_t *pressed_vks, int n) {
         case 0x1B: case 'Z': keys |= K_CANCEL; break;
         default: break;
         }
+    }
     if (keys && top_dlg()) dlg_input(c, keys);
     else if (keys && menu_shown()) menu_input(keys);
     refresh();
@@ -914,7 +975,7 @@ static uint32_t ctl_message(CPU *c, Dlg *d, Ctl *t, uint32_t msg, uint32_t wp, u
     case 0x0E: return (uint32_t)strlen(t->text);                                     // WM_GETTEXTLENGTH
     case 0xF0: return (uint32_t)t->checked;                                          // BM_GETCHECK
     case 0xF1: t->checked = (int)wp; return 0;                                       // BM_SETCHECK
-    case 0xC5: return 0;                                                             // EM_LIMITTEXT
+    case 0xC5: t->limit = (int)wp; return 0;                                         // EM_LIMITTEXT
     case 0xF5: click(c, d, t); return 0;                                             // BM_CLICK
     }
     if (cb || t->cls == C_LISTBOX) {

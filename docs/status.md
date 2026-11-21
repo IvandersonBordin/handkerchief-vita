@@ -46,8 +46,11 @@ Main path: full static recompilation of `HDKWIN.EXE` (see [static-recomp.md](sta
   Settings: HDKWIN.EXE keeps them in a CConfig object built with defaults at every start (0x414CF6) and never
   stores them; the port saves CConfig +0x04..+0x9B to hkconfig.txt in the game folder after OK in 1491/1492 and
   loads it through a recompiler hook at 0x414D0B (recomp/image_patches.py HOOKS: regenerate build/hk-recomp/gen).
-  Not done: typing in edit boxes (save names keep the game's default "Data N [date]"), the 1490 secret options
-  (editor menu only). Remapping a key to one the pad cannot send makes that action unusable on the Vita until
+  Text in EDIT controls (save name, dialog 1499): on PC typed while the control has the focus (SDL text input,
+  Backspace erases, EM_LIMITTEXT respected; HK_TEXT=frame:text types in headless tests, '~' = Backspace); verified:
+  "Ivan's save 1" typed, saved and found in User02.HDK. On the Vita, Cross on the control opens the system
+  keyboard (sceImeDialog, drawn by SDL's GXM renderer through sceCommonDialogUpdate) with the current text;
+  compiles and links, **not tested on the console**. Not done: the 1490 secret options (editor menu only). Remapping a key to one the pad cannot send makes that action unusable on the Vita until
   Reset.
 - Ivan's console test (2026-11-20): the game plays correctly on the Vita, colours look right, Start enters
   the stage, Select quits; requests were a jump button and shooting on Cross, then jump on Square and pause on Start (all done in
@@ -122,9 +125,10 @@ Without `HK_HEADLESS` a window shows the game's primary surface.
 
 ## VPKs available for console tests
 
-- 2026-11-21 (dialogs and menu, not tested on the console): `build/hk-vita/handkerchief.vpk`, SHA-256
-  `607ef55b6f9f2dc64b2288be1b524a0ef0c18939b57bb814d6a39fa14c94048b`, check_vpk.py 0 errors. To test: Start, then
-  Select opens the game's menu; Option > Game / Key Configuration; Cross selects, Triangle = OK, Circle cancels.
+- 2026-11-21 (dialogs, menu and system keyboard, not tested on the console): `build/hk-vita/handkerchief.vpk`,
+  SHA-256 `3b942f51c80b853f909d9949c00101470b5259aa8b250d92b6c9ba468ac4a97a`, check_vpk.py 0 errors. To test:
+  Start, then Select opens the game's menu; Option > Game / Key Configuration; Cross selects, Triangle = OK,
+  Circle cancels; File > Save This Game, then Cross on the name field should open the system keyboard.
 
 - `build/hk-vita/handkerchief.vpk` (local only, derived from HDKWIN.EXE: never publish), title `HKRC00010`,
   SHA-256 `9a28d273850441f91f3ed3870cfbb0cdef42aa1985fb335d56421ea24519aec3`. Built 2026-11-20 with

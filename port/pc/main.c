@@ -23,11 +23,59 @@ int plat_message_box(const char *title, const char *text, unsigned type) {
     return SDL_ShowSimpleMessageBox(icon, title_utf8, text_utf8, g_win) == 0 ? 1 : 0;
 }
 
+// Typed text (plat.h): SDL_TEXTINPUT and Backspace while an EDIT control has the focus. HK_TEXT=frame:text[,...]
+// types text at a presented frame for headless tests ('~' stands for Backspace).
+static int g_text_on;
+static char g_typed[256];
+static int g_ntyped;
+static void typed_add(const char *utf8) {
+    for (const unsigned char *p = (const unsigned char *)utf8; *p && g_ntyped < (int)sizeof g_typed - 1; p++) {
+        unsigned ch = *p;
+        if (ch >= 0xC2 && ch <= 0xC3 && (p[1] & 0xC0) == 0x80) { ch = ((ch & 0x1F) << 6) | (p[1] & 0x3F); p++; }   // U+0080-U+00FF
+        else if (ch >= 0x80) { while ((p[1] & 0xC0) == 0x80) p++; ch = '?'; }
+        if (ch >= 0x20 || ch == '\b') g_typed[g_ntyped++] = (char)ch;
+    }
+}
+int plat_has_keyboard(void) { return 1; }
+void plat_text_enable(int on) {
+    if (on == g_text_on) return;
+    g_text_on = on;
+    g_ntyped = 0;
+    if (on) SDL_StartTextInput(); else SDL_StopTextInput();
+}
+int plat_text_typed(char *out, int cap) {
+    const char *s = getenv("HK_TEXT");
+    extern unsigned g_frame;
+    static unsigned done_frame;
+    while (s && *s && g_text_on) {   // scripted text, once per entry
+        char *e;
+        unsigned at = (unsigned)strtoul(s, &e, 10);
+        if (*e != ':') break;
+        const char *t = e + 1, *end = strchr(t, ',');
+        size_t n = end ? (size_t)(end - t) : strlen(t);
+        if (g_frame >= at && at > done_frame) {
+            for (size_t i = 0; i < n && g_ntyped < (int)sizeof g_typed - 1; i++) g_typed[g_ntyped++] = t[i] == '~' ? '\b' : t[i];
+            done_frame = at;
+        }
+        s = end ? end + 1 : t + n;
+    }
+    int n = g_ntyped < cap ? g_ntyped : cap;
+    memcpy(out, g_typed, (size_t)n);
+    memmove(g_typed, g_typed + n, (size_t)(g_ntyped - n));
+    g_ntyped -= n;
+    return n;
+}
+int plat_text_open(const char *title, const char *text, int maxlen) { (void)title; (void)text; (void)maxlen; return 0; }
+int plat_text_status(char *out, int cap) { (void)out; (void)cap; return 2; }
+
 int plat_pump_events(void) {
     SDL_Event e;
     int quit = 0;
-    while (SDL_PollEvent(&e))
+    while (SDL_PollEvent(&e)) {
         if (e.type == SDL_QUIT) quit = 1;
+        else if (e.type == SDL_TEXTINPUT && g_text_on) typed_add(e.text.text);
+        else if (e.type == SDL_KEYDOWN && g_text_on && e.key.keysym.sym == SDLK_BACKSPACE) typed_add("\b");
+    }
     return quit;
 }
 

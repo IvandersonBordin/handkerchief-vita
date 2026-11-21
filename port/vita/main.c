@@ -7,6 +7,8 @@
 #include <psp2/io/stat.h>
 #include <psp2/power.h>
 #include <psp2/kernel/threadmgr.h>
+#include <psp2/ime_dialog.h>
+#include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include "hk/font_data.h"
@@ -31,6 +33,56 @@ void plat_show_window(void) {}
 int plat_message_box(const char *title, const char *text, unsigned type) {
     rt_log("[msgbox] %s: %s (type %u)\n", title ? title : "", text ? text : "", type);
     return 0;   // no implicit answer
+}
+
+// Text entry (plat.h): the system keyboard (IME dialog). SDL's GXM renderer calls sceCommonDialogUpdate on every
+// SDL_RenderPresent, which draws the dialog; the game's dialog keeps presenting while it waits (port/hk/dialog.c).
+// Not tested on the console yet.
+static SceWChar16 g_ime_title[SCE_IME_DIALOG_MAX_TITLE_LENGTH], g_ime_init[SCE_IME_DIALOG_MAX_TEXT_LENGTH + 1],
+    g_ime_text[SCE_IME_DIALOG_MAX_TEXT_LENGTH + 1];
+static int g_ime_open;
+static void latin1_to_utf16(SceWChar16 *out, int cap, const char *s) {
+    int n = 0;
+    for (; s && *s && n < cap - 1; s++) out[n++] = (uint8_t)*s;
+    out[n] = 0;
+}
+int plat_has_keyboard(void) { return 0; }
+void plat_text_enable(int on) { (void)on; }
+int plat_text_typed(char *out, int cap) { (void)out; (void)cap; return 0; }
+int plat_text_open(const char *title, const char *text, int maxlen) {
+    if (g_ime_open) return 1;
+    if (maxlen <= 0 || maxlen > SCE_IME_DIALOG_MAX_TEXT_LENGTH) maxlen = SCE_IME_DIALOG_MAX_TEXT_LENGTH;
+    latin1_to_utf16(g_ime_title, SCE_IME_DIALOG_MAX_TITLE_LENGTH, title);
+    latin1_to_utf16(g_ime_init, maxlen + 1, text);
+    memset(g_ime_text, 0, sizeof g_ime_text);
+    SceImeDialogParam p;
+    sceImeDialogParamInit(&p);
+    p.supportedLanguages = SCE_IME_LANGUAGE_ENGLISH;
+    p.languagesForced = SCE_TRUE;
+    p.type = SCE_IME_TYPE_BASIC_LATIN;
+    p.textBoxMode = SCE_IME_DIALOG_TEXTBOX_MODE_WITH_CLEAR;
+    p.title = g_ime_title;
+    p.maxTextLength = (SceUInt32)maxlen;
+    p.initialText = g_ime_init;
+    p.inputTextBuffer = g_ime_text;
+    int r = sceImeDialogInit(&p);
+    rt_log("[ime] sceImeDialogInit -> %08x\n", (unsigned)r);
+    g_ime_open = r >= 0;
+    return g_ime_open;
+}
+int plat_text_status(char *out, int cap) {
+    if (!g_ime_open) return 2;
+    if (sceImeDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) return 0;
+    SceImeDialogResult r;
+    memset(&r, 0, sizeof r);
+    sceImeDialogGetResult(&r);
+    sceImeDialogTerm();
+    g_ime_open = 0;
+    if (r.button != SCE_IME_DIALOG_BUTTON_ENTER) return 2;
+    int n = 0;
+    for (const SceWChar16 *w = g_ime_text; *w && n < cap - 1; w++) out[n++] = (char)(*w < 256 ? *w : '?');
+    out[n] = 0;
+    return 1;
 }
 
 int plat_pump_events(void) {

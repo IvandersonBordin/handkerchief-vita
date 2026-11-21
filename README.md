@@ -8,6 +8,8 @@
 
 The recompiled game runs on Linux and on a real PS Vita (PCH-1010, firmware 3.65) at its native 25 frames per second.
 
+> **25 FPS is the original game's speed, not a performance limit.** *Handkerchief* was designed to update and draw exactly 25 frames per second, and all of its movement, animation and timing depend on that rate. Running it faster would make the whole game faster. The Vita holds the full 25 FPS; the port only adds an optional on-screen counter to check it.
+
 | Area | State |
 | --- | --- |
 | Intro, title screen, stage A0 | Playable on Linux and on the Vita, verified on hardware |

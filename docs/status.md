@@ -20,8 +20,13 @@ Main path: full static recompilation of `HDKWIN.EXE` (see [static-recomp.md](sta
   WM_KEYDOWN/WM_KEYUP (the game peeks with PM_NOREMOVE and takes messages with GetMessageA at 0x40EA33).
   With Enter on the title (HK_KEYS=1300:0d:6) NEW GAME starts: "TERRITORY 'GOLD FISH'" card, then
   stage A0 from System/a0.HDK with HUD, enemies and explosions (screenshots 1350-2200).
-  Provisional Vita mapping: d-pad/left stick = arrows, Cross = Z, Circle = X, Square = C,
-  Triangle = space, Start = Enter, Select = Esc, L = Shift, R = Ctrl.
+  Key roles found by scripted key tests in A0 (2026-11-20, build/keytest): X shoots, A and Up jump,
+  S crouches; Z, C, V, D, space, Shift, Ctrl, Alt and the mouse buttons showed no visible effect at that
+  point. Menus confirm with Enter/space and go back with Z/X/C/Shift/Ctrl (0x4117D4).
+  Vita mapping (port/vita/main.c): Cross = X + space (shoot / confirm), Circle = A (jump), down = arrow + S
+  (crouch), Square = Z, Triangle = C, L = Shift, R = Ctrl, Start = Enter, Select = Esc.
+- Ivan's console test (2026-11-20): the game plays correctly on the Vita, colours look right, Start enters
+  the stage, Select quits; requests were a jump button and shooting on Cross (done in the mapping above).
 - Missing: GDI text (speech bubbles are empty), sound, save/continue not checked.
 - CRT `memcpy`/`memmove` (`0x45E4B0`/`0x45F6C0`) are native; guest memory is 256 MB on PC (64 MB ran out
   when a 13.9 MB block was requested). Two double frees by the game are logged and ignored, as Windows does.

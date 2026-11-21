@@ -62,7 +62,7 @@ U(MessageBoxA) {
 // Keyboard messages: each key the game uses becomes WM_KEYDOWN / WM_KEYUP on a state change (plat_vk_down),
 // queued for the window procedure like Windows does; GetKeyState keeps answering from the same state.
 static void post_key_changes(void) {
-    static const uint8_t keys[] = {0x25, 0x26, 0x27, 0x28, 0x0D, 0x1B, 0x20, 0x10, 0x11, 0x12, 0x71, 'Z', 'X', 'C'};
+    static const uint8_t keys[] = {0x25, 0x26, 0x27, 0x28, 0x0D, 0x1B, 0x20, 0x10, 0x11, 0x12, 0x71, 'Z', 'X', 'C', 'A', 'S'};
     static uint8_t down[256];
     for (unsigned i = 0; i < sizeof keys; i++) {
         int vk = keys[i], d = plat_vk_down(vk) != 0;

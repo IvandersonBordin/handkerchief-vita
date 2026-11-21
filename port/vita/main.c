@@ -47,8 +47,10 @@ void plat_present_xrgb(const uint32_t *pixels, int width, int height, int pitch_
     SDL_RenderPresent(g_ren);
 }
 
-// Provisional pad mapping (the game's own key roles are not identified yet): d-pad and left stick = arrows,
-// Cross = Z, Circle = X, Square = C, Triangle = space, Start = Enter, Select = Esc, L = Shift, R = Ctrl.
+// Pad mapping, from key tests in stage A0 on 2026-11-20 (docs/status.md): X shoots, A or Up jumps, S crouches.
+// Menus confirm with Enter or space and go back with Z/X/C (0x4117D4), and the game checks confirm first, so
+// Cross sends X + space: it shoots in play and confirms in menus. Circle = A (jump), down = arrow + S (crouch),
+// Square = Z, Triangle = C, L = Shift, R = Ctrl, Start = Enter, Select = Esc.
 int plat_vk_down(int vk) {
     static SceCtrlData pad;
     static uint32_t last_frame = 0xffffffffu;
@@ -60,15 +62,18 @@ int plat_vk_down(int vk) {
         last_frame = g_frame;
     }
     uint32_t b = pad.buttons;
+    int down = (b & SCE_CTRL_DOWN) || pad.ly > 192;
     switch (vk) {
     case 0x25: return (b & SCE_CTRL_LEFT) || pad.lx < 64;
     case 0x26: return (b & SCE_CTRL_UP) || pad.ly < 64;
     case 0x27: return (b & SCE_CTRL_RIGHT) || pad.lx > 192;
-    case 0x28: return (b & SCE_CTRL_DOWN) || pad.ly > 192;
-    case 'Z': return (b & SCE_CTRL_CROSS) != 0;
-    case 'X': return (b & SCE_CTRL_CIRCLE) != 0;
-    case 'C': return (b & SCE_CTRL_SQUARE) != 0;
-    case 0x20: return (b & SCE_CTRL_TRIANGLE) != 0;
+    case 0x28: return down;
+    case 'S': return down;
+    case 'X': return (b & SCE_CTRL_CROSS) != 0;
+    case 0x20: return (b & SCE_CTRL_CROSS) != 0;
+    case 'A': return (b & SCE_CTRL_CIRCLE) != 0;
+    case 'Z': return (b & SCE_CTRL_SQUARE) != 0;
+    case 'C': return (b & SCE_CTRL_TRIANGLE) != 0;
     case 0x0D: return (b & SCE_CTRL_START) != 0;
     case 0x1B: return (b & SCE_CTRL_SELECT) != 0;
     case 0x10: return (b & SCE_CTRL_LTRIGGER) != 0;

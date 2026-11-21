@@ -35,6 +35,7 @@ typedef struct DSBuf {
     struct { uint32_t off, ev; } notify[32];
     uint32_t gen;               // changed by Play/Stop/SetCurrentPosition: the mixer drops stale results
     int dup;                    // started on top of a copy of the same sound: mixed silent (see buf_play)
+    struct DSBuf *dup_of;       // the copy it is silent for; dup_release hands the sound back when that one stops
     float lp[4];                // anti-imaging low-pass state (two one-pole stages, left and right)
     int *shared_refs;           // sample memory shared between duplicates
     struct DSBuf *parent;       // K_NOTIFY: the buffer it belongs to
@@ -48,6 +49,21 @@ static float mix_acc[MIX_FRAMES * 2];
 static uint32_t g_vt_ds, g_vt_buf, g_vt_notify;
 
 static uint32_t g_gen;   // under mx
+
+// Under mx. A buffer that stops (Stop, end of a one-shot, SetCurrentPosition, Release) no longer covers the copies
+// that were mixed silent on top of it: the first of them becomes audible again and the others now wait on it.
+// Before, a silent copy stayed silent until the game stopped it, so a looping sound the game kept playing (and
+// kept updating) disappeared when its in-phase twin was stopped: 14 such cases in 40 s at the first A0 tower.
+static void dup_release(DSBuf *o) {
+    DSBuf *heir = NULL;
+    for (int k = 1; k < MAX_OBJ; k++) {
+        DSBuf *q = g_obj[k];
+        if (!q || q == o || q->kind != K_BUF || !q->dup || q->dup_of != o) continue;
+        if (!q->playing) { q->dup = 0; q->dup_of = NULL; continue; }   // stopped meanwhile: Play decides again
+        if (!heir) { heir = q; q->dup = 0; q->dup_of = NULL; }
+        else q->dup_of = heir;
+    }
+}
 static int now_ok(Uint64 *t_last) {   // true at most once every 5 s
     Uint64 now = SDL_GetPerformanceCounter();
     if (now - *t_last < 5 * SDL_GetPerformanceFrequency()) return 0;
@@ -213,7 +229,7 @@ static void mix(void *ud, Uint8 *stream, int len) {
         if (!alive || b->gen != v->gen || !b->playing) continue;   // released, restarted, stopped or moved
         b->pos = (double)v->pos / 65536.0;
         memcpy(b->lp, v->lp, sizeof b->lp);
-        if (v->ended) b->playing = 0;
+        if (v->ended) { b->playing = 0; dup_release(b); }
         double before = v->before;
         for (int q = 0; q < b->nnotify; q++) {   // position notifications crossed during this block
             uint32_t off = b->notify[q].off;
@@ -232,7 +248,11 @@ static void mix(void *ud, Uint8 *stream, int len) {
         if (!t0) t0 = now;
         if (now - t0 > 5 * SDL_GetPerformanceFrequency() && getenv("HK_TRACE_DS")) {
             rt_log("[mix] max voices %d\n", maxv); maxv = 0; t0 = now;
-            for (int k = 1; k < MAX_OBJ; k++) { DSBuf *q = g_obj[k]; if (q && q->kind == K_BUF && q->playing) rt_log("[mix]  #%d vol %d pan %d freq %u rate %u pos %.0f/%u loop %d\n", k, q->volume, q->pan, q->freq, q->rate, q->pos, q->align ? q->size / q->align : 0, q->looping); }
+            for (int k = 1; k < MAX_OBJ; k++) { DSBuf *q = g_obj[k]; if (q && q->kind == K_BUF && q->playing) {
+                int orphan = 0;   // a silent copy whose twin no longer plays (must not happen, see dup_release)
+                if (q->dup) { orphan = 1; for (int j = 1; j < MAX_OBJ; j++) if (g_obj[j] == q->dup_of && q->dup_of->playing) orphan = 0; }
+                rt_log("[mix]  #%d vol %d pan %d freq %u rate %u pos %.0f/%u loop %d dup %d%s\n", k, q->volume, q->pan, q->freq, q->rate, q->pos, q->align ? q->size / q->align : 0, q->looping, q->dup, orphan ? " ORPHAN" : "");
+            } }
         }
         (void)tsum;
         static uint64_t outn; extern unsigned g_frame;   // HK_TRACE_DS: audio time -> game frame, every second
@@ -295,6 +315,7 @@ static void audio_start(void) {
 
 // Under mx (or before the buffer is visible to the mixer).
 static void free_buffer(DSBuf *b) {
+    dup_release(b);
     if (b->shared_refs && --*b->shared_refs == 0) { gheap_free(b->mem); free(b->shared_refs); }
     obj_unwrap(b);
     free(b);
@@ -413,8 +434,11 @@ static void buf_lock(CPU *c) {
     if (ARG(7)) W32(ARG(7), n - n1);
     STDRET(8, DS_OK);
 }
+#define TR2(name, val) do { static int t2 = -1; if (t2 < 0) { const char *e = getenv("HK_TRACE_DS"); t2 = e && atoi(e) >= 2; } \
+    if (t2) { extern unsigned g_frame; rt_log("[ds2] f%u %s #%u %d pl %d pos %.0f (ret %08x)\n", g_frame, name, R32(b->guest + 4) & 0xffffu, (int)(val), b->playing, b->pos, R32(c->esp)); } } while (0)
 static void buf_play(CPU *c) {   // (this, reserved, priority, flags): DSBPLAY_LOOPING 1
     HOSTFN; BUFN(4);
+    TR2("Play", ARG(4));
     SDL_LockMutex(mx);
     if (!b->playing) {   // Play on a playing buffer only changes the looping flag: keep its position
         b->gen = ++g_gen;
@@ -423,11 +447,11 @@ static void buf_play(CPU *c) {   // (this, reserved, priority, flags): DSBPLAY_L
         // copies add up in phase (block peaks of 5-9x full scale logged on the console), which forced the limiter
         // down to 15% gain and made the whole mix pump. A copy started within 40 ms of another playing copy of
         // the same sample still plays for the game (status, position, notifications) but is mixed silent.
-        b->dup = 0;
+        b->dup = 0; b->dup_of = NULL;
         for (int k = 1; k < MAX_OBJ && b->mem; k++) {
             DSBuf *o = g_obj[k];
             if (o && o != b && o->kind == K_BUF && o->playing && !o->dup && o->mem == b->mem && o->rate &&
-                o->pos < (double)o->rate * 0.04 && o->pos >= b->pos - 1.0) { b->dup = 1; break; }
+                o->pos < (double)o->rate * 0.04 && o->pos >= b->pos - 1.0) { b->dup = 1; b->dup_of = o; break; }
         }
     }
     b->playing = 1;
@@ -437,19 +461,23 @@ static void buf_play(CPU *c) {   // (this, reserved, priority, flags): DSBPLAY_L
 }
 static void buf_set_position(CPU *c) {
     HOSTFN; BUFN(2);
+    TR2("SetPos", ARG(2));
     SDL_LockMutex(mx);
     if (b->align) b->pos = (double)(ARG(2) / b->align);
+    dup_release(b);
     b->gen = ++g_gen;
     SDL_UnlockMutex(mx);
     STDRET(2, DS_OK);
 }
 static void buf_set_format(CPU *c) { HOSTFN; STDRET(2, DS_OK); }   // primary buffer format: the mixer resamples anyway
-static void buf_set_volume(CPU *c) { HOSTFN; BUFN(2); b->volume = (int32_t)ARG(2); STDRET(2, DS_OK); }
-static void buf_set_pan(CPU *c) { HOSTFN; BUFN(2); b->pan = (int32_t)ARG(2); STDRET(2, DS_OK); }
-static void buf_set_frequency(CPU *c) { HOSTFN; BUFN(2); b->freq = ARG(2); STDRET(2, DS_OK); }
+static void buf_set_volume(CPU *c) { HOSTFN; BUFN(2); TR2("Vol", ARG(2)); b->volume = (int32_t)ARG(2); STDRET(2, DS_OK); }
+static void buf_set_pan(CPU *c) { HOSTFN; BUFN(2); TR2("Pan", ARG(2)); b->pan = (int32_t)ARG(2); STDRET(2, DS_OK); }
+static void buf_set_frequency(CPU *c) { HOSTFN; BUFN(2); TR2("Freq", ARG(2)); b->freq = ARG(2); STDRET(2, DS_OK); }
 static void buf_stop(CPU *c) {
     HOSTFN; BUFN(1);
+    TR2("Stop", 0);
     SDL_LockMutex(mx);
+    dup_release(b);
     b->playing = 0;
     b->gen = ++g_gen;
     for (int k = 0; k < b->nnotify; k++)
@@ -511,7 +539,7 @@ static void ds_duplicate(CPU *c) {
     if (!b) { W32(ARG(3), 0); STDRET(3, E_OUTOFMEMORY_); }
     SDL_LockMutex(mx);
     *b = *o;
-    b->playing = 0; b->pos = 0; b->nnotify = 0;
+    b->playing = 0; b->pos = 0; b->nnotify = 0; b->dup = 0; b->dup_of = NULL;
     memset(b->lp, 0, sizeof b->lp);
     if (b->shared_refs) ++*b->shared_refs;
     W32(ARG(3), obj_wrap(b, K_BUF, g_vt_buf));

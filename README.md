@@ -27,6 +27,20 @@ The most important milestone is **a character moving and colliding against A0's 
 
 See [feasibility and strategy](docs/feasibility.md), [engine map](docs/engine-map.md), [HDK format](docs/hdk-format.md), and [prototype test notes](docs/vista-walk.md).
 
+## Development workflow: from Codex to Claude Code
+
+The project was originally developed with an automated **OpenAI Codex CLI** executor (a scheduled cycle of scripts, systemd units and issue workers). On **2026-11-20** that executor was retired and development moved to **[Claude Code](https://claude.com/claude-code)**, used interactively from Visual Studio Code.
+
+The switch brought a substantial productivity gain for this project in the author's experience. Investigations and prototype iterations take fewer round-trips. Reverse-engineering findings are easier to review and keep traceable. Work no longer stalls on failed automated cycles or usage-limit interruptions in the middle of a review.
+
+How the project works with Claude Code today:
+
+- Three project subagents are defined in [`.claude/agents/`](.claude/agents/): **Gandalf** (coordination and evidence review), **Bruno** (x86/HDK reverse engineering) and **Carlos** (portable C and VitaSDK prototypes).
+- Agents run **only when requested** in a Claude Code session; there is no scheduled automation.
+- Pushes and merges into `main` still require the author's explicit approval, and the existing validation rules still apply.
+
+The retired Codex executor remains available in Git history (up to commit `306d7ba`). See [Claude Code workflow](docs/claude-code-workflow.md) for details.
+
 ## Reproducing the data inspection
 
 Requirements: Python 3 and your **own legally obtained copy** of the original game files. On Linux, place the following files locally (paths are case-sensitive):
@@ -66,4 +80,5 @@ This is an unofficial, non-commercial research effort. No original commercial ga
 - [HDK format](docs/hdk-format.md)
 - [Character investigation](docs/character-identification.md)
 - [Vita prototypes and tests](docs/vista-walk.md)
+- [Claude Code workflow](docs/claude-code-workflow.md)
 - [Development and validation guidelines](AGENTS.md)

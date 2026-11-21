@@ -24,15 +24,31 @@ Main path: full static recompilation of `HDKWIN.EXE` (see [static-recomp.md](sta
   S crouches; Z, C, V, D, space, Shift, Ctrl, Alt and the mouse buttons showed no visible effect at that
   point. Menus confirm with Enter/space and go back with Z/X/C/Shift/Ctrl (0x4117D4).
   The game's Key Configuration dialog (resource 1492) names the actions: Move Up/Down/Left/Right, Shoot & Bomb,
-  Turncoat Bomb, Switch & Rotation, Jump, Crouch (option "Move Up to Jump").
+  Turncoat Bomb, Switch & Rotation, Jump, Crouch (option "Move Up to Jump"). Its defaults (seen in the dialog,
+  2026-11-21): arrows move, Z = Switch & Rotation, X = Shoot & Bomb, C = Turncoat Bomb, A = Jump, S = Crouch;
+  joystick buttons 1-5.
   Vita mapping (port/vita/main.c): Cross = X + space (shoot / confirm), Square = A (jump), down = arrow + S
-  (crouch), Circle = Z and Triangle = C (probably Turncoat Bomb and Switch & Rotation, not verified),
-  L = Shift, R = Ctrl, Select = Esc. Start is the port's own pause (darkened frame with a pause sign; the
+  (crouch), Circle = Z (Switch & Rotation), Triangle = C (Turncoat Bomb), L = Shift, R = Ctrl, Select = Esc. Start is the port's own pause (darkened frame with a pause sign; the
   game's clocks skip the paused time through g_pause_qpc). On the title, Cross confirms.
-- Game menus are Win32 dialogs and are not implemented yet: Esc opens resource 1498 "Exit Handkerchief ?"
-  (CreateDialogParamA at 0x40E9D1) and F2 opens a configuration dialog; both first call
-  IDirectDraw::GetGDISurface (slot 14), which stops the run. Dialog IDs used by the game: 0x5D0-0x5DC
-  (1490 secret options, 1491 Game Configuration, 1492 Key Configuration, 1496 network lobby).
+- Win32 dialogs and the menu bar work (port/hk/dialog.c, 2026-11-21): the port draws the game's DIALOG/DIALOGEX
+  templates over the frame and runs the game's own dialog procedures. The game's options live in its menu bar
+  (MENU 1505 title, 1504 stage, 1502 with Network), which in full screen the game shows on a right click
+  (window procedure 0x40ED30 -> SetMenu). F10 on PC, or Select on the Vita pause screen, sends that right click;
+  the port draws the bar, the pad picks an item and the port posts WM_COMMAND: File (Save This Game = F2 ->
+  slot dialog 1500 + name 1499; Stop This Game = F4; Continue -> 1500 load; Exit = Esc -> 1498), Option (Key
+  Configuration 1492, Game Configuration 1491; Toggle Display Mode and Network are greyed: windowed mode lost the
+  palette, no DirectPlay) and About (1516). Keys in dialogs: arrows move the focus spatially, space/X/Cross press
+  the focused control (a combo box opens its list), Enter/C/Triangle press OK, Esc/Z/Circle/Select cancel.
+  Verified on PC with scripted keys and screenshots: Music On off stops the title music (#433), Sound Effects
+  On off leaves 0-1 voices while shooting (12-20 with it on), Reset restores the defaults, a key remap shows
+  up again after a restart, Continue loads USER01, Save writes User02.HDK. F2 with no soldiers shows dialog 1493
+  "Can't save because you have no men.".
+  Settings: HDKWIN.EXE keeps them in a CConfig object built with defaults at every start (0x414CF6) and never
+  stores them; the port saves CConfig +0x04..+0x9B to hkconfig.txt in the game folder after OK in 1491/1492 and
+  loads it through a recompiler hook at 0x414D0B (recomp/image_patches.py HOOKS: regenerate build/hk-recomp/gen).
+  Not done: typing in edit boxes (save names keep the game's default "Data N [date]"), the 1490 secret options
+  (editor menu only). Remapping a key to one the pad cannot send makes that action unusable on the Vita until
+  Reset.
 - Ivan's console test (2026-11-20): the game plays correctly on the Vita, colours look right, Start enters
   the stage, Select quits; requests were a jump button and shooting on Cross, then jump on Square and pause on Start (all done in
   the mapping above). What looked like "Select quits" is the run stopping at GetGDISurface.
@@ -43,7 +59,8 @@ Main path: full static recompilation of `HDKWIN.EXE` (see [static-recomp.md](sta
 - Screen aspect: on the Vita pause screen (Start), Triangle toggles 4:3 letterboxed / stretched 16:9, saved in
   ux0:data/handkerchief/hkport.cfg. True widescreen (more of the world visible) would need changes to the
   game's drawing and camera; not attempted.
-- Missing: sound, Win32 dialogs (Esc exit prompt, F2 configuration), save/continue not checked.
+- Missing: typing text in dialogs; the black band across the A0 terrain is drawn by the game in normal play
+  too (seen at frame 1530 with no menu), not by the dialogs.
 - Old test apps HKRC00005-00009 were uninstalled by Ivan from the LiveArea (vita-agent-use `content preview`
   fails with firmware error 0xFFFEFFF2 on this console).
 - Ivan's feedback (2026-11-20): the game runs smoothly on the Vita; stretched 16:9 makes text easier to read
@@ -79,8 +96,8 @@ Main path: full static recompilation of `HDKWIN.EXE` (see [static-recomp.md](sta
    Next: log on the console what happens at each audible->silent transition (playing voices, Stop/Release
    callers, sample memory still non-zero?) to tell game logic, limiter, and overwritten sample memory apart.
    FPS above 30 is not possible without changing game speed: the game logic runs at 25 frames/s.
-2. Win32 dialogs used by the game: 1498 "Exit Handkerchief ?" (Esc), 1491 Game Configuration and 1492 Key
-   Configuration (F2); both start with IDirectDraw::GetGDISurface. The 4:3/16:9 option can move there.
+2. Win32 dialogs used by the game: done on PC (see above); needs a console test of the menu (Start, then
+   Select) and of the configuration dialogs with the pad.
 3. Native widescreen (requested by Ivan): a wider view of the world instead of stretching. Start from the
    camera and horizontal parallax mapped in docs/engine-map.md ("Câmera e parallax horizontal"); find where
    the 640-pixel view width is assumed (surfaces, camera clamp, actor culling, HUD) before changing it.
@@ -102,6 +119,10 @@ The last `FATAL:` line of the log names the next missing Win32 import or DirectD
 Without `HK_HEADLESS` a window shows the game's primary surface.
 
 ## VPKs available for console tests
+
+- 2026-11-21 (dialogs and menu, not tested on the console): `build/hk-vita/handkerchief.vpk`, SHA-256
+  `607ef55b6f9f2dc64b2288be1b524a0ef0c18939b57bb814d6a39fa14c94048b`, check_vpk.py 0 errors. To test: Start, then
+  Select opens the game's menu; Option > Game / Key Configuration; Cross selects, Triangle = OK, Circle cancels.
 
 - `build/hk-vita/handkerchief.vpk` (local only, derived from HDKWIN.EXE: never publish), title `HKRC00010`,
   SHA-256 `9a28d273850441f91f3ed3870cfbb0cdef42aa1985fb335d56421ea24519aec3`. Built 2026-11-20 with

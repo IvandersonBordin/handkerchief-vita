@@ -58,9 +58,6 @@ U(UnionRect) {
 
 // ---------- USER32: single-window shell ----------
 U(LoadCursorA) { HOSTFN; STDRET(2, 0x00020001u); }
-U(LoadMenuA) { HOSTFN; STDRET(2, 0x00030001u); }
-U(SetMenu) { HOSTFN; STDRET(2, 1); }
-U(DestroyMenu) { HOSTFN; STDRET(1, 1); }
 int hk_dlg_enable(uint32_t hwnd, int on);   // port/hk/dialog.c
 int hk_dlg_enabled(uint32_t hwnd);
 U(EnableWindow) { HOSTFN; int was = hk_dlg_enable(ARG(1), (int)ARG(2)); STDRET(2, was > 0 ? 1u : 0u); }

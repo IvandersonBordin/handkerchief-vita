@@ -88,6 +88,10 @@ static void show_frame(const uint32_t *pixels, int width, int height, int pitch_
 // Start pauses: the last frame is shown darkened with a pause sign until Start is pressed again. The game's
 // clocks skip the paused time (g_pause_qpc, read by w32_qpc/w32_tick_ms) so it does not try to catch up.
 extern uint64_t g_pause_qpc;
+// Select on the pause screen leaves it and opens the game's menu bar (File: save / stop / exit, Option: Key and Game
+// Configuration, About): plat_vk_down reports F10 for a few frames, which USER32 turns into the game's right click
+// (port/hk/dialog.c hk_menu_key). In play, Select stays Esc (the game's exit prompt).
+static unsigned g_menu_until;
 static void pause_loop(const uint32_t *pixels, int width, int height, int pitch_bytes) {
     static uint32_t dim[480][640];
     uint64_t t0 = SDL_GetPerformanceCounter();
@@ -98,24 +102,28 @@ static void pause_loop(const uint32_t *pixels, int width, int height, int pitch_
         for (int x = 0; x < 24; x++) { dim[y][296 + x] = 0xffffffu; dim[y][320 + x] = 0xffffffu; }
     draw_text(&dim[0][0], 230, 300, "Start: continue", 0xffffffu);
     SceCtrlData pad;
-    int released = 0, tri_was = 1, sq_was = 1;
+    int released = 0, tri_was = 1, sq_was = 1, sel_was = 1;
     for (;;) {
         static uint32_t shown[480][640];
         memcpy(shown, dim, sizeof shown);
         draw_text(&shown[0][0], 230, 324, g_wide ? "Triangle: screen 16:9" : "Triangle: screen 4:3", 0xffff80u);
         draw_text(&shown[0][0], 230, 348, g_fps ? "Square: FPS counter on" : "Square: FPS counter off", 0xffff80u);
+        draw_text(&shown[0][0], 230, 372, "Select: game menu", 0xffff80u);
         show_frame(&shown[0][0], 640, 480, 640 * 4);
         sceCtrlPeekBufferPositive(0, &pad, 1);
         int tri = (pad.buttons & SCE_CTRL_TRIANGLE) != 0, sq = (pad.buttons & SCE_CTRL_SQUARE) != 0;
         if (tri && !tri_was) { g_wide = !g_wide; apply_aspect(); save_cfg(); }
         if (sq && !sq_was) { g_fps = !g_fps; save_cfg(); }
+        int sel = (pad.buttons & SCE_CTRL_SELECT) != 0;
+        if (sel && !sel_was) { extern unsigned g_frame; g_menu_until = g_frame + 3; break; }
         tri_was = tri;
         sq_was = sq;
+        sel_was = sel;
         if (!(pad.buttons & SCE_CTRL_START)) released = 1;
         else if (released) break;
         SDL_Delay(16);
     }
-    while (sceCtrlPeekBufferPositive(0, &pad, 1) >= 0 && (pad.buttons & SCE_CTRL_START)) SDL_Delay(16);
+    while (sceCtrlPeekBufferPositive(0, &pad, 1) >= 0 && (pad.buttons & (SCE_CTRL_START | SCE_CTRL_SELECT))) SDL_Delay(16);
     g_pause_qpc += SDL_GetPerformanceCounter() - t0;
 }
 
@@ -151,8 +159,9 @@ void plat_present_xrgb(const uint32_t *pixels, int width, int height, int pitch_
 // game's Key Configuration dialog (resource 1492) lists Shoot & Bomb, Turncoat Bomb, Switch & Rotation, Jump and
 // Crouch. Menus confirm with Enter or space and go back with Z/X/C (0x4117D4), checking confirm first, so Cross
 // sends X + space: it shoots in play and confirms in menus. Square = A (jump), down = arrow + S (crouch),
-// Circle = Z, Triangle = C (probably Turncoat Bomb and Switch & Rotation; not verified), L = Shift, R = Ctrl,
-// Select = Esc. Start is the port's own pause (plat_present_xrgb), not a game key.
+// Circle = Z (Switch & Rotation), Triangle = C (Turncoat Bomb), as the Key Configuration defaults show; L = Shift,
+// R = Ctrl, Select = Esc. Start is the port's own pause (plat_present_xrgb), not a game key. In the game's dialogs
+// (port/hk/dialog.c) Cross presses the focused control, Triangle presses OK and Circle or Select cancel.
 int plat_vk_down(int vk) {
     static SceCtrlData pad;
     static uint32_t last_frame = 0xffffffffu;
@@ -177,6 +186,7 @@ int plat_vk_down(int vk) {
     case 'Z': return (b & SCE_CTRL_CIRCLE) != 0;
     case 'C': return (b & SCE_CTRL_TRIANGLE) != 0;
     case 0x1B: return (b & SCE_CTRL_SELECT) != 0;
+    case 0x79: return g_frame < g_menu_until;   // F10: the game's menu, from the pause screen
     case 0x10: return (b & SCE_CTRL_LTRIGGER) != 0;
     case 0x11: return (b & SCE_CTRL_RTRIGGER) != 0;
     default: return 0;

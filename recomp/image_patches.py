@@ -51,7 +51,10 @@ IMAGE_PATCHES = []
 # Ghidra leaves them unnamed (FUN_...), so they are matched by address. Native versions: port/rt/natives.c.
 ADDR_OVERRIDES = {0x45E4B0: "nat_memcpy", 0x45F6C0: "nat_memmove"}
 ADDR_WRAPS = {}
-HOOKS = {}
+# 0x414D0B: in the CConfig constructor, right after the defaults (Reset 0x414D1E, key table 0x414D49); esi = this.
+# The port loads the settings saved by the Game / Key Configuration dialogs (hkconfig.txt, port/hk/dialog.c):
+# the game itself never stores them.
+HOOKS = {0x414D0B: "hk_config_loaded"}
 ABI_NATIVES = set()
 
 FTOL2 = None   # MSVC __ftol is found by its Ghidra name in x86rec.py when present

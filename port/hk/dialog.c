@@ -6,11 +6,14 @@
 // Dialogs used by the game (tools/dump_dialogs.py): 1498 "Exit Handkerchief ?" (Esc, modeless), 1491 Game
 // Configuration and 1492 Key Configuration (F2, modal), 1490 secret options, 1493/1497/1499 messages and input.
 //
-// Controls: arrows move the focus between controls (left/right change a combo box, list box or radio group);
-// Enter, space or X (pad Cross) press the focused control; Esc or Z (pad Circle, Select) send IDCANCEL.
+// Controls: arrows move the focus between controls (spatially, for a pad); space or X (pad Cross) press the focused
+// control (a combo box opens its list); Enter or C (pad Triangle) press the default (OK) button;
+// Esc or Z (pad Circle, Select) send IDCANCEL. The game's menu bar (LoadMenuA/SetMenu) is drawn and driven the same
+// way; F10 (pad: Select on the pause screen) asks the game to show it.
 #include "win32.h"
 #include "plat.h"
 #include "hk/font_data.h"
+#include "safe_write.h"
 #include <SDL.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -39,6 +42,7 @@ typedef struct {
     int x, y, w, h;          // pixels on the 640x480 screen, including the title bar
     Ctl ctl[MAX_CTL];
     int n, focus;
+    int drop, drop_orig;     // the focused combo box shows its list; selection to restore on cancel
 } Dlg;
 
 static Dlg g_dlg[MAX_DLG];
@@ -71,7 +75,92 @@ static Dlg *top_dlg(void) {
     for (int k = MAX_DLG - 1; k > 0; k--) if (g_dlg[k].used && g_dlg[k].visible) return &g_dlg[k];
     return NULL;
 }
-int hk_dlg_active(void) { return top_dlg() != NULL; }
+
+// ---------- menu bar ----------
+// HDKWIN.EXE loads a MENU resource per state (1505 title, 1504 in a stage, 1502 with Network, 1503 the developers'
+// editor) and, in full screen, shows it only on demand: a right click (WM_RBUTTONDOWN, window procedure 0x40ED30)
+// or WM_INITMENU calls 0x40EEE9, which pauses the game and SetMenu(hwnd, menu); WM_COMMAND (0x40ED65 -> 0x40EF4A)
+// hides it again with SetMenu(hwnd, 0) and leaves the command id in the window object for the main loop.
+// The port draws the menu set by SetMenu as a bar at the top of the screen; the keyboard or pad picks an item, which
+// is posted as WM_COMMAND; cancelling posts another right click, the game's own toggle. F10 (pad: Select on the
+// port's pause screen) opens it with a right click.
+static void strip_amp(char *s);
+#define MENU_HANDLE(res) (0x00050000u | ((res) & 0xffffu))
+#define MAX_MTOP 10
+#define MAX_MITEM 24
+typedef struct { char text[64], key[16]; uint16_t id; int grayed, sep; } MItem;
+typedef struct { char text[64]; uint16_t id; int popup, grayed, n; MItem it[MAX_MITEM]; } MTop;
+static struct {
+    uint32_t res;                 // resource shown, 0 = no menu bar
+    int ntop, top, item, open;    // selected title; selected item and whether its drop-down is open
+    MTop t[MAX_MTOP];
+} g_menu;
+static void menu_text(const uint16_t **w, char *out, size_t cap, char *key, size_t kcap) {
+    size_t n = 0, k = 0;
+    int tab = 0;
+    for (; **w; (*w)++) {
+        uint16_t ch = **w;
+        if (ch == '\t') { tab = 1; continue; }
+        char c8 = (char)(ch < 256 ? ch : '?');
+        if (tab) { if (key && k + 1 < kcap) key[k++] = c8; }
+        else if (n + 1 < cap) out[n++] = c8;
+    }
+    (*w)++;
+    out[n] = 0;
+    if (key && kcap) key[k] = 0;
+}
+// Standard MENU template: (flags, [id], text) items; MF_POPUP (0x10) opens a sub-list, MF_END (0x80) closes one.
+// Nested popups (the editor menu) are flattened into their top-level drop-down.
+static int menu_parse(uint32_t res) {
+    HOSTFN;
+    uint32_t size, ga = w32_resource(res, 4, &size);   // RT_MENU
+    if (!ga || size < 8) { rt_log("[menu] menu %u not found\n", res); return 0; }
+    const uint16_t *w = (const uint16_t *)(mb + ga + 4), *end = (const uint16_t *)(mb + ga + size);
+    memset(&g_menu.t, 0, sizeof g_menu.t);
+    g_menu.ntop = 0;
+    int lvl = 0, ends[8] = {0};   // ends[l]: the popup that opened level l+1 also ended level l
+    while (w < end && lvl >= 0) {
+        uint16_t fl = *w++, id = 0;
+        if (!(fl & 0x10)) id = *w++;
+        char text[64], key[16];
+        menu_text(&w, text, sizeof text, key, sizeof key);
+        strip_amp(text);
+        if (lvl == 0) {
+            if (g_menu.ntop < MAX_MTOP) {
+                MTop *t = &g_menu.t[g_menu.ntop++];
+                snprintf(t->text, sizeof t->text, "%s", text);
+                t->id = id; t->popup = (fl & 0x10) != 0; t->grayed = (fl & 3) != 0;
+            }
+        } else if (!(fl & 0x10) && g_menu.ntop && g_menu.t[g_menu.ntop - 1].n < MAX_MITEM) {
+            MTop *t = &g_menu.t[g_menu.ntop - 1];
+            MItem *m = &t->it[t->n++];
+            snprintf(m->text, sizeof m->text, "%s", text);
+            snprintf(m->key, sizeof m->key, "%s", key);
+            m->id = id; m->grayed = (fl & 3) != 0; m->sep = !id && !text[0];
+            // The port is always full screen and has no DirectPlay: Toggle Display Mode (windowed mode lost the
+            // palette: grey picture) and Network are shown greyed out.
+            if (id == 40064 || id == 40059) m->grayed = 1;
+        }
+        if (fl & 0x10) { if (lvl < 7) ends[lvl] = (fl & 0x80) != 0; lvl++; }
+        else if (fl & 0x80) { lvl--; while (lvl >= 0 && lvl < 8 && ends[lvl]) { ends[lvl] = 0; lvl--; } }
+    }
+    return g_menu.ntop > 0;
+}
+static int menu_shown(void) { return g_menu.res != 0; }
+static int mtop_ok(int i) { return i >= 0 && i < g_menu.ntop && !g_menu.t[i].grayed && g_menu.t[i].text[0]; }
+static int mitem_ok(const MTop *t, int i) { return i >= 0 && i < t->n && !t->it[i].grayed && !t->it[i].sep; }
+static void menu_set(uint32_t hmenu) {
+    uint32_t res = (hmenu & 0xffff0000u) == 0x00050000u ? hmenu & 0xffffu : 0;
+    rt_log("[menu] SetMenu(%u)\n", res);
+    if (res && res != g_menu.res && !menu_parse(res)) res = 0;
+    if (res && !menu_shown()) {
+        g_menu.top = 0;
+        while (g_menu.top < g_menu.ntop && !mtop_ok(g_menu.top)) g_menu.top++;
+        g_menu.open = 0; g_menu.item = 0;
+    }
+    g_menu.res = res;
+}
+int hk_dlg_active(void) { return top_dlg() != NULL || menu_shown(); }
 
 // ---------- template ----------
 static const uint8_t *res_sz(const uint8_t *p, char *out, size_t cap, int *ord) {
@@ -95,18 +184,19 @@ static void strip_amp(char *s) {   // "&OK" -> "OK", "&&" -> "&"
     *o = 0;
 }
 
+// DIALOG and DIALOGEX templates (the About box 1516 and the save slots 1500 are DIALOGEX).
 static int parse_template(Dlg *d, uint32_t ga) {
     HOSTFN;
     const uint8_t *p = mb + ga;
     uint32_t style; memcpy(&style, p, 4);
-    if (style == 0xffff0001u) { rt_log("[dlg] extended DIALOGEX template not supported\n"); return 0; }
+    int ex = style == 0xffff0001u;
     uint16_t n; int16_t cx, cy;
-    memcpy(&n, p + 8, 2); memcpy(&cx, p + 14, 2); memcpy(&cy, p + 16, 2);
-    p += 18;
+    if (ex) { memcpy(&style, p + 12, 4); memcpy(&n, p + 16, 2); memcpy(&cx, p + 22, 2); memcpy(&cy, p + 24, 2); p += 26; }
+    else { memcpy(&n, p + 8, 2); memcpy(&cx, p + 14, 2); memcpy(&cy, p + 16, 2); p += 18; }
     p = res_sz(p, NULL, 0, NULL);                      // menu
     p = res_sz(p, NULL, 0, NULL);                      // class
     p = res_sz(p, d->title, sizeof d->title, NULL);    // title
-    if (style & 0x40) { p += 2; p = res_sz(p, NULL, 0, NULL); }   // DS_SETFONT: point size, face
+    if (style & 0x40) { p += ex ? 6 : 2; p = res_sz(p, NULL, 0, NULL); }   // DS_SETFONT: size (weight, italic, charset), face
     d->w = DU_X(cx) + 6; d->h = DU_Y(cy) + TITLE_H + 6;
     if (d->w > 636) d->w = 636;
     if (d->h > 476) d->h = 476;
@@ -117,9 +207,15 @@ static int parse_template(Dlg *d, uint32_t ga) {
         Ctl *t = &d->ctl[d->n];
         memset(t, 0, sizeof *t);
         int16_t x, y, w, h; uint16_t id;
-        memcpy(&t->style, p, 4); memcpy(&x, p + 8, 2); memcpy(&y, p + 10, 2); memcpy(&w, p + 12, 2);
-        memcpy(&h, p + 14, 2); memcpy(&id, p + 16, 2);
-        p += 18;
+        if (ex) {   // helpID, exStyle, style, x, y, cx, cy, DWORD id
+            memcpy(&t->style, p + 8, 4); memcpy(&x, p + 12, 2); memcpy(&y, p + 14, 2); memcpy(&w, p + 16, 2);
+            memcpy(&h, p + 18, 2); memcpy(&id, p + 20, 2);
+            p += 24;
+        } else {
+            memcpy(&t->style, p, 4); memcpy(&x, p + 8, 2); memcpy(&y, p + 10, 2); memcpy(&w, p + 12, 2);
+            memcpy(&h, p + 14, 2); memcpy(&id, p + 16, 2);
+            p += 18;
+        }
         int ord; char cls[32];
         p = res_sz(p, cls, sizeof cls, &ord);
         p = res_sz(p, t->text, sizeof t->text, NULL);
@@ -180,6 +276,37 @@ static void frame(uint32_t *fb, int x, int y, int w, int h, uint32_t tl, uint32_
 #define C_DARK 0x000000u
 #define C_FOCUS 0xffd000u
 
+// Static text as Windows draws it: word-wrapped to the control width, '\n' breaks lines, aligned left (0), centre (1)
+// or right (2); vertically centred when vc is set. A word wider than the control is not split (it may spill over).
+// The port's font is wider than the game's MS P Gothic, so a control only one line high is never wrapped: its text
+// may spill a little past the control instead of being cut.
+static void text_box(uint32_t *fb, int x, int y, int w, int h, const char *s, int align, int vc, uint32_t ink) {
+    char lines[8][160];
+    int nl = 0, w0 = w;
+    if (h < 2 * font()->cell) w = 1 << 20;
+    const char *p = s;
+    while (*p && nl < 8) {
+        char *o = lines[nl];
+        int len = 0, last_space = -1;
+        const char *q = p, *brk = NULL;
+        for (; *q && *q != '\n' && len < 159; q++) {
+            o[len] = *q; o[len + 1] = 0;
+            if (*q == ' ') last_space = len;
+            if (text_w(o) > w && last_space > 0) { o[last_space] = 0; brk = p + last_space + 1; break; }
+            len++;
+        }
+        if (!brk) { o[len] = 0; brk = *q == '\n' ? q + 1 : q; }
+        nl++;
+        p = brk;
+    }
+    int lh = font()->cell, top = vc ? y + (h - nl * lh) / 2 : y;
+    for (int i = 0; i < nl; i++) {
+        int lw = text_w(lines[i]), tx = align == 1 ? x + (w0 - lw) / 2 : align == 2 ? x + w0 - lw : x;
+        if (tx < x - 20 && align != 1) tx = x;
+        put_text(fb, tx, top + i * lh, lines[i], ink, 640);
+    }
+}
+
 static const char *item_text(const Ctl *t, int i) { return i >= 0 && i < t->nitems ? t->items[i] : ""; }
 
 static void draw_ctl(uint32_t *fb, const Dlg *d, const Ctl *t, int focused) {
@@ -194,10 +321,30 @@ static void draw_ctl(uint32_t *fb, const Dlg *d, const Ctl *t, int focused) {
             if (t->text[0]) { fill(fb, x + 6, y, text_w(t->text) + 4, 13, C_FACE); put_text(fb, x + 8, y, t->text, ink, x + w); }
             break;
         case 2: case 3: case 4: case 9: {   // check box / radio button
+            if (t->style & 0x1000u) {      // BS_PUSHLIKE (save slots 1500): a push button, sunk while checked
+                fill(fb, x, y, w, h, t->checked ? 0xe0e0e0u : C_FACE);
+                if (t->checked) { frame(fb, x, y, w, h, C_DARK, C_LIGHT); frame(fb, x + 1, y + 1, w - 2, h - 2, C_SHADOW, C_FACE); }
+                else { frame(fb, x, y, w, h, C_LIGHT, C_DARK); frame(fb, x + 1, y + 1, w - 2, h - 2, C_FACE, C_SHADOW); }
+                text_box(fb, x + 3, y, w - 6, h, t->text, 1, 1, ink);
+                if (focused) { frame(fb, x - 2, y - 2, w + 4, h + 4, C_FOCUS, C_FOCUS); frame(fb, x - 3, y - 3, w + 6, h + 6, C_FOCUS, C_FOCUS); }
+                break;
+            }
             int r = btype(t) == 4 || btype(t) == 9, by = y + (h - 11) / 2;
-            fill(fb, x, by, 11, 11, C_LIGHT);
-            frame(fb, x, by, 11, 11, C_SHADOW, C_LIGHT);
-            if (t->checked) { if (r) fill(fb, x + 3, by + 3, 5, 5, C_DARK); else for (int i = 0; i < 7; i++) { fill(fb, x + 2 + i, by + 2 + i, 1, 1, C_DARK); fill(fb, x + 8 - i, by + 2 + i, 1, 1, C_DARK); } }
+            if (r) {   // round: rows of a 11x11 circle
+                static const uint8_t half[11] = {2, 1, 0, 0, 0, 0, 0, 0, 0, 1, 2};
+                for (int j = 0; j < 11; j++) {
+                    int k = half[j] + (j == 0 || j == 10 ? 1 : 0);
+                    fill(fb, x + k, by + j, 11 - 2 * k, 1, C_LIGHT);
+                    fill(fb, x + k, by + j, 1, 1, j < 6 ? C_SHADOW : C_LIGHT);
+                    fill(fb, x + 10 - k, by + j, 1, 1, j < 6 ? C_SHADOW : C_LIGHT);
+                }
+                fill(fb, x + 3, by, 5, 1, C_SHADOW);
+                if (t->checked) { fill(fb, x + 4, by + 3, 3, 5, C_DARK); fill(fb, x + 3, by + 4, 5, 3, C_DARK); }
+            } else {
+                fill(fb, x, by, 11, 11, C_LIGHT);
+                frame(fb, x, by, 11, 11, C_SHADOW, C_LIGHT);
+                if (t->checked) for (int i = 0; i < 7; i++) { fill(fb, x + 2 + i, by + 2 + i, 1, 1, C_DARK); fill(fb, x + 8 - i, by + 2 + i, 1, 1, C_DARK); }
+            }
             put_text(fb, x + 15, ty, t->text, ink, x + w + 40);
             if (focused) frame(fb, x - 2, ty - 1, text_w(t->text) + 19, font()->cell + 2, C_FOCUS, C_FOCUS);
             break;
@@ -213,12 +360,9 @@ static void draw_ctl(uint32_t *fb, const Dlg *d, const Ctl *t, int focused) {
         break;
     case C_STATIC:
         if ((t->style & 0x1fu) == 0x12u) { frame(fb, x, y, w, h, C_SHADOW, C_LIGHT); break; }   // SS_ETCHEDFRAME
-        if ((t->style & 0x1fu) >= 4 && (t->style & 0x1fu) <= 9) break;                         // rectangles and frames
-        {
-            int a = (int)(t->style & 3u), tx = a == 1 ? x + (w - text_w(t->text)) / 2 : a == 2 ? x + w - text_w(t->text) : x;
-            if (tx < x - 20) tx = x;
-            put_text(fb, tx, (t->style & 0x200u) ? ty : y, t->text, ink, 640);   // SS_CENTERIMAGE: vertically centred
-        }
+        if ((t->style & 0x1fu) >= 3 && (t->style & 0x1fu) <= 9) break;                         // icon, rectangles, frames
+        if ((t->style & 0x1fu) == 0xEu) break;                                                 // SS_BITMAP
+        text_box(fb, x, y, w, h, t->text, (int)(t->style & 3u), (t->style & 0x200u) != 0, ink);   // SS_CENTERIMAGE: vertically centred
         break;
     case C_EDIT:
         fill(fb, x, y, w, h, t->enabled ? C_LIGHT : C_FACE);
@@ -229,9 +373,11 @@ static void draw_ctl(uint32_t *fb, const Dlg *d, const Ctl *t, int focused) {
     case C_COMBO:
         fill(fb, x, y, w, h, t->enabled ? C_LIGHT : C_FACE);
         frame(fb, x, y, w, h, C_SHADOW, C_LIGHT);
-        put_text(fb, x + 3, ty, item_text(t, t->cursel), ink, x + w - 12);
-        put_text(fb, x + w - 10, ty, focused ? ">" : "v", focused ? 0x0000c0u : C_SHADOW, 640);
-        if (focused) { put_text(fb, x - 9, ty, "<", C_FOCUS, 640); frame(fb, x - 2, y - 2, w + 4, h + 4, C_FOCUS, C_FOCUS); }
+        put_text(fb, x + 3, ty, item_text(t, t->cursel), ink, x + w - 14);
+        fill(fb, x + w - 13, y + 2, 11, h - 4, C_FACE);   // drop-down button with a small triangle
+        frame(fb, x + w - 13, y + 2, 11, h - 4, C_LIGHT, C_SHADOW);
+        for (int i = 0; i < 3; i++) fill(fb, x + w - 11 + i, y + h / 2 - 1 + i, 7 - 2 * i, 1, ink);
+        if (focused) frame(fb, x - 2, y - 2, w + 4, h + 4, C_FOCUS, C_FOCUS);
         break;
     case C_LISTBOX: {
         fill(fb, x, y, w, h, C_LIGHT);
@@ -249,8 +395,81 @@ static void draw_ctl(uint32_t *fb, const Dlg *d, const Ctl *t, int focused) {
     }
 }
 
+// The open list of a combo box, below it (above if it would leave the screen), scrolled to the selection.
+static void draw_drop(uint32_t *fb, const Dlg *d, const Ctl *t) {
+    int rows = t->nitems < 10 ? t->nitems : 10, rh = 14, w = t->w, h = rows * rh + 4;
+    int x = d->x + 3 + t->x, y = d->y + TITLE_H + 3 + t->y + t->h;
+    if (y + h > 478) y = d->y + TITLE_H + 3 + t->y - h;
+    int first = t->cursel - rows / 2;
+    if (first > t->nitems - rows) first = t->nitems - rows;
+    if (first < 0) first = 0;
+    fill(fb, x, y, w, h, C_LIGHT);
+    frame(fb, x, y, w, h, C_DARK, C_DARK);
+    for (int i = 0; i < rows; i++) {
+        int it = first + i, sel = it == t->cursel;
+        if (sel) fill(fb, x + 2, y + 2 + i * rh, w - 4, rh, 0x000080u);
+        put_text(fb, x + 4, y + 2 + i * rh, t->items[it], sel ? C_LIGHT : C_DARK, x + w - 2);
+    }
+}
+
 // Called by the DirectDraw present with the converted 640x480 frame.
+#ifdef __vita__
+#define HINT_BAR "Left/Right: menu   Cross: open   Circle: close"
+#define HINT_DROP "Up/Down: choose   Cross: select   Circle: back"
+#define HINT_DLG "D-pad: move   Cross: select   Triangle: OK   Circle: cancel"
+#define HINT_LIST "Up/Down: choose   Cross: keep   Circle: undo"
+#else
+#define HINT_BAR "Left/Right: menu   Enter: open   Esc/F10: close"
+#define HINT_DROP "Up/Down: choose   Enter: select   Esc: back"
+#define HINT_DLG "Arrows: move   Space: select   Enter: OK   Esc: cancel"
+#define HINT_LIST "Up/Down: choose   Enter/Space: keep   Esc: undo"
+#endif
+static void menu_draw(uint32_t *fb) {
+    const int bh = 20;
+    fill(fb, 0, 0, 640, bh, C_FACE);
+    fill(fb, 0, bh - 1, 640, 1, C_SHADOW);
+    int x = 6, top_x = 6, has_dlg = top_dlg() != NULL;
+    for (int i = 0; i < g_menu.ntop; i++) {
+        MTop *t = &g_menu.t[i];
+        int w = text_w(t->text) + 14;
+        if (i == g_menu.top && !has_dlg) { fill(fb, x, 1, w, bh - 2, 0x000080u); top_x = x; }
+        put_text(fb, x + 7, 3, t->text, i == g_menu.top && !has_dlg ? C_LIGHT : t->grayed ? C_SHADOW : C_DARK, 640);
+        x += w;
+    }
+    if (has_dlg) return;
+    if (!g_menu.open || g_menu.top >= g_menu.ntop || !g_menu.t[g_menu.top].popup) {
+        const char *hint = HINT_BAR;
+        fill(fb, (640 - text_w(hint)) / 2 - 4, 465, text_w(hint) + 8, 15, 0x202020u);
+        put_text(fb, (640 - text_w(hint)) / 2, 466, hint, 0xe0e0e0u, 640);
+        return;
+    }
+    MTop *t = &g_menu.t[g_menu.top];
+    int w = 0;
+    for (int i = 0; i < t->n; i++) { int iw = text_w(t->it[i].text) + (t->it[i].key[0] ? text_w(t->it[i].key) + 30 : 0); if (iw > w) w = iw; }
+    w += 34;
+    int h = 4, px = top_x + w > 638 ? 638 - w : top_x, py = bh;
+    for (int i = 0; i < t->n; i++) h += t->it[i].sep ? 8 : 18;
+    fill(fb, px, py, w, h, C_FACE);
+    frame(fb, px, py, w, h, C_LIGHT, C_DARK);
+    frame(fb, px + 1, py + 1, w - 2, h - 2, C_FACE, C_SHADOW);
+    int y = py + 2;
+    for (int i = 0; i < t->n; i++) {
+        MItem *m = &t->it[i];
+        if (m->sep) { fill(fb, px + 4, y + 3, w - 8, 1, C_SHADOW); fill(fb, px + 4, y + 4, w - 8, 1, C_LIGHT); y += 8; continue; }
+        int sel = i == g_menu.item;
+        uint32_t ink = sel ? C_LIGHT : m->grayed ? C_SHADOW : C_DARK;
+        if (sel) fill(fb, px + 3, y, w - 6, 18, 0x000080u);
+        put_text(fb, px + 18, y + 2, m->text, ink, px + w);
+        if (m->key[0]) put_text(fb, px + w - 12 - text_w(m->key), y + 2, m->key, ink, px + w);
+        y += 18;
+    }
+    const char *hint = HINT_DROP;
+    fill(fb, (640 - text_w(hint)) / 2 - 4, 465, text_w(hint) + 8, 15, 0x202020u);
+    put_text(fb, (640 - text_w(hint)) / 2, 466, hint, 0xe0e0e0u, 640);
+}
+
 void hk_dlg_overlay(uint32_t *fb) {
+    if (menu_shown()) menu_draw(fb);
     for (int k = 1; k < MAX_DLG; k++) {
         Dlg *d = &g_dlg[k];
         if (!d->used || !d->visible) continue;
@@ -260,9 +479,12 @@ void hk_dlg_overlay(uint32_t *fb) {
         fill(fb, d->x + 3, d->y + 3, d->w - 6, TITLE_H - 2, 0x000080u);
         put_text(fb, d->x + 6, d->y + 4, d->title, C_LIGHT, d->x + d->w - 4);
         for (int i = 0; i < d->n; i++) if (d->ctl[i].visible) draw_ctl(fb, d, &d->ctl[i], i == d->focus && d == top_dlg());
+        if (d->drop && d->focus >= 0) draw_drop(fb, d, &d->ctl[d->focus]);
         if (d == top_dlg()) {
-            const char *hint = "Cross/Enter: select   Circle/Esc: cancel   D-pad: move";
+            const char *hint = d->drop ? HINT_LIST : HINT_DLG;
             int hy = d->y + d->h + 4 < 466 ? d->y + d->h + 4 : 466;
+            for (int j = 1; j < MAX_DLG; j++)   // over another dialog: at the bottom of the screen instead
+                if (&g_dlg[j] != d && g_dlg[j].used && g_dlg[j].visible && hy + 14 > g_dlg[j].y && hy < g_dlg[j].y + g_dlg[j].h) hy = 466;
             fill(fb, (640 - text_w(hint)) / 2 - 4, hy - 1, text_w(hint) + 8, 15, 0x202020u);
             put_text(fb, (640 - text_w(hint)) / 2, hy, hint, 0xe0e0e0u, 640);
         }
@@ -348,34 +570,69 @@ static void change(CPU *c, Dlg *d, Ctl *t, int dir) {   // left/right on a combo
     if (t->cls == C_LISTBOX) { int rows = (t->h - 4) / 14; if (rows < 1) rows = 1; if (n < t->top) t->top = n; if (n >= t->top + rows) t->top = n - rows + 1; }
     command(c, d, t, 1);
 }
+// Spatial focus move for a pad: the next control must lie past the focused one's edge in that direction; controls
+// that overlap it across the direction (same row or column) win, then the nearest.
 static void move_focus(Dlg *d, int dx, int dy) {
     if (d->focus < 0) { set_focus_default(d); return; }
     Ctl *f = &d->ctl[d->focus];
-    int fx = f->x + f->w / 2, fy = f->y + f->h / 2, best = -1, bestv = 1 << 30;
+    int best = -1, bestv = 1 << 30;
     for (int i = 0; i < d->n; i++) {
         Ctl *t = &d->ctl[i];
         if (i == d->focus || !focusable(t)) continue;
-        int tx = t->x + t->w / 2, ty = t->y + t->h / 2, ax = (tx - fx) * dx + (ty - fy) * dy;   // along the direction
-        int across = abs(dx ? ty - fy : tx - fx);
-        if (ax <= 2) continue;
-        int v = ax + 3 * across;
+        int tx = t->x + t->w / 2, ty = t->y + t->h / 2, along, gap, overlap;
+        if (dx) {
+            along = dx < 0 ? f->x - tx : tx - (f->x + f->w);
+            if (along < -f->w / 2 || (dx < 0 ? tx >= f->x + f->w / 4 : tx <= f->x + f->w * 3 / 4)) continue;
+            overlap = t->y < f->y + f->h && f->y < t->y + t->h;
+            gap = overlap ? 0 : abs(ty - (f->y + f->h / 2));
+        } else {
+            along = dy < 0 ? f->y - ty : ty - (f->y + f->h);
+            if (along < 0) continue;
+            overlap = t->x < f->x + f->w && f->x < t->x + t->w;
+            gap = overlap ? abs(t->x - f->x) / 4 : abs(tx - (f->x + f->w / 2));
+        }
+        int v = (overlap ? 0 : 1 << 20) + (along > 0 ? along : 0) + 2 * gap;
         if (v < bestv) { bestv = v; best = i; }
     }
-    if (best >= 0) d->focus = best;
+    if (best >= 0) { d->focus = best; rt_log("[dlg] focus id %u \"%s\"\n", d->ctl[best].id, d->ctl[best].text); }
 }
-enum { K_UP = 1, K_DOWN = 2, K_LEFT = 4, K_RIGHT = 8, K_OK = 16, K_CANCEL = 32 };
+// K_OK presses the focused control (space, X, pad Cross); K_DEFAULT is Enter (pad Triangle): the dialog's default
+// button (OK), wherever the focus is.
+enum { K_UP = 1, K_DOWN = 2, K_LEFT = 4, K_RIGHT = 8, K_OK = 16, K_CANCEL = 32, K_DEFAULT = 64 };
 static void dlg_input(CPU *c, int keys) {
     Dlg *d = top_dlg();
     if (!d) return;
     Ctl *f = d->focus >= 0 ? &d->ctl[d->focus] : NULL;
+    if (f && d->drop) {   // an open combo box list: arrows choose, OK keeps the choice, cancel restores the old one
+        if (keys & K_CANCEL) { f->cursel = d->drop_orig; d->drop = 0; return; }
+        if (keys & (K_OK | K_DEFAULT)) { d->drop = 0; if (f->cursel != d->drop_orig) command(c, d, f, 1); return; }   // CBN_SELCHANGE
+        int step = (keys & (K_UP | K_LEFT)) ? -1 : (keys & (K_DOWN | K_RIGHT)) ? 1 : 0;
+        if (step && f->nitems) {
+            int n = f->cursel + step;
+            f->cursel = n < 0 ? 0 : n >= f->nitems ? f->nitems - 1 : n;
+        }
+        return;
+    }
     if (keys & K_CANCEL) {
         Ctl *cancel = ctl_by_id(d, 2);
         dlg_send(c, d, 0x111u, 2u, cancel ? ctl_hwnd(d, cancel) : 0);   // IDCANCEL
         return;
     }
-    if (keys & K_OK) { if (f) click(c, d, f); return; }
+    if (keys & K_DEFAULT) {   // the default push button (BS_DEFPUSHBUTTON), else OK (id 1), else the focused control
+        Ctl *ok = NULL;
+        for (int i = 0; i < d->n && !ok; i++)
+            if (d->ctl[i].cls == C_BUTTON && btype(&d->ctl[i]) == 1 && d->ctl[i].visible && d->ctl[i].enabled) ok = &d->ctl[i];
+        if (!ok) ok = ctl_by_id(d, 1);
+        if (ok && ok->enabled && ok->visible) { click(c, d, ok); return; }
+        keys |= K_OK;
+    }
+    if (keys & K_OK) {
+        if (f && f->cls == C_COMBO) { if (f->enabled && f->nitems) { d->drop = 1; d->drop_orig = f->cursel; } return; }
+        if (f) click(c, d, f);
+        return;
+    }
     int lr = (keys & K_LEFT) ? -1 : (keys & K_RIGHT) ? 1 : 0;
-    if (lr && f && (f->cls == C_COMBO || f->cls == C_LISTBOX)) { change(c, d, f, lr); return; }
+    if (lr && f && f->cls == C_LISTBOX) { change(c, d, f, lr); return; }
     if (f && f->cls == C_LISTBOX && (keys & (K_UP | K_DOWN))) {
         int nf = d->focus;
         move_focus(d, 0, (keys & K_UP) ? -1 : 1);
@@ -386,6 +643,47 @@ static void dlg_input(CPU *c, int keys) {
     else if (keys & K_DOWN) move_focus(d, 0, 1);
     else if (lr) move_focus(d, lr, 0);
 }
+#define HWND_MAIN_DLG 0x00010010u   // the game's window (port/win32/user32.c HWND_MAIN)
+static void menu_input(int keys) {
+    if (keys & K_DEFAULT) keys |= K_OK;
+    MTop *t = g_menu.top < g_menu.ntop ? &g_menu.t[g_menu.top] : NULL;
+    if (!t) return;
+    int lr = (keys & K_LEFT) ? -1 : (keys & K_RIGHT) ? 1 : 0;
+    if (keys & K_CANCEL) {
+        if (g_menu.open) g_menu.open = 0;
+        else w32_post_message(HWND_MAIN_DLG, 0x204u, 0x2u, 0);   // right click again: the game hides the menu
+        return;
+    }
+    if (lr) {
+        int i = g_menu.top;
+        for (int k = 0; k < g_menu.ntop; k++) { i = (i + lr + g_menu.ntop) % g_menu.ntop; if (mtop_ok(i)) break; }
+        g_menu.top = i;
+        g_menu.item = 0;
+        while (g_menu.open && g_menu.item < g_menu.t[i].n && !mitem_ok(&g_menu.t[i], g_menu.item)) g_menu.item++;
+        return;
+    }
+    if (!g_menu.open) {
+        if (keys & (K_OK | K_DOWN)) {
+            if (!t->popup) { if (keys & K_OK) { rt_log("[menu] command %u\n", t->id); w32_post_message(HWND_MAIN_DLG, 0x111u, t->id, 0); } return; }
+            g_menu.open = 1; g_menu.item = 0;
+            while (g_menu.item < t->n && !mitem_ok(t, g_menu.item)) g_menu.item++;
+        }
+        return;
+    }
+    if (keys & (K_UP | K_DOWN)) {
+        int dir = (keys & K_UP) ? -1 : 1, i = g_menu.item;
+        for (int k = 0; k < t->n; k++) { i = (i + dir + t->n) % t->n; if (mitem_ok(t, i)) break; }
+        g_menu.item = i;
+        return;
+    }
+    if ((keys & K_OK) && mitem_ok(t, g_menu.item)) {
+        uint16_t id = t->it[g_menu.item].id;
+        g_menu.open = 0;
+        rt_log("[menu] command %u (%s)\n", id, t->it[g_menu.item].text);
+        w32_post_message(HWND_MAIN_DLG, 0x111u, id, 0);   // WM_COMMAND from a menu: the game hides the menu itself
+    }
+}
+
 // Key transitions while a dialog is up: called by USER32's message functions instead of posting WM_KEYDOWN.
 // Several keys pressed together (pad Cross sends X and space) count as one action.
 void hk_dlg_keys(CPU *c, const uint8_t *pressed_vks, int n) {
@@ -396,12 +694,19 @@ void hk_dlg_keys(CPU *c, const uint8_t *pressed_vks, int n) {
         case 0x28: keys |= K_DOWN; break;
         case 0x25: keys |= K_LEFT; break;
         case 0x27: keys |= K_RIGHT; break;
-        case 0x0D: case 0x20: case 'X': keys |= K_OK; break;
+        case 0x20: case 'X': keys |= K_OK; break;
+        case 0x0D: case 'C': keys |= K_DEFAULT; break;
         case 0x1B: case 'Z': keys |= K_CANCEL; break;
         default: break;
         }
-    if (keys) dlg_input(c, keys);
+    if (keys && top_dlg()) dlg_input(c, keys);
+    else if (keys && menu_shown()) menu_input(keys);
     refresh();
+}
+// F10 (pad: Select on the pause screen) asks the game for its menu with a right click; it also closes it.
+void hk_menu_key(void) {
+    if (top_dlg()) return;
+    w32_post_message(HWND_MAIN_DLG, 0x204u, 0x2u, 0);   // WM_RBUTTONDOWN, MK_RBUTTON
 }
 
 // ---------- USER32 ----------
@@ -420,6 +725,56 @@ U(CreateDialogParamA) {
     }
     STDRET(5, d ? d->hwnd : 0);
 }
+// ---------- settings file ----------
+// The game keeps its settings in a CConfig object built with defaults at every start (constructor 0x414CF6, called
+// from 0x4513B2; layout from the dialog procedures 0x414F6C and 0x415242 and CConfig::Serialize 0x414D79):
+// +0x04 View Sky, +0x08 View Background, +0x0C Full Effect, +0x10 Full Motion, +0x14 screen size (0 normal,
+// 1 middle, 2 small), +0x18 Opening Animation, +0x1C Music On, +0x20 Sound Effects On, +0x24..+0x93 the key table
+// (copied from 0x47B548 by Reset), +0x94 Move Down to Crouch, +0x98 Move Up to Jump. HDKWIN.EXE reads and writes no
+// file or registry value for it (runs with both dialogs and Exit showed no CreateFileA/RegSetValueExA), so the
+// settings were lost at exit. The port saves +0x04..+0x9B to hkconfig.txt in the game folder when Game or Key
+// Configuration closes with OK, and loads it into each new CConfig (hook at 0x414D0B, after the constructor's
+// defaults; recomp/image_patches.py).
+#define CFG_FIRST 0x04u
+#define CFG_END 0x9Cu
+#define CFG_OBJ 0x4AC844u   // the CConfig the open configuration dialog edits (set by 0x4151CA / 0x415433)
+static void cfg_path(char *out, size_t cap) { snprintf(out, cap, "%s/hkconfig.txt", g_game_dir); }
+static void cfg_save(uint32_t obj) {
+    HOSTFN;
+    if (!obj) return;
+    char path[600], tmp[640];
+    cfg_path(path, sizeof path);
+    if (sw_tmp_path(path, tmp, sizeof tmp)) return;
+    FILE *f = fopen(tmp, "w");
+    if (!f) { rt_log("[config] cannot write %s\n", tmp); return; }
+    fprintf(f, "# Handkerchief port: the game's settings (CConfig fields, hex offset=value), written after OK\n");
+    for (uint32_t o = CFG_FIRST; o < CFG_END; o += 4) fprintf(f, "%02x=%u\n", o, R32(obj + o));
+    int ok = fclose(f) == 0;
+    if (!ok || sw_commit(path)) { rt_log("[config] cannot save %s\n", path); return; }
+    rt_log("[config] saved %s (music %u, sound %u, screen %u)\n", path, R32(obj + 0x1C), R32(obj + 0x20), R32(obj + 0x14));
+}
+// Hook at 0x414D0B (esi = the new CConfig). Unknown offsets and implausible values are ignored, field by field.
+void hk_config_loaded(CPU *c) {
+    HOSTFN;
+    uint32_t obj = c->esi;
+    char path[600], line[64];
+    cfg_path(path, sizeof path);
+    sw_recover(path);
+    FILE *f = fopen(path, "r");
+    if (!f) return;
+    int n = 0;
+    while (fgets(line, sizeof line, f)) {
+        unsigned o, v;
+        if (line[0] == '#' || sscanf(line, "%x=%u", &o, &v) != 2) continue;
+        if (o < CFG_FIRST || o >= CFG_END || (o & 3u) || v > 0xFFFFu) continue;
+        if (o == 0x14 && v > 2) continue;
+        W32(obj + o, v);
+        n++;
+    }
+    fclose(f);
+    rt_log("[config] loaded %d values from %s (music %u, sound %u)\n", n, path, R32(obj + 0x1C), R32(obj + 0x20));
+}
+
 // DialogBoxParamA(hInstance, template, parent, proc, param): runs its own message loop until EndDialog.
 U(DialogBoxParamA) {
     HOSTFN;
@@ -430,7 +785,9 @@ U(DialogBoxParamA) {
         if (!d->ended) { refresh(); SDL_Delay(10); }
     }
     uint32_t r = d->result;
+    int res = d->res;
     if (d->used) { dlg_send(c, d, 0x2u, 0, 0); dlg_free(d); }   // WM_DESTROY
+    if (r == 1 && (res == 1491 || res == 1492)) cfg_save(R32(CFG_OBJ));   // Game / Key Configuration: OK
     rt_log("[dlg] dialog %u closed -> %d\n", ARG(2), (int)r);
     STDRET(5, r);
 }
@@ -564,7 +921,8 @@ static uint32_t ctl_message(CPU *c, Dlg *d, Ctl *t, uint32_t msg, uint32_t wp, u
         uint32_t add = cb ? 0x143 : 0x180, ins = cb ? 0x14A : 0x181, reset = cb ? 0x14B : 0x184, setsel = cb ? 0x14E : 0x186,
                  getsel = cb ? 0x147 : 0x188, count = cb ? 0x146 : 0x18B, gettext = cb ? 0x148 : 0x189,
                  textlen = cb ? 0x149 : 0x18A, getdata = cb ? 0x150 : 0x199, setdata = cb ? 0x151 : 0x19A,
-                 find = cb ? 0x14C : 0x18F, findx = cb ? 0x158 : 0x1A2, del = cb ? 0x144 : 0x182;
+                 find = cb ? 0x14C : 0x18F, findx = cb ? 0x158 : 0x1A2, del = cb ? 0x144 : 0x182,
+                 selstr = cb ? 0x14D : 0x18C;
         if (msg == add) return (uint32_t)add_item(t, lp ? GSTR(lp) : "", -1);
         if (msg == ins) return (uint32_t)add_item(t, lp ? GSTR(lp) : "", (int)wp);
         if (msg == reset) { t->nitems = 0; t->cursel = -1; t->top = 0; return 0; }
@@ -577,6 +935,11 @@ static uint32_t ctl_message(CPU *c, Dlg *d, Ctl *t, uint32_t msg, uint32_t wp, u
         if (msg == setdata) { if ((int)wp < t->nitems) t->itemdata[wp] = lp; return 0; }
         if (msg == find) return (uint32_t)find_item(t, lp ? GSTR(lp) : "", (int32_t)wp, 0);
         if (msg == findx) return (uint32_t)find_item(t, lp ? GSTR(lp) : "", (int32_t)wp, 1);
+        if (msg == selstr) {   // CB_SELECTSTRING / LB_SELECTSTRING: first item starting with the text after index wp
+            int i = find_item(t, lp ? GSTR(lp) : "", (int32_t)wp, 0);
+            if (i >= 0) t->cursel = i;
+            return (uint32_t)i;
+        }
         if (msg == del) {
             if ((int)wp >= t->nitems) return 0xffffffffu;
             memmove(&t->items[wp], &t->items[wp + 1], (size_t)(t->nitems - (int)wp - 1) * sizeof t->items[0]);
@@ -599,3 +962,8 @@ U(SendDlgItemMessageA) {   // (dlg, id, msg, wparam, lparam)
     Ctl *t = ctl_by_id(d, ARG(2));
     STDRET(5, t ? ctl_message(c, d, t, ARG(3), ARG(4), ARG(5)) : 0);
 }
+
+// Menus: LoadMenuA hands out a handle naming the resource; SetMenu shows it as the port's menu bar (see above).
+U(LoadMenuA) { HOSTFN; rt_log("[menu] LoadMenuA(%u)\n", ARG(2)); STDRET(2, ARG(2) < 0x10000u ? MENU_HANDLE(ARG(2)) : 0u); }
+U(SetMenu) { HOSTFN; menu_set(ARG(2)); refresh(); STDRET(2, 1); }
+U(DestroyMenu) { HOSTFN; if (ARG(1) && (ARG(1) & 0xffffu) == g_menu.res) g_menu.res = 0; STDRET(1, 1); }

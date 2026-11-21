@@ -38,6 +38,7 @@ int hk_dlg_set_focus(uint32_t hwnd);
 int hk_dlg_active(void);
 void hk_dlg_keys(CPU *c, const uint8_t *pressed_vks, int n);
 void hk_dlg_refresh(void);
+void hk_menu_key(void);
 U(DestroyWindow) { HOSTFN; hk_dlg_destroy(c, ARG(1)); STDRET(1, 1); }
 U(ShowWindow) {
     HOSTFN;
@@ -79,7 +80,7 @@ static void timer_delivered(uint32_t id);
 // While a dialog is up, key presses go to it (hk_dlg_keys) instead of the game's window.
 static void post_key_changes(CPU *c) {
     post_due_timers();
-    static const uint8_t keys[] = {0x25, 0x26, 0x27, 0x28, 0x0D, 0x1B, 0x20, 0x10, 0x11, 0x12, 0x71, 'Z', 'X', 'C', 'A', 'S'};
+    static const uint8_t keys[] = {0x25, 0x26, 0x27, 0x28, 0x0D, 0x1B, 0x20, 0x10, 0x11, 0x12, 0x71, 0x73, 0x79, 'Z', 'X', 'C', 'A', 'S'};
     static uint8_t down[256];
     uint8_t pressed[sizeof keys];
     int npressed = 0, dlg = hk_dlg_active();
@@ -87,6 +88,7 @@ static void post_key_changes(CPU *c) {
         int vk = keys[i], d = plat_vk_down(vk) != 0;
         if (d == down[vk]) continue;
         down[vk] = (uint8_t)d;
+        if (vk == 0x79) { if (d) hk_menu_key(); continue; }   // F10: the game's menu (port/hk/dialog.c)
         if (dlg) { if (d) pressed[npressed++] = (uint8_t)vk; continue; }
         w32_post_message(HWND_MAIN, d ? 0x100u : 0x101u, (uint32_t)vk, d ? 1u : 0xC0000001u);
     }

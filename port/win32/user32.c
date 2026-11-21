@@ -316,7 +316,7 @@ U(LoadStringA) {   // (hInstance, id, buffer, buffer size): from the image's str
     int w32_load_string(uint32_t id, char *out, size_t cap);
     char s[1024];
     int n = w32_load_string(ARG(2), s, sizeof s);
-    rt_log("LoadStringA(%u) -> \"%s\"\n", ARG(2), s);
+    if (RT_TRACE("HK_TRACE_GDI") || rt_first_time(0x4c530000ull | ARG(2))) rt_log("LoadStringA(%u) -> \"%s\"\n", ARG(2), s);
     if (!ARG(3) || !ARG(4)) STDRET(4, 0);
     if ((uint32_t)n >= ARG(4)) n = (int)ARG(4) - 1;
     memcpy(mb + ARG(3), s, (size_t)n);

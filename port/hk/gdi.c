@@ -301,7 +301,8 @@ G(CreateFontIndirectA) {
         if (!g_font_used[i]) {
             g_font_used[i] = 1;
             g_font_height[i] = ARG(1) ? (int32_t)R32(ARG(1)) : 16;
-            if (ARG(1)) rt_log("[gdi] CreateFontIndirectA height %d width %d weight %u charset %u face \"%s\" -> #%d\n",
+            if (ARG(1) && (RT_TRACE("HK_TRACE_GDI") || rt_first_time(0x46000000ull ^ ((uint64_t)(uint32_t)R32(ARG(1)) << 32) ^ ((uint64_t)(uint32_t)R32(ARG(1) + 4) << 16) ^ (R32(ARG(1) + 16) * 31u) ^ R8(ARG(1) + 23)) ))
+                rt_log("[gdi] CreateFontIndirectA height %d width %d weight %u charset %u face \"%s\" -> #%d\n",
                                (int32_t)R32(ARG(1)), (int32_t)R32(ARG(1) + 4), R32(ARG(1) + 16), R8(ARG(1) + 23),
                                (char *)mb + ARG(1) + 28, i);
             STDRET(1, H_FONT + (uint32_t)i);

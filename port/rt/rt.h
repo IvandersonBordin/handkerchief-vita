@@ -3,6 +3,7 @@
 #pragma once
 #include "x86rt.h"
 #include <stdarg.h>
+#include <stdlib.h>
 #include <stdio.h>
 
 extern uint32_t g_mem_size;
@@ -61,6 +62,10 @@ static inline uint32_t GADDR(const void *p) { return (uint32_t)((const uint8_t *
 extern uint64_t g_t_sleep, g_t_gl, g_t_swap;
 
 void rt_log(const char *fmt, ...);
+// Per-call trace flag, read once from the environment (always off on the Vita, which has no env).
+#define RT_TRACE(envname) ({ static int t_ = -1; if (t_ < 0) t_ = getenv(envname) != NULL; t_; })
+// True the first time it sees this key (small table; when full, reports false so nothing floods).
+int rt_first_time(uint64_t key);
 void rt_log_flush(void);
 void rt_cpu_profile_init(void);
 void rt_dump_hang(void);   // watchdog: where the main thread is when frames stop

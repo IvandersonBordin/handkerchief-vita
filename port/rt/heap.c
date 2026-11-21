@@ -116,7 +116,7 @@ uint32_t gheap_alloc(uint32_t size) {
         }
     }
     SDL_UnlockMutex(g_heap_lock);
-    if (!p) rt_log("[heap] allocation of %u bytes failed: used %llu MB, free %llu KB, largest block %llu KB in %u blocks\n",
+    if (!p && (size < 0xF0000000u || RT_TRACE("HK_TRACE_HEAP"))) rt_log("[heap] allocation of %u bytes failed: used %llu MB, free %llu KB, largest block %llu KB in %u blocks\n",
                    size, (unsigned long long)(g_heap_used >> 20),
                    (unsigned long long)(free_stats.total >> 10),
                    (unsigned long long)(free_stats.largest >> 10), free_stats.blocks);

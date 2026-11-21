@@ -154,7 +154,7 @@ K(Sleep) {
 }
 K(GetTickCount) {
     static unsigned s_tc;
-    if (++s_tc <= 3 || s_tc % 50000 == 0) rt_log("GetTickCount #%u -> %u\n", s_tc, w32_tick_ms());
+    if (++s_tc <= 3) rt_log("GetTickCount #%u -> %u\n", s_tc, w32_tick_ms());
     STDRET(0, w32_tick_ms());
 }
 // SH3_HZ: reported QPF = real * 30 / HZ (inherited from SH4, where the logic step is QPF/30; unverified for SH3).
@@ -666,7 +666,7 @@ static K(CreateFileA_impl) {
         int err = errno;
         uint32_t error = file_error(err, 2);
         free(fl);
-        rt_log("CreateFileA(\"%s\") failed%s\n", gp, wav_ro && err == ENOENT ? " (remembered as missing)" : "");
+        if (!(wav_ro && err == ENOENT) || RT_TRACE("HK_TRACE_IO")) rt_log("CreateFileA(\"%s\") failed%s\n", gp, wav_ro && err == ENOENT ? " (remembered as missing)" : "");
         if (wav_ro && err == ENOENT) wav_missing(gp, 1);
         w32_set_last_error(c, error);
         STDRET(7, 0xffffffffu);
@@ -695,7 +695,7 @@ static K(CreateFileA_impl) {
         (!SDL_strcasecmp(ext,".arc") || !SDL_strcasecmp(ext,".afs"));   // SH3 immutable archives (SH4 used .sh4/.pac)
     w32_set_last_error(c, 0);
     uint32_t h = fl->h = h_new(H_FILE, fl);
-    rt_log("CreateFileA(\"%s\") -> %x%s\n", gp, h, c == g_main_cpu ? "" : " (other thread)");
+    if (RT_TRACE("HK_TRACE_IO")) rt_log("CreateFileA(\"%s\") -> %x%s\n", gp, h, c == g_main_cpu ? "" : " (other thread)");
     STDRET(7, h);
 }
 static File *file_of(uint32_t h) { return h_get(h, H_FILE); }
@@ -964,13 +964,13 @@ K(ReadFile) {
     if (got >= 262144 || (io_tail_profile && got >= 65536)) {
         static unsigned s_big;
         extern unsigned g_frame;
-        if (++s_big <= 400) rt_log("[io] frame %u h=%x pos=%ld n=%u KB=%u %.1f ms (%.1f MB/s) thread=%d ahead=%d caller=%08x head=%d\n", g_frame, ARG(1), pos0, n, got >> 10,
+        if (RT_TRACE("HK_TRACE_IO") && ++s_big <= 400) rt_log("[io] frame %u h=%x pos=%ld n=%u KB=%u %.1f ms (%.1f MB/s) thread=%d ahead=%d caller=%08x head=%d\n", g_frame, ARG(1), pos0, n, got >> 10,
                                    d_io * 1000.0 / SDL_GetPerformanceFrequency(), got / 1048576.0 / (d_io / (double)SDL_GetPerformanceFrequency() + 1e-9),
                                    c == g_main_cpu, pfhit, R32(c->esp), headhit);
     }
     {
         static unsigned s_rf;
-        if (++s_rf <= 20 || s_rf % 100 == 0)
+        if (RT_TRACE("HK_TRACE_IO") && (++s_rf <= 20 || s_rf % 100 == 0))
             rt_log("ReadFile #%u h=%x n=%u -> %u\n", s_rf, ARG(1), n, got);
     }
     if (f && !error) read_ring_add(f->path, pos0, n, got, buf, c == g_main_cpu);
@@ -1128,7 +1128,7 @@ K(GetFileSize) {
     long n = ftell(f->f);
     fseek(f->f, cur, SEEK_SET);
     file_release(f);
-    rt_log("GetFileSize h=%x -> %ld\n", ARG(1), n);
+    if (RT_TRACE("HK_TRACE_IO")) rt_log("GetFileSize h=%x -> %ld\n", ARG(1), n);
     if (ARG(2)) W32(ARG(2), 0);
     STDRET(2, (uint32_t)n);
 }

@@ -28,6 +28,14 @@ static int g_log_init_done;
 static SDL_mutex *g_drainmtx;
 static char *g_lq;
 static size_t g_lqn, g_lqcap;
+int rt_first_time(uint64_t key) {
+    static uint64_t seen[256];
+    static unsigned n;
+    for (unsigned i = 0; i < n; i++) if (seen[i] == key) return 0;
+    if (n >= 256) return 0;
+    seen[n++] = key;
+    return 1;
+}
 void rt_log_flush(void) {
     if (!g_logmtx) return;
     SDL_LockMutex(g_drainmtx);

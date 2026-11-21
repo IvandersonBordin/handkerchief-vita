@@ -6,6 +6,7 @@
 #include <psp2/ctrl.h>
 #include <psp2/io/stat.h>
 #include <psp2/power.h>
+#include <psp2/kernel/threadmgr.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include "hk/font_data.h"
@@ -42,8 +43,9 @@ int plat_pump_events(void) {
 
 // Aspect: 0 = 4:3 letterboxed (original proportions), 1 = stretched to the full 16:9 screen.
 // Toggled with Triangle on the pause screen, saved in HK_DATA_DIR/hkport.cfg.
+// FPS counter (frames shown per second, top left): toggled with Square on the pause screen, saved there too.
 #define HK_CFG HK_DATA_DIR "/hkport.cfg"
-static int g_wide;
+static int g_wide, g_fps;
 static void apply_aspect(void) {
     if (!g_ren) return;
     if (g_wide) SDL_RenderSetLogicalSize(g_ren, 0, 0);
@@ -51,11 +53,14 @@ static void apply_aspect(void) {
 }
 static void load_cfg(void) {
     FILE *f = fopen(HK_CFG, "r");
-    if (f) { if (fscanf(f, "wide=%d", &g_wide) != 1) g_wide = 0; fclose(f); }
+    if (!f) return;
+    char line[64];
+    while (fgets(line, sizeof line, f)) { sscanf(line, "wide=%d", &g_wide); sscanf(line, "fps=%d", &g_fps); }
+    fclose(f);
 }
 static void save_cfg(void) {
     FILE *f = fopen(HK_CFG, "w");
-    if (f) { fprintf(f, "wide=%d\n", g_wide); fclose(f); }
+    if (f) { fprintf(f, "wide=%d\nfps=%d\n", g_wide, g_fps); fclose(f); }
 }
 // Text on a 640x480 XRGB buffer with the port's bitmap font (cell 18).
 static void draw_text(uint32_t *buf, int x, int y, const char *s, uint32_t color) {
@@ -93,16 +98,19 @@ static void pause_loop(const uint32_t *pixels, int width, int height, int pitch_
         for (int x = 0; x < 24; x++) { dim[y][296 + x] = 0xffffffu; dim[y][320 + x] = 0xffffffu; }
     draw_text(&dim[0][0], 230, 300, "Start: continue", 0xffffffu);
     SceCtrlData pad;
-    int released = 0, tri_was = 1;
+    int released = 0, tri_was = 1, sq_was = 1;
     for (;;) {
         static uint32_t shown[480][640];
         memcpy(shown, dim, sizeof shown);
         draw_text(&shown[0][0], 230, 324, g_wide ? "Triangle: screen 16:9" : "Triangle: screen 4:3", 0xffff80u);
+        draw_text(&shown[0][0], 230, 348, g_fps ? "Square: FPS counter on" : "Square: FPS counter off", 0xffff80u);
         show_frame(&shown[0][0], 640, 480, 640 * 4);
         sceCtrlPeekBufferPositive(0, &pad, 1);
-        int tri = (pad.buttons & SCE_CTRL_TRIANGLE) != 0;
+        int tri = (pad.buttons & SCE_CTRL_TRIANGLE) != 0, sq = (pad.buttons & SCE_CTRL_SQUARE) != 0;
         if (tri && !tri_was) { g_wide = !g_wide; apply_aspect(); save_cfg(); }
+        if (sq && !sq_was) { g_fps = !g_fps; save_cfg(); }
         tri_was = tri;
+        sq_was = sq;
         if (!(pad.buttons & SCE_CTRL_START)) released = 1;
         else if (released) break;
         SDL_Delay(16);
@@ -118,6 +126,24 @@ void plat_present_xrgb(const uint32_t *pixels, int width, int height, int pitch_
     int start = (pad.buttons & SCE_CTRL_START) != 0;
     if (start && !start_was) { pause_loop(pixels, width, height, pitch_bytes); start = 0; }
     start_was = start;
+    // FPS: frames shown in the last full second (the game targets 25).
+    static uint64_t t_sec;
+    static int count, fps;
+    uint64_t now = SDL_GetPerformanceCounter(), hz = SDL_GetPerformanceFrequency();
+    count++;
+    if (!t_sec) t_sec = now;
+    if (now - t_sec >= hz) { fps = (int)((uint64_t)count * hz / (now - t_sec)); count = 0; t_sec = now; }
+    if (g_fps && width == 640 && height <= 480) {
+        static uint32_t buf[480][640];
+        for (int y = 0; y < height; y++) memcpy(buf[y], pixels + y * (pitch_bytes / 4), 640 * 4);
+        char txt[16];
+        snprintf(txt, sizeof txt, "%d FPS", fps);
+        for (int y = 2; y < 22; y++)
+            for (int x = 2; x < 74; x++) buf[y][x] = (buf[y][x] >> 2) & 0x3f3f3fu;
+        draw_text(&buf[0][0], 6, 3, txt, fps >= 24 ? 0x80ff80u : 0xffff60u);
+        show_frame(&buf[0][0], 640, height, 640 * 4);
+        return;
+    }
     show_frame(pixels, width, height, pitch_bytes);
 }
 
@@ -167,6 +193,10 @@ int main(int argc, char **argv) {
     scePowerSetBusClockFrequency(222);
     scePowerSetGpuClockFrequency(222);
     scePowerSetGpuXbarClockFrequency(166);
+    // The game's main thread keeps core 0 to itself; audio (port/hk/dsound.c), log and the game's helper
+    // threads run on cores 1-2. Without this the audio thread could share the main thread's core and starve in
+    // heavy scenes (sound dropping out when the house is destroyed, in tunnels and on map changes).
+    sceKernelChangeThreadCpuAffinityMask(sceKernelGetThreadId(), SCE_KERNEL_CPU_MASK_USER_0);
     SDL_strlcpy(g_game_dir, HK_DATA_DIR, sizeof g_game_dir);
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_TIMER | SDL_INIT_EVENTS | SDL_INIT_GAMECONTROLLER)) {
         rt_log("SDL_Init: %s\n", SDL_GetError());

@@ -9,6 +9,9 @@
 #include <SDL.h>
 #include <stdio.h>
 #include <stdlib.h>
+#ifdef __vita__
+#include <psp2/kernel/threadmgr.h>
+#endif
 
 #define OUT_RATE 48000
 #define MIX_FRAMES 2048u   // ~43 ms at 48 kHz: headroom when many voices play at once
@@ -75,12 +78,39 @@ static void obj_unwrap(DSBuf *b) {
     W32(b->guest + 4, 0x44530000u);   // dead: index 0
 }
 
+// Callback timing: a callback that comes much later than one buffer after the previous one means the device ran
+// dry (silence or crackle). Late callbacks are counted and logged at most every 10 s with the game frame, so
+// console logs show whether the audio thread is starved. On the Vita the audio thread is moved to core 1, away
+// from the game's main thread (core 0, port/vita/main.c), which can use 100% of its core in heavy scenes.
+static void late_check(int n) {
+    static Uint64 last, t_log; static unsigned late, calls; static double worst;
+    Uint64 now = SDL_GetPerformanceCounter(), hz = SDL_GetPerformanceFrequency();
+    if (!last) {
+#ifdef __vita__
+        int r = sceKernelChangeThreadCpuAffinityMask(sceKernelGetThreadId(), SCE_KERNEL_CPU_MASK_USER_1);
+        rt_log("[mix] audio thread on core 1 (%d)\n", r);
+#endif
+        last = t_log = now;
+        return;
+    }
+    double gap = (double)(now - last) * 1000.0 / (double)hz, period = n * 1000.0 / OUT_RATE;
+    last = now;
+    calls++;
+    if (gap > period * 1.5) { late++; if (gap > worst) worst = gap; }
+    if (late && now - t_log > 10 * hz) {
+        extern unsigned g_frame;
+        rt_log("[mix] %u of %u callbacks late (worst gap %.0f ms, period %.0f ms) frame %u\n", late, calls, worst, period, g_frame);
+        late = calls = 0; worst = 0; t_log = now;
+    }
+}
+
 static void free_buffer(DSBuf *b);
 static void mix(void *ud, Uint8 *stream, int len) {
     (void)ud;
     int n = len / 4;
     if (n <= 0) return;
     if ((unsigned)n > MIX_FRAMES) n = MIX_FRAMES;   // the device is opened with MIX_FRAMES samples
+    late_check(n);
     float *acc = mix_acc;
     memset(acc, 0, (size_t)n * 2 * sizeof(float));
     SDL_LockMutex(mx);
@@ -145,8 +175,14 @@ static void mix(void *ud, Uint8 *stream, int len) {
         if (v > maxv) maxv = v;
         Uint64 now = SDL_GetPerformanceCounter();
         if (!t0) t0 = now;
-        if (now - t0 > 5 * SDL_GetPerformanceFrequency() && getenv("HK_TRACE_DS")) { rt_log("[mix] max voices %d\n", maxv); maxv = 0; t0 = now; }
+        if (now - t0 > 5 * SDL_GetPerformanceFrequency() && getenv("HK_TRACE_DS")) {
+            rt_log("[mix] max voices %d\n", maxv); maxv = 0; t0 = now;
+            for (int k = 1; k < MAX_OBJ; k++) { DSBuf *q = g_obj[k]; if (q && q->kind == K_BUF && q->playing) rt_log("[mix]  #%d vol %d pan %d freq %u rate %u pos %.0f/%u loop %d\n", k, q->volume, q->pan, q->freq, q->rate, q->pos, q->align ? q->size / q->align : 0, q->looping); }
+        }
         (void)tsum;
+        static uint64_t outn; extern unsigned g_frame;   // HK_TRACE_DS: audio time -> game frame, every second
+        if (outn / OUT_RATE != (outn + (unsigned)n) / OUT_RATE && getenv("HK_TRACE_DS")) rt_log("[mixt] %.1f s frame %u\n", (double)(outn + n) / OUT_RATE, g_frame);
+        outn += (unsigned)n;
     }
     SDL_UnlockMutex(mx);
     int16_t *out = (int16_t *)stream;

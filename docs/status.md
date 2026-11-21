@@ -59,8 +59,10 @@ Main path: full static recompilation of `HDKWIN.EXE` (see [static-recomp.md](sta
 - Screen aspect: on the Vita pause screen (Start), Triangle toggles 4:3 letterboxed / stretched 16:9, saved in
   ux0:data/handkerchief/hkport.cfg. True widescreen (more of the world visible) would need changes to the
   game's drawing and camera; not attempted.
-- Missing: typing text in dialogs; the black band across the A0 terrain is drawn by the game in normal play
-  too (seen at frame 1530 with no menu), not by the dialogs.
+- The black diagonal strip in the A0 mound under the player's house is original: Ivan's recording of the game
+  (build/gameplay-reference/overview.jpg, first row) shows it too. HK_TRACE_PIX=300,305,1530 shows the game
+  drawing it with an opaque BltFast (call at 0x408D59, element bit 15 clear) of black 40x20 tiles from
+  HdkMAPb0.BMP (surface #9); the surface has its colour key, the game just does not ask for it there.
 - Old test apps HKRC00005-00009 were uninstalled by Ivan from the LiveArea (vita-agent-use `content preview`
   fails with firmware error 0xFFFEFFF2 on this console).
 - Ivan's feedback (2026-11-20): the game runs smoothly on the Vita; stretched 16:9 makes text easier to read

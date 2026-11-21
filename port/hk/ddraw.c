@@ -313,6 +313,22 @@ static void stretch(uint8_t *mb, Obj *d, int dx0, int dy0, int dx1, int dy1, Obj
 #define DDBLT_COLORFILL 0x400u
 #define DDBLT_KEYSRC 0x8000u
 #define DDBLT_KEYSRCOVERRIDE 0x10000u
+// HK_TRACE_PIX=x,y,N: logs every Blt / BltFast / colour fill to the back buffer that covers pixel (x, y) while
+// frame N is drawn: source surface and point, colour key (-1 = opaque), source and resulting index, return address.
+// Used to show that the black strip under the house in A0 is an opaque BltFast of black from HdkMAPb0 asked by
+// the game itself (0x408D59, element bit 15 clear), which the original also shows (Ivan's recording).
+static void trace_pix(uint8_t *mb, const char *op, Obj *d, int dx0, int dy0, int dx1, int dy1, Obj *s, int sx0, int sy0, int key, uint32_t ret) {
+    static int px = -1, py, pf;
+    if (px == -1) { const char *e = getenv("HK_TRACE_PIX"); px = -2; if (e) sscanf(e, "%d,%d,%d", &px, &py, &pf); }
+    extern unsigned g_frame;
+    if (px < 0 || !d->backbuffer || (int)g_frame + 1 != pf) return;
+    if (px < dx0 || px >= dx1 || py < dy0 || py >= dy1) return;
+    int sx = s ? sx0 + px - dx0 : -1, sy = s ? sy0 + py - dy0 : -1;
+    rt_log("[pix] %s dst(%d,%d)-(%d,%d) src #%d %dx%d at (%d,%d) key %d srcval %d -> %d (ret %08x)\n", op, dx0, dy0, dx1, dy1,
+           s ? idx_of(s) : 0, s ? s->w : 0, s ? s->h : 0, sx, sy, key,
+           s && sx >= 0 && sy >= 0 && sx < s->w && sy < s->h ? R8(s->pixels + (uint32_t)(sy * s->pitch + sx)) : -1,
+           R8(d->pixels + (uint32_t)(py * d->pitch + px)), ret);
+}
 // IDirectDrawSurface::Blt(this, destRect, src, srcRect, flags, fx)
 static void surf_blt(CPU *c) {
     HOSTFN;
@@ -328,6 +344,7 @@ static void surf_blt(CPU *c) {
         if (dx1 > d->w) dx1 = d->w;
         if (dy1 > d->h) dy1 = d->h;
         for (int y = dy0; y < dy1; y++) memset(mb + d->pixels + (uint32_t)(y * d->pitch + dx0), col, (size_t)(dx1 > dx0 ? dx1 - dx0 : 0));
+        trace_pix(mb, "fill", d, dx0, dy0, dx1, dy1, NULL, 0, 0, col, R32(c->esp));
     } else {
         Obj *s = obj_of(ARG(3), OBJ_SURF);
         if (!s) STDRET(6, DDERR_INVALIDPARAMS);
@@ -338,6 +355,7 @@ static void surf_blt(CPU *c) {
         if ((flags & DDBLT_KEYSRCOVERRIDE) && fx) key = (int)(R32(fx + 92) & 0xff);
         if (dx1 - dx0 == sx1 - sx0 && dy1 - dy0 == sy1 - sy0) blit(mb, d, dx0, dy0, s, sx0, sy0, sx1, sy1, key);
         else stretch(mb, d, dx0, dy0, dx1, dy1, s, sx0, sy0, sx1, sy1, key);
+        trace_pix(mb, "blt", d, dx0, dy0, dx1, dy1, s, sx0, sy0, key, R32(c->esp));
     }
     if (d->primary) present_primary();
     STDRET(6, DD_OK);
@@ -351,6 +369,7 @@ static void surf_bltfast(CPU *c) {
     get_rect(mb, ARG(5), s, &sx0, &sy0, &sx1, &sy1);
     int key = ((ARG(6) & 1u) && s->has_ck) ? (int)(s->ck_lo & 0xff) : -1;   // DDBLTFAST_SRCCOLORKEY
     blit(mb, d, (int32_t)ARG(2), (int32_t)ARG(3), s, sx0, sy0, sx1, sy1, key);
+    trace_pix(mb, "fast", d, (int32_t)ARG(2), (int32_t)ARG(3), (int32_t)ARG(2) + sx1 - sx0, (int32_t)ARG(3) + sy1 - sy0, s, sx0, sy0, key, R32(c->esp));
     if (d->primary) present_primary();
     STDRET(6, DD_OK);
 }

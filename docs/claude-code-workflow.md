@@ -15,11 +15,18 @@ explicit authorization before it is enabled (see `CLAUDE.md`, "Cost and usage").
 
 Defined in `.claude/agents/`:
 
-| Agent | Role | Worktree | Branch |
-|---|---|---|---|
-| `gandalf` | Supervisor: plans, reviews evidence, delegates | `handkerchief-vita` | `main` |
-| `bruno` | Reverse engineering (x86, HDK, CRock, player Y) | `../handkerchief-vita-bruno` | `agent/reverse-engineering` |
-| `carlos` | Portable C and VitaSDK prototypes | `../handkerchief-vita-carlos` | `agent/vita-smoke-test` |
+| Agent | Role | Model |
+|---|---|---|
+| `gandalf` | Supervisor: plans, reviews evidence, delegates | sonnet |
+| `bruno` | Reverse engineering and the x86 -> C recompiler | opus |
+| `carlos` | Runtime, Win32/DirectDraw emulation, Linux and Vita builds | opus |
+| `tester` | Builds, test runs, screenshots, log summaries (no edits) | haiku |
+
+Since the 2026-11-20 pivot to static recompilation (docs/static-recomp.md), delegated work uses a
+worktree branched from `recomp/static-pipeline`. The older worktrees `../handkerchief-vita-bruno`
+(`agent/reverse-engineering`) and `../handkerchief-vita-carlos` (`agent/vita-smoke-test`) keep the
+earlier findings and prototypes. Short tasks are done directly in the main session: each subagent
+starts without context and spends quota re-reading it.
 
 Each agent works only in its own worktree. Agents may commit locally on their own branch
 after validation; `git push` and merges into `main` require Ivan's approval.

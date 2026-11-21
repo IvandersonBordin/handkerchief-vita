@@ -150,6 +150,7 @@ static unsigned g_menu_until;
 // is stored at 0x4AC84C (0x4154F5 / 0x41555D). L sets that flag; R and Circle queue 'U' and 'M' presses that are
 // delivered to the game after the pause, a few frames each (plat_vk_down).
 #define HK_UNRIVALED 0x4AC84Cu
+#define HK_INVINCIBLE 0x47BCD8u   // starts at 1 in .data; each 'u' XORs it (0x455138), effective with Unrivaled Mode
 static char g_keyq[32];
 static int g_keyq_n;
 static unsigned g_keyq_at;
@@ -181,7 +182,8 @@ static void pause_loop(const uint32_t *pixels, int width, int height, int pitch_
         draw_text(&shown[0][0], 230, 396, cheats ? "L: cheats on" : "L: cheats off", 0x80ffffu);
         if (cheats) {
             char line[64];
-            snprintf(line, sizeof line, "R: invincible on/off%s", inv ? " (queued)" : "");
+            int on = (*(uint32_t *)(g_mem + HK_INVINCIBLE) != 0) ^ inv;
+            snprintf(line, sizeof line, "R: invincible %s", on ? "ON" : "OFF");
             draw_text(&shown[0][0], 230, 420, line, 0x80ffffu);
             snprintf(line, sizeof line, money ? "Circle: add money (x%d)" : "Circle: add money", money);
             draw_text(&shown[0][0], 230, 444, line, 0x80ffffu);

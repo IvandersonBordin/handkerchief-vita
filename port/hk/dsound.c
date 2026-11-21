@@ -33,6 +33,7 @@ typedef struct DSBuf {
     int32_t volume, pan;
     int nnotify;
     struct { uint32_t off, ev; } notify[32];
+    int dup;                    // started on top of a copy of the same sound: mixed silent (see buf_play)
     float lp[4];                // anti-imaging low-pass state (two one-pole stages, left and right)
     int *shared_refs;           // sample memory shared between duplicates
     struct DSBuf *parent;       // K_NOTIFY: the buffer it belongs to
@@ -118,7 +119,7 @@ static void mix(void *ud, Uint8 *stream, int len) {
     for (int k = 1; k < MAX_OBJ; k++) {
         DSBuf *b = g_obj[k];
         if (!b || b->kind != K_BUF || !b->playing || b->primary || !b->align) continue;
-        float g = db_gain(b->volume), gl = g, gr = g;
+        float g = b->dup ? 0.f : db_gain(b->volume), gl = g, gr = g;
         if (b->pan < 0) gr *= db_gain(b->pan); else if (b->pan > 0) gl *= db_gain(-b->pan);
         double step = (double)(b->freq ? b->freq : b->rate) / OUT_RATE;
         uint32_t frames = b->size / b->align;
@@ -367,7 +368,19 @@ static void buf_lock(CPU *c) {
 static void buf_play(CPU *c) {   // (this, reserved, priority, flags): DSBPLAY_LOOPING 1
     HOSTFN; BUFN(4);
     SDL_LockMutex(mx);
-    if (!b->playing) memset(b->lp, 0, sizeof b->lp);
+    if (!b->playing) {
+        memset(b->lp, 0, sizeof b->lp);
+        // The game often starts the same sample on several duplicates at once (explosion debris, gunfire): the
+        // copies add up in phase (block peaks of 5-9x full scale logged on the console), which forced the limiter
+        // down to 15% gain and made the whole mix pump. A copy started within 40 ms of another playing copy of
+        // the same sample still plays for the game (status, position, notifications) but is mixed silent.
+        b->dup = 0;
+        for (int k = 1; k < MAX_OBJ && b->mem; k++) {
+            DSBuf *o = g_obj[k];
+            if (o && o != b && o->kind == K_BUF && o->playing && !o->dup && o->mem == b->mem && o->rate &&
+                o->pos < (double)o->rate * 0.04 && o->pos >= b->pos - 1.0) { b->dup = 1; break; }
+        }
+    }
     b->playing = 1;
     b->looping = ARG(4) & 1;
     SDL_UnlockMutex(mx);

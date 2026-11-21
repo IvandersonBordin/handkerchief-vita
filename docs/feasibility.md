@@ -21,7 +21,7 @@ Evidências locais em [mapa do motor](engine-map.md), [formato HDK](hdk-format.m
 
 ## Cota dos agentes
 
-O executor instalado em ~/.local/bin/handkerchief-cycle usa um marcador compartilhado em ~/.local/state/handkerchief/usage-limit (ou XDG_STATE_HOME). Um erro de cota do CLI grava a mensagem. Os próximos ciclos retornam antes de chamar o modelo. Chamadas já em curso podem terminar. Após a renovação confirmada, remover apenas esse marcador libera os dois agentes. Essa retomada manual evita sondagens pagas.
+The Codex executor and its shared usage-limit marker were retired on 2026-11-20. Agents now run only on request in Claude Code; quota rules are in `CLAUDE.md` and [claude-code-workflow.md](claude-code-workflow.md).
 
 ## Auditoria comparativa de 19/11/2026
 

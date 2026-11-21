@@ -52,8 +52,36 @@ cmake -S . -B /tmp/hk-build -DCMAKE_BUILD_TYPE=Release && cmake --build /tmp/hk-
 python3 -B check_livearea.py
 ```
 
-`test_loop.c` and `test_crock.c` also exist on that branch; `test_crock.c` was never part
-of the old gate and should be added to the routine checks.
+Also run these two (all passed on 2026-11-20, `sdk_include=$HOME/vitasdk/arm-vita-eabi/include`):
+
+```sh
+cc $flags test_crock.c -o /tmp/test_crock && /tmp/test_crock
+cc $flags -idirafter "$sdk_include" -Dmain=smoke_main -c main.c -o /tmp/main.o &&
+cc $flags -idirafter "$sdk_include" test_loop.c sprite.c /tmp/main.o -o /tmp/test_loop && /tmp/test_loop
+```
+
+`test_loop` must print `Active loop time: 1200000 us` twice (see `docs/vita-smoke-test.md`
+on Carlos's branch). On `main`, the camera regression needs the link flags from
+`docs/vista-walk.md` (`-ffunction-sections -fdata-sections -Wl,--gc-sections`).
+
+## Reference sources
+
+Local-only, never committed:
+
+- Original data: `original-data/` (read-only; Claude Code deny rules block writes).
+- Ghidra project: `~/Projetos/handkerchief-ghidra.gpr` / `.rep` (`analyzeHeadless` is not
+  on `PATH`; use the Ghidra install under `/usr/bin/ghidra`'s tree).
+- Gameplay video (51 min, 360p): `~/Downloads/YTDown.com_YouTube_Media_u65GuE901bg_Handkerchief-PC-Game-Gameplay_002_360p.mp4`.
+  Earlier reports cite the A0 opening at 01:00.
+- Recompilation proofs and Vita diagnostics: `build/recomp-*`, `build/gameplay-reference/`.
+- Vita tooling: `~/Projetos/ferramentas/vdpm`, `~/Projetos/ferramentas/vitacompanion`.
+
+External projects already evaluated (PCRecomp, sh4vita/sh3vita `x86rec.py`, I.G.I. recomp,
+cnc-ddraw, soloader, vitaGL and others) are catalogued with verdicts in
+[plano-recompilacao.md](plano-recompilacao.md), section B.
+
+The `vita-port` skill lives in `.agents/skills/vita-port` and is exposed to Claude Code
+through the symlink `.claude/skills/vita-port`.
 
 ## State carried over from the Codex executor (2026-11-20)
 

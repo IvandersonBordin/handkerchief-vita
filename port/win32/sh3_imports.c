@@ -104,7 +104,7 @@ K(DeleteFileA) {
     char hp[600];
     w32_host_path(GSTR(ARG(1)) ? GSTR(ARG(1)) : "", hp, sizeof hp);
     int ok = remove(hp) == 0;
-    rt_log("DeleteFileA(\"%s\") -> %d\n", GSTR(ARG(1)), ok);
+    rt_log("DeleteFileA(\"%s\") -> %d (%s)\n", GSTR(ARG(1)), ok, hp);
     if (!ok) w32_set_last_error(c, 2);
     STDRET(1, ok);
 }

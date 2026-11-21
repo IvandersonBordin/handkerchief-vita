@@ -525,6 +525,12 @@ void hk_dlg_refresh(void) { if (hk_dlg_active()) refresh(); }
 static uint32_t dlg_send(CPU *c, Dlg *d, uint32_t msg, uint32_t wp, uint32_t lp) {
     return d->proc ? rt_guest_call(c, d->proc, 4, d->hwnd, msg, wp, lp) : 0;
 }
+// A message posted to a dialog (PostMessageA) and taken by the game's loop: DispatchMessageA hands it to the procedure.
+// Dropped when the dialog is gone, as Windows drops messages for a destroyed window.
+uint32_t hk_dlg_dispatch(CPU *c, uint32_t hwnd, uint32_t msg, uint32_t wp, uint32_t lp) {
+    Dlg *d = dlg_of(hwnd);
+    return d ? dlg_send(c, d, msg, wp, lp) : 0;
+}
 static void set_focus_default(Dlg *d) {
     d->focus = -1;
     for (int i = 0; i < d->n; i++) if (focusable(&d->ctl[i]) && d->ctl[i].cls == C_BUTTON && btype(&d->ctl[i]) == 1) { d->focus = i; return; }
@@ -619,9 +625,13 @@ static void move_focus(Dlg *d, int dx, int dy) {
 // K_OK presses the focused control (space, X, pad Cross); K_DEFAULT is Enter (pad Triangle): the dialog's default
 // button (OK), wherever the focus is.
 enum { K_UP = 1, K_DOWN = 2, K_LEFT = 4, K_RIGHT = 8, K_OK = 16, K_CANCEL = 32, K_DEFAULT = 64 };
+// Dialogs the game drives itself: GAME DATA (1500, save/load slots) runs its own loop at 0x4328CD that polls the game's
+// input object and moves the slot radio buttons (0x401726) or posts WM_COMMAND 0x9CA4 (confirm) / 0x9CA5 (cancel).
+// Port-side navigation on top of it moved the focus to Cancel while the game moved the slot, so Enter cancelled.
+static int game_driven(const Dlg *d) { return d->res == 1500; }
 static void dlg_input(CPU *c, int keys) {
     Dlg *d = top_dlg();
-    if (!d) return;
+    if (!d || game_driven(d)) return;
     Ctl *f = d->focus >= 0 ? &d->ctl[d->focus] : NULL;
     if (f && d->drop) {   // an open combo box list: arrows choose, OK keeps the choice, cancel restores the old one
         if (keys & K_CANCEL) { f->cursel = d->drop_orig; d->drop = 0; return; }
@@ -781,6 +791,7 @@ U(CreateDialogParamA) {
     if (d) {
         uint32_t size, ga = w32_resource(ARG(2), 5, &size);
         uint32_t style; memcpy(&style, mb + ga, 4);
+        if (style == 0xffff0001u) memcpy(&style, mb + ga + 12, 4);   // DLGTEMPLATEEX
         if (style & 0x10000000u) d->visible = 1;
         refresh();
     }

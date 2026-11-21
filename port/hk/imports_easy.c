@@ -125,6 +125,7 @@ K(CopyFileA) {
     w32_host_path(GSTR(ARG(2)), to, sizeof to);
     if (ARG(3)) { FILE *e = fopen(to, "rb"); if (e) { fclose(e); w32_set_last_error(c, 80); STDRET(3, 0); } }
     int ok = copy_host(from, to);
+    rt_log("CopyFileA(\"%s\", \"%s\") -> %d (%s)\n", GSTR(ARG(1)), GSTR(ARG(2)), ok, to);
     if (!ok) w32_set_last_error(c, 2);
     STDRET(3, ok);
 }
@@ -134,6 +135,7 @@ K(MoveFileA) {
     w32_host_path(GSTR(ARG(1)), from, sizeof from);
     w32_host_path(GSTR(ARG(2)), to, sizeof to);
     int ok = rename(from, to) == 0;
+    rt_log("MoveFileA(\"%s\", \"%s\") -> %d (%s)\n", GSTR(ARG(1)), GSTR(ARG(2)), ok, to);
     if (!ok) w32_set_last_error(c, 2);
     STDRET(2, ok);
 }

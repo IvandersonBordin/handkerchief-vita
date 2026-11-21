@@ -119,6 +119,8 @@ U(PeekMessageA) {
     }
     STDRET(5, got);
 }
+int hk_dlg_is(uint32_t hwnd);
+uint32_t hk_dlg_dispatch(CPU *c, uint32_t hwnd, uint32_t msg, uint32_t wp, uint32_t lp);
 U(TranslateMessage) { STDRET(1, 0); }
 U(DispatchMessageA) {
     HOSTFN;
@@ -127,13 +129,18 @@ U(DispatchMessageA) {
         rt_guest_call(c, R32(m + 12), 4, R32(m), 0x113u, R32(m + 8), w32_tick_ms());
         STDRET(1, 0);
     }
-    if (g_wndproc && R32(m + 4) != 0x12) r = rt_guest_call(c, g_wndproc, 4, R32(m), R32(m + 4), R32(m + 8), R32(m + 12));
+    if (hk_dlg_is(R32(m))) r = hk_dlg_dispatch(c, R32(m), R32(m + 4), R32(m + 8), R32(m + 12));
+    else if (g_wndproc && R32(m + 4) != 0x12) r = rt_guest_call(c, g_wndproc, 4, R32(m), R32(m + 4), R32(m + 8), R32(m + 12));
     STDRET(1, r);
 }
 U(PostQuitMessage) { g_quit_posted = 1; STDRET(1, 0); }
+// Messages for a dialog are queued and reach its procedure through DispatchMessageA: the GAME DATA dialog (1500)
+// loop posts WM_COMMAND 0x9CA4 (confirm) / 0x9CA5 (cancel) to it (0x4329F8, 0x432A15); dropping them made Enter
+// do nothing. The only other PostMessageA in HDKWIN.EXE (0x40ECE8) is left as before.
 U(PostMessageA) {
     HOSTFN;
     if (ARG(2) == 0x10 || ARG(2) == 0x12) g_quit_posted = 1; // WM_CLOSE / WM_QUIT
+    else if (hk_dlg_is(ARG(1))) w32_post_message(ARG(1), ARG(2), ARG(3), ARG(4));
     STDRET(4, 1);
 }
 U(PostThreadMessageA) { STDRET(4, 1); }

@@ -145,6 +145,20 @@ extern uint64_t g_pause_qpc;
 // (port/hk/dialog.c hk_menu_key). In play Select opens the menu directly (Ivan's request, 2026-11-21); Exit is in
 // its File menu.
 static unsigned g_menu_until;
+// Cheats (pause screen, Ivan's request 2026-11-21): the game's own Secret Option (dialog 1490, typed H D K on a
+// keyboard) has "Unrivaled Mode": while it is on, 'u' toggles invincibility and 'm' adds money. Its checkbox 1417
+// is stored at 0x4AC84C (0x4154F5 / 0x41555D). L sets that flag; R and Circle queue 'U' and 'M' presses that are
+// delivered to the game after the pause, a few frames each (plat_vk_down).
+#define HK_UNRIVALED 0x4AC84Cu
+static char g_keyq[32];
+static int g_keyq_n;
+static unsigned g_keyq_at;
+static void keyq_push(char k) { if (g_keyq_n < (int)sizeof g_keyq) g_keyq[g_keyq_n++] = k; }
+static int keyq_down(int vk) { extern unsigned g_frame; return g_keyq_n && g_keyq[0] == vk && g_frame >= g_keyq_at && g_frame < g_keyq_at + 3; }
+static void keyq_step(void) {   // once per presented frame: 3 frames down, 3 frames up, next key
+    extern unsigned g_frame;
+    if (g_keyq_n && g_frame >= g_keyq_at + 6) { memmove(g_keyq, g_keyq + 1, (size_t)--g_keyq_n); g_keyq_at = g_frame + 1; }
+}
 static void pause_loop(const uint32_t *pixels, int width, int height, int pitch_bytes) {
     static uint32_t dim[480][640];
     uint64_t t0 = SDL_GetPerformanceCounter();
@@ -155,18 +169,34 @@ static void pause_loop(const uint32_t *pixels, int width, int height, int pitch_
         for (int x = 0; x < 24; x++) { dim[y][296 + x] = 0xffffffu; dim[y][320 + x] = 0xffffffu; }
     draw_text(&dim[0][0], 230, 300, "Start: continue", 0xffffffu);
     SceCtrlData pad;
-    int released = 0, tri_was = 1, sq_was = 1, sel_was = 1;
+    int released = 0, tri_was = 1, sq_was = 1, sel_was = 1, l_was = 1, r_was = 1, o_was = 1, money = 0, inv = 0;
+    extern unsigned g_frame;
     for (;;) {
         static uint32_t shown[480][640];
         memcpy(shown, dim, sizeof shown);
         draw_text(&shown[0][0], 230, 324, g_wide ? "Triangle: screen 16:9" : "Triangle: screen 4:3", 0xffff80u);
         draw_text(&shown[0][0], 230, 348, g_fps ? "Square: FPS counter on" : "Square: FPS counter off", 0xffff80u);
         draw_text(&shown[0][0], 230, 372, "Select: game menu", 0xffff80u);
+        int cheats = *(uint32_t *)(g_mem + HK_UNRIVALED) != 0;
+        draw_text(&shown[0][0], 230, 396, cheats ? "L: cheats on" : "L: cheats off", 0x80ffffu);
+        if (cheats) {
+            char line[64];
+            snprintf(line, sizeof line, "R: invincible on/off%s", inv ? " (queued)" : "");
+            draw_text(&shown[0][0], 230, 420, line, 0x80ffffu);
+            snprintf(line, sizeof line, money ? "Circle: add money (x%d)" : "Circle: add money", money);
+            draw_text(&shown[0][0], 230, 444, line, 0x80ffffu);
+        }
         show_frame(&shown[0][0], 640, 480, 640 * 4);
         sceCtrlPeekBufferPositive(0, &pad, 1);
         int tri = (pad.buttons & SCE_CTRL_TRIANGLE) != 0, sq = (pad.buttons & SCE_CTRL_SQUARE) != 0;
         if (tri && !tri_was) { g_wide = !g_wide; apply_aspect(); save_cfg(); }
         if (sq && !sq_was) { g_fps = !g_fps; save_cfg(); }
+        int l = (pad.buttons & SCE_CTRL_LTRIGGER) != 0, r = (pad.buttons & SCE_CTRL_RTRIGGER) != 0,
+            o = (pad.buttons & SCE_CTRL_CIRCLE) != 0;
+        if (l && !l_was) *(uint32_t *)(g_mem + HK_UNRIVALED) = !cheats;
+        if (cheats && r && !r_was) { inv = !inv; }
+        if (cheats && o && !o_was && money < 20) money++;
+        l_was = l; r_was = r; o_was = o;
         int sel = (pad.buttons & SCE_CTRL_SELECT) != 0;
         if (sel && !sel_was) { extern unsigned g_frame; g_menu_until = g_frame + 3; break; }
         tri_was = tri;
@@ -175,6 +205,11 @@ static void pause_loop(const uint32_t *pixels, int width, int height, int pitch_
         if (!(pad.buttons & SCE_CTRL_START)) released = 1;
         else if (released) break;
         SDL_Delay(16);
+    }
+    if (*(uint32_t *)(g_mem + HK_UNRIVALED)) {
+        if (inv) keyq_push('U');
+        while (money-- > 0) keyq_push('M');
+        g_keyq_at = g_frame + 2;
     }
     while (sceCtrlPeekBufferPositive(0, &pad, 1) >= 0 && (pad.buttons & (SCE_CTRL_START | SCE_CTRL_SELECT))) SDL_Delay(16);
     g_pause_qpc += SDL_GetPerformanceCounter() - t0;
@@ -187,6 +222,7 @@ void plat_present_xrgb(const uint32_t *pixels, int width, int height, int pitch_
     int start = (pad.buttons & SCE_CTRL_START) != 0;
     if (start && !start_was) { pause_loop(pixels, width, height, pitch_bytes); start = 0; }
     start_was = start;
+    keyq_step();
     // FPS: frames shown in the last full second (the game targets 25).
     static uint64_t t_sec;
     static int count, fps;
@@ -236,6 +272,7 @@ int plat_vk_down(int vk) {
     case 'S': return down;
     case 'X': return (b & SCE_CTRL_CROSS) != 0;
     case 0x20: return (b & SCE_CTRL_CROSS) != 0;
+    case 'U': case 'M': return keyq_down(vk);   // cheats from the pause screen
     case 'A': return (b & SCE_CTRL_SQUARE) != 0;
     case 'Z': return (b & SCE_CTRL_CIRCLE) != 0;
     case 'C': return (b & SCE_CTRL_TRIANGLE) != 0;

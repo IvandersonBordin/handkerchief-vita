@@ -48,6 +48,12 @@ static float mix_acc[MIX_FRAMES * 2];
 static uint32_t g_vt_ds, g_vt_buf, g_vt_notify;
 
 static uint32_t g_gen;   // under mx
+static int now_ok(Uint64 *t_last) {   // true at most once every 5 s
+    Uint64 now = SDL_GetPerformanceCounter();
+    if (now - *t_last < 5 * SDL_GetPerformanceFrequency()) return 0;
+    *t_last = now;
+    return 1;
+}
 static float db_gain(int32_t v) { return v <= -10000 ? 0.f : powf(10.f, (float)v / 2000.f); }
 
 static uint32_t obj_wrap(DSBuf *b, int kind, uint32_t vt) {
@@ -123,7 +129,7 @@ static void mix(void *ud, Uint8 *stream, int len) {
     // mixed, and their new state is written back under the lock only if nothing changed them meanwhile (gen).
     static struct Voice {
         DSBuf *b; uint32_t gen, mem, frames; int stereo, bits16, looping, dup;
-        uint64_t pos, st; float gl, gr, a, lp[4]; double before; int ended;
+        uint64_t pos, st; float gl, gr, a, lp[4], vpk; double before; int ended;
     } vs[MAX_OBJ];
     int nv = 0;
     SDL_LockMutex(mx);
@@ -157,6 +163,7 @@ static void mix(void *ud, Uint8 *stream, int len) {
         uint32_t frames = v->frames;
         float a = v->a, gl = v->gl, gr = v->gr, z0 = v->lp[0], z1 = v->lp[1], z2 = v->lp[2], z3 = v->lp[3];
         int silent = gl == 0.f && gr == 0.f;
+        float vpk = 0.f;
         for (int i = 0; i < n; i++) {
             if (!silent) {
                 uint32_t f = (uint32_t)(pos >> 16);
@@ -184,6 +191,8 @@ static void mix(void *ud, Uint8 *stream, int len) {
                 z0 += a * (l - z0); z1 += a * (z0 - z1); z2 += a * (r - z2); z3 += a * (z2 - z3);
                 acc[2 * i] += z1 * gl;
                 acc[2 * i + 1] += z3 * gr;
+                float m = fabsf(z1 * gl);
+                if (m > vpk) vpk = m;
             }
             pos += st;
             if (pos >= end) {
@@ -192,6 +201,7 @@ static void mix(void *ud, Uint8 *stream, int len) {
             }
         }
         v->pos = pos;
+        v->vpk = vpk;
         v->lp[0] = z0; v->lp[1] = z1; v->lp[2] = z2; v->lp[3] = z3;
     }
     SDL_LockMutex(mx);
@@ -233,7 +243,7 @@ static void mix(void *ud, Uint8 *stream, int len) {
     // Fixed master gain (Ivan asked for a constant volume: the block limiter that ducked the whole mix in loud
     // scenes was unpleasant). In-phase copies are already silenced in buf_play, so loud moments rarely pass the
     // knee at 0.8 full scale; above it a soft curve rounds the peak instead of clipping hard.
-    const float master = 0.5f;
+    const float master = 0.35f;   // 0.5 still sat on the knee in most blocks of a fight (console log)
     int16_t *out = (int16_t *)stream;
     unsigned over = 0;
     for (int i = 0; i < n * 2; i++) {
@@ -242,14 +252,27 @@ static void mix(void *ud, Uint8 *stream, int len) {
         float v = x * 32767.f;
         out[i] = (int16_t)(v > 32767.f ? 32767 : v < -32768.f ? -32768 : v);
     }
-    {   // Console evidence: blocks that needed the soft knee, at most one line every 5 s.
-        static Uint64 t_last; static unsigned blocks;
+    {   // Console evidence, at most one line every 5 s: blocks that needed the soft knee, and blocks that came
+        // out (nearly) silent although a voice louder than -20 dB was playing (Ivan hears the sound cut out).
+        static Uint64 t_last; static unsigned blocks, quiet;
         if (over) blocks++;
-        Uint64 now = SDL_GetPerformanceCounter();
-        if (blocks && now - t_last > 5 * SDL_GetPerformanceFrequency()) {
+        int audible = 0;
+        for (int j = 0; j < nv; j++) if (vs[j].vpk > 0.05f) audible++;   // voices whose own output was loud
+        float pk = 0.f;
+        for (int i = 0; i < n * 2; i++) { float m = fabsf(acc[i]); if (m > pk) pk = m; }
+        if (audible && pk < 0.002f) {
+            quiet++;
+            if (quiet <= 3) {
+                extern unsigned g_frame;
+                rt_log("[mix] silent block with %d audible voices (of %d) frame %u:", audible, nv, g_frame);
+                for (int j = 0; j < nv && j < 8; j++) rt_log(" [g %.2f pk %.2f dup %d pos %llu/%u]", vs[j].gl, vs[j].vpk, vs[j].dup, (unsigned long long)(vs[j].pos >> 16), vs[j].frames);
+                rt_log("\n");
+            }
+        }
+        if ((blocks || quiet) && now_ok(&t_last)) {
             extern unsigned g_frame;
-            rt_log("[mix] %u blocks above the soft knee in 5 s, frame %u\n", blocks, g_frame);
-            blocks = 0; t_last = now;
+            rt_log("[mix] 5 s: %u blocks above the soft knee, %u silent blocks with audible voices, frame %u\n", blocks, quiet, g_frame);
+            blocks = quiet = 0;
         }
     }
     if (n * 4 < len) memset(stream + n * 4, 0, (size_t)(len - n * 4));

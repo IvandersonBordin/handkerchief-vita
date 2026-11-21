@@ -44,8 +44,20 @@ Main path: full static recompilation of `HDKWIN.EXE` (see [static-recomp.md](sta
   ux0:data/handkerchief/hkport.cfg. True widescreen (more of the world visible) would need changes to the
   game's drawing and camera; not attempted.
 - Missing: sound, Win32 dialogs (Esc exit prompt, F2 configuration), save/continue not checked.
-- Old test apps HKRC00005-00009: vita-agent-use `content preview` fails with firmware error 0xFFFEFFF2 on this
-  console, so Ivan removes them from the LiveArea himself.
+- Old test apps HKRC00005-00009 were uninstalled by Ivan from the LiveArea (vita-agent-use `content preview`
+  fails with firmware error 0xFFFEFFF2 on this console).
+- Ivan's feedback (2026-11-20): the game runs smoothly on the Vita; stretched 16:9 makes text easier to read
+  but distorts the image, so he asked for a native widescreen mode.
+
+## Planned work (approved order)
+
+1. Sound: DirectSound (DSOUND ordinal 1) and PlaySoundA/mmio for the WAV/ folder, over SDL2 audio.
+2. Win32 dialogs used by the game: 1498 "Exit Handkerchief ?" (Esc), 1491 Game Configuration and 1492 Key
+   Configuration (F2); both start with IDirectDraw::GetGDISurface. The 4:3/16:9 option can move there.
+3. Native widescreen (requested by Ivan): a wider view of the world instead of stretching. Start from the
+   camera and horizontal parallax mapped in docs/engine-map.md ("Câmera e parallax horizontal"); find where
+   the 640-pixel view width is assumed (surfaces, camera clamp, actor culling, HUD) before changing it.
+   Good candidate for a Bruno task (reverse engineering, opus).
 - CRT `memcpy`/`memmove` (`0x45E4B0`/`0x45F6C0`) are native; guest memory is 256 MB on PC (64 MB ran out
   when a 13.9 MB block was requested). Two double frees by the game are logged and ignored, as Windows does.
 - Not done yet: text rendering (ExtTextOutA is only logged), keyboard/pad input, sound (DirectSound

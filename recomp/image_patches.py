@@ -54,7 +54,12 @@ ADDR_WRAPS = {}
 # 0x414D0B: in the CConfig constructor, right after the defaults (Reset 0x414D1E, key table 0x414D49); esi = this.
 # The port loads the settings saved by the Game / Key Configuration dialogs (hkconfig.txt, port/hk/dialog.c):
 # the game itself never stores them.
-HOOKS = {0x414D0B: "hk_config_loaded"}
+# Test aid HK_STAGE (port/hk/glue.c): the game scene constructor marks only territory A's first-entry event as done
+# (0x4542BC: mov byte [esi+0x70],1; bytes [esi+0x71..0x7A] were zeroed at 0x454296). Starting NEW GAME in another
+# territory then runs its first-entry event (0x45525D -> 0x455414) before the player exists ([scene+0x4C] = 0) and
+# calls through a null vtable at 0x45717F. The hook runs before 0x4542C0 and, only when HK_STAGE is set, marks
+# territories B-J as entered too. Without HK_STAGE it does nothing.
+HOOKS = {0x414D0B: "hk_config_loaded", 0x4542C0: "hk_stage_scene_hook"}
 ABI_NATIVES = set()
 
 FTOL2 = None   # MSVC __ftol is found by its Ghidra name in x86rec.py when present

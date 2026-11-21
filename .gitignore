@@ -1,0 +1,35 @@
+
+# Arquivos originais do Handkerchief
+/original-data/
+
+# Arquivos gerados durante a compilação
+/build/
+/build-*/
+/dist/
+
+# Executáveis e pacotes compilados
+*.vpk
+*.elf
+*.self
+*.suprx
+
+# Arquivos temporários e logs
+*.log
+*.tmp
+*.bak
+*.swp
+*~
+
+# Arquivos locais do sistema
+.DS_Store
+Thumbs.db
+
+# Configurações locais e segredos
+.env
+.env.*
+!.env.example
+
+# Cache gerado automaticamente pelo Python
+__pycache__/
+*.py[cod]
+.pytest_cache/

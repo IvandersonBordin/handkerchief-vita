@@ -230,37 +230,27 @@ static void mix(void *ud, Uint8 *stream, int len) {
         outn += (unsigned)n;
     }
     SDL_UnlockMutex(mx);
-    // Master gain and a block limiter: many loud voices at once (explosions, gunfire) used to drive the old
-    // per-sample soft clipper into constant saturation, heard as distortion. The gain drops at once when a block
-    // would exceed the ceiling and recovers over ~1 s; a hard clip remains only as a safety net.
-    static float env = 1.f;
-    const float master = 0.55f, ceiling = 0.9f;   // 0.55: the limiter only acts on the loudest moments
-    float peak = 0.f;
-    for (int i = 0; i < n * 2; i++) { float m = fabsf(acc[i]) * master; if (m > peak) peak = m; }
-    float target = peak > ceiling ? ceiling / peak : 1.f, g0 = env, g1;
-    // Gain changes are ramped across the block (a step at a block boundary clicks); an attack ramp can let the
-    // first samples of a block overshoot, which the hard clip below catches. Release ~1 s, so the level does
-    // not pump up and down between shots.
-    if (target < env) g1 = target;
-    else g1 = env + (target - env) * 0.05f;
-    env = g1;
-    {   // Console evidence for long quiet stretches: limiter gain below 0.6, at most one line every 2 s.
-        static Uint64 t_last;
-        Uint64 now = SDL_GetPerformanceCounter();
-        if (g1 < 0.6f && now - t_last > 2 * SDL_GetPerformanceFrequency()) {
-            extern unsigned g_frame;
-            int v = 0, loud = 0;
-            for (int k = 1; k < MAX_OBJ; k++)
-                if (g_obj[k] && g_obj[k]->kind == K_BUF && g_obj[k]->playing) { v++; if (g_obj[k]->volume > -1000) loud++; }
-            rt_log("[mix] limiter gain %.2f (block peak %.2f) voices %d (%d above -10 dB) frame %u\n", g1, peak, v, loud, g_frame);
-            t_last = now;
-        }
-    }
+    // Fixed master gain (Ivan asked for a constant volume: the block limiter that ducked the whole mix in loud
+    // scenes was unpleasant). In-phase copies are already silenced in buf_play, so loud moments rarely pass the
+    // knee at 0.8 full scale; above it a soft curve rounds the peak instead of clipping hard.
+    const float master = 0.5f;
     int16_t *out = (int16_t *)stream;
+    unsigned over = 0;
     for (int i = 0; i < n * 2; i++) {
-        float g = (g0 + (g1 - g0) * (float)(i >> 1) / (float)n) * master;
-        float v = acc[i] * g * 32767.f;
+        float x = acc[i] * master, m = fabsf(x);
+        if (m > 0.8f) { x = copysignf(0.8f + 0.2f * tanhf((m - 0.8f) / 0.2f), x); over++; }
+        float v = x * 32767.f;
         out[i] = (int16_t)(v > 32767.f ? 32767 : v < -32768.f ? -32768 : v);
+    }
+    {   // Console evidence: blocks that needed the soft knee, at most one line every 5 s.
+        static Uint64 t_last; static unsigned blocks;
+        if (over) blocks++;
+        Uint64 now = SDL_GetPerformanceCounter();
+        if (blocks && now - t_last > 5 * SDL_GetPerformanceFrequency()) {
+            extern unsigned g_frame;
+            rt_log("[mix] %u blocks above the soft knee in 5 s, frame %u\n", blocks, g_frame);
+            blocks = 0; t_last = now;
+        }
     }
     if (n * 4 < len) memset(stream + n * 4, 0, (size_t)(len - n * 4));
 }

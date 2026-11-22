@@ -56,8 +56,10 @@ void hk_ws_view_rect(CPU *c) {
 static int g_ws_stage_drawn;   // main scene drawn since the last Flip
 static int g_ws_pillar = 1;    // current frames are 640-only: centre them
 static uint32_t g_ws_hud_list, g_ws_hud_box;   // HUD list and box being drawn (see hk_ws_hud_list)
+int g_hk_in_stage;   // a stage was drawn in the last game frame (any width): used by the Vita crouch tap
 void hk_ws_flip(void) {
-    if (g_hk_ws_w == 640) return;
+    g_hk_in_stage = g_ws_stage_drawn;
+    if (g_hk_ws_w == 640) { g_ws_stage_drawn = 0; return; }
     const int p = !g_ws_stage_drawn;
     g_ws_stage_drawn = 0;
     if (p != g_ws_pillar && getenv("HK_TRACE_WS")) { extern unsigned g_frame; rt_log("[ws] frame %u: %s\n", g_frame, p ? "pillarbox 640" : "wide"); }

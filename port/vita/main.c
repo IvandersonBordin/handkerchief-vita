@@ -119,7 +119,7 @@ static void load_cfg(void) {
 }
 static void save_cfg(void) {
     FILE *f = fopen(HK_CFG, "w");
-    if (f) { fprintf(f, "wide=%d\nfps=%d\nwide_native=%d\nvolume=%d\nmusic=%d\n", g_wide, g_fps, g_wide_native, g_vol, g_mus); fclose(f); }
+    if (f) { fprintf(f, "wide=%d\nfps=%d\nwide_native=%d\nvolume=%d\nmusic=%d\npresent_thread=%d\n", g_wide, g_fps, g_wide_native, g_vol, g_mus, g_present_thread); fclose(f); }
 }
 // Text on a g_hk_ws_w x 480 XRGB buffer with the port's bitmap font (cell 18).
 static void draw_text(uint32_t *buf, int x, int y, const char *s, uint32_t color) {
@@ -311,6 +311,7 @@ void plat_show_xrgb(uint32_t *pixels, int width, int height, int pitch_bytes) {
 // R = Ctrl, Select = Esc. Start is the port's own pause (plat_present_xrgb), not a game key. In the game's dialogs
 // (port/hk/dialog.c) Cross presses the focused control, Triangle presses OK and Circle or Select cancel.
 int hk_dlg_active(void);   // port/hk/dialog.c
+extern int g_hk_in_stage;  // port/hk/wide.c
 int plat_vk_down(int vk) {
     static SceCtrlData pad;
     static uint32_t last_frame = 0xffffffffu, tap_at = 0xffffffffu;
@@ -330,7 +331,7 @@ int plat_vk_down(int vk) {
         static int d_prev, skip_release;
         if (d_prev && !d_now) {
             if (skip_release) skip_release = 0;   // his real re-press already stood him up
-            else if (!other && !hk_dlg_active() && g_frame >= g_menu_until) tap_at = g_frame + 2;
+            else if (!other && !hk_dlg_active() && g_frame >= g_menu_until && g_hk_in_stage) tap_at = g_frame + 2;   // stages only: in menus the tap moved the cursor twice
         } else if (d_now && !d_prev && tap_at != 0xffffffffu && g_frame < tap_at) {
             tap_at = 0xffffffffu;   // pressed again before the synthetic press: the real press does the job
             skip_release = 1;

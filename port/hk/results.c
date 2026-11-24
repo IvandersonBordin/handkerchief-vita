@@ -37,12 +37,12 @@ int hk_results_read(uint32_t out[13]) {
 void hk_results_tick(void) {
     static int on = -1;
     static uint32_t last[13];
-    if (on < 0) on = getenv("HK_RESULTS_LOG") != NULL;
+    if (on < 0) on = HK_ENV("HK_RESULTS_LOG") != NULL;
     uint32_t v[13];
     if (!on) return;
     static int was_ok = -1;
     const int ok = hk_results_read(v);
-    if (ok != was_ok) { extern unsigned g_frame; rt_log("[results] frame %u: counters %s (scene %08x)\n", g_frame, ok ? "readable" : "not readable", g_rs_scene); was_ok = ok; }
+    if (ok != was_ok) { extern unsigned g_frame; rt_dlog("[results] frame %u: counters %s (scene %08x)\n", g_frame, ok ? "readable" : "not readable", g_rs_scene); was_ok = ok; }
     if (!ok) return;
     if (!memcmp(v + 1, last + 1, 12 * 4)) return;
     memcpy(last, v, sizeof last);
@@ -51,5 +51,5 @@ void hk_results_tick(void) {
     char line[200];
     int n = snprintf(line, sizeof line, "[results] frame %u obj %08x:", g_frame, R32(g_rs_scene + 0x60u));
     for (int i = 0; i < 13 && n < (int)sizeof line; i++) n += snprintf(line + n, sizeof line - (size_t)n, " %u", v[i]);
-    rt_log("%s\n", line);
+    rt_dlog("%s\n", line);
 }

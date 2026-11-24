@@ -21,6 +21,7 @@
 #endif
 
 #define K(name) void imp_KERNEL32_##name(CPU *c)
+#include "hk/hitch.h"
 #define FAKE_KERNEL32 0x7c800000u
 #define FAKE_USER32   0x77d40000u
 
@@ -57,7 +58,7 @@ K(GetModuleFileNameA) {
 }
 K(LoadLibraryA) {
     HOSTFN;
-    rt_log("LoadLibraryA(\"%s\") -> NULL\n", GSTR(ARG(1)));
+    rt_dlog("LoadLibraryA(\"%s\") -> NULL\n", GSTR(ARG(1)));
     w32_set_last_error(c, 126);
     STDRET(1, 0);
 }
@@ -65,7 +66,7 @@ K(FreeLibrary) { STDRET(1, 1); }
 K(GetProcAddress) {
     HOSTFN;
     uint32_t n = ARG(2);
-    rt_log("GetProcAddress(%08x, \"%s\") -> NULL\n", ARG(1), n > 0xffff ? GSTR(n) : "#ord");
+    rt_dlog("GetProcAddress(%08x, \"%s\") -> NULL\n", ARG(1), n > 0xffff ? GSTR(n) : "#ord");
     STDRET(2, 0);
 }
 K(GetCommandLineA) {
@@ -142,13 +143,14 @@ K(MulDiv) {
 // HK_TRACE_LOAD=1: per-frame file-load counters (all threads), logged by hk_load_trace_frame() when a frame took > 60 ms.
 uint64_t g_lt_open_t, g_lt_read_t, g_lt_dec_t, g_lt_read_n, g_lt_read_b, g_lt_open_n;
 int g_trace_load;
+uint64_t g_hc_ram_b, g_hc_ram_n;   // hitch log: reads served from RAM (preload cache / prefetcher)
 uint64_t g_t_sleep, g_t_gl, g_t_swap, g_t_io, g_t_wait, g_io_bytes;   // diagnostics: main thread disk read / object wait
 K(Sleep) {
     HOSTFN;
     static unsigned s_sleep_n;
     if (ARG(1) > 0 && (++s_sleep_n <= 3 || s_sleep_n % 500 == 0))
-        rt_log("Sleep(%u) #%u%s caller %08x\n", ARG(1), s_sleep_n, c == g_main_cpu ? "" : " (other thread)", R32(c->esp));
-    if (g_trace_load && ARG(1) >= 20) rt_log("[load] Sleep(%u)%s\n", ARG(1), c == g_main_cpu ? "" : " (other thread)");
+        rt_dlog("Sleep(%u) #%u%s caller %08x\n", ARG(1), s_sleep_n, c == g_main_cpu ? "" : " (other thread)", R32(c->esp));
+    if (g_trace_load && ARG(1) >= 20) rt_dlog("[load] Sleep(%u)%s\n", ARG(1), c == g_main_cpu ? "" : " (other thread)");
     uint64_t t0 = SDL_GetPerformanceCounter();
     SDL_Delay(ARG(1));
     if (c == g_main_cpu) g_t_sleep += SDL_GetPerformanceCounter() - t0;
@@ -156,7 +158,7 @@ K(Sleep) {
 }
 K(GetTickCount) {
     static unsigned s_tc;
-    if (++s_tc <= 3) rt_log("GetTickCount #%u -> %u\n", s_tc, w32_tick_ms());
+    if (++s_tc <= 3) rt_dlog("GetTickCount #%u -> %u\n", s_tc, w32_tick_ms());
     STDRET(0, w32_tick_ms());
 }
 // SH3_HZ: reported QPF = real * 30 / HZ (inherited from SH4, where the logic step is QPF/30; unverified for SH3).
@@ -315,18 +317,19 @@ void heap_report(void) {
         int best = r;
         for (int k = r + 1; k < nt; k++) if (top[k].bytes > top[best].bytes) best = k;
         __typeof__(top[0]) t = top[r]; top[r] = top[best]; top[best] = t;
-        rt_log("[heap] caller %08x: %llu KB in %u blocks\n", top[r].caller, (unsigned long long)(top[r].bytes >> 10), top[r].n);
+        rt_dlog("[heap] caller %08x: %llu KB in %u blocks\n", top[r].caller, (unsigned long long)(top[r].bytes >> 10), top[r].n);
     }
 }
 static void trace_big(CPU *c, const char *what, uint32_t size, uint32_t a) {
     HOSTFN;
     static int on = -1;
-    if (on < 0) on = getenv("SH3_TRACE_HEAP") != NULL;
-    if (on && size >= (64u << 10)) rt_log("[heap] %s %u KB -> %08x (caller %08x)\n", what, size >> 10, a, R32(c->esp));
+    if (on < 0) on = HK_ENV("SH3_TRACE_HEAP") != NULL;
+    if (on && size >= (64u << 10)) rt_dlog("[heap] %s %u KB -> %08x (caller %08x)\n", what, size >> 10, a, R32(c->esp));
     if (on && a) live_add(a, size, R32(c->esp));
 }
 K(HeapAlloc) {
     HOSTFN;
+    gheap_site(c);
     uint32_t a = gheap_calloc(ARG(3));   // always zeroed: fresh Windows heap pages read as zero, and HDKWIN.EXE relies on it
     trace_big(c, "HeapAlloc", ARG(3), a);
     STDRET(3, a);
@@ -337,6 +340,7 @@ K(HeapReAlloc) {
     HOSTFN;
     uint32_t flags = ARG(2), p = ARG(3), sz = ARG(4), old = gheap_size(p);
     if (flags & 0x10) STDRET(4, sz <= old ? p : 0); // HEAP_REALLOC_IN_PLACE_ONLY
+    gheap_site(c);
     uint32_t r = gheap_realloc(p, sz);
     if (r && (flags & 8) && sz > old) memset(mb + r + old, 0, sz - old);
     if (r || (p && !sz)) live_del(p);
@@ -347,6 +351,7 @@ K(VirtualAlloc) {
     HOSTFN;
     uint32_t addr = ARG(1), size = ARG(2);
     if (addr) STDRET(4, addr); // MEM_COMMIT in an already reserved region (memory present and zeroed)
+    gheap_site(c);
     uint32_t a = gheap_alloc_aligned((size + 0xfff) & ~0xfffu, 0x10000);
     if (a) memset(mb + a, 0, size);
     trace_big(c, "VirtualAlloc", size, a);
@@ -462,6 +467,7 @@ typedef struct {
     FILE *f; char path[600]; int ro, pfreuse;
     int prechk; struct Preload_ *pre;   // preload entry of this path (resolved on the first ReadFile)
     int small;    // Vita: read-only file <= 64 KB, fully buffered (one syscall per load instead of one per small read)
+    uint8_t *own; // savefast: RAM copy backing an fmemopen stream
     int commit;   // written to path + ".tmp": CloseHandle swaps it in (safe_write.h)
     uint8_t *pf; uint32_t pfcap, pfwant; long pfpos; SDL_Thread *th;
     SDL_atomic_t pfgot, pfdone, pfabort;
@@ -483,7 +489,7 @@ static void file_release(File *f) {
     if (!f) return;
     SDL_UnlockMutex(f->mu);
     if (h_release(f->h)) {
-        rt_log("[file] %s closed after the call that was still using it\n", f->path);
+        rt_dlog("[file] %s closed after the call that was still using it\n", f->path);
         file_destroy(f);
     }
 }
@@ -510,7 +516,7 @@ void w32_read_ring_dump(uint32_t addr, uint32_t n) {
         unsigned i = k % READ_RING;
         int hit = s_reads[i].buf < addr + n && addr < s_reads[i].buf + s_reads[i].got;
         if (hit || k + 12 >= last)
-            rt_log("  %s read %s pos=%ld n=%u got=%u -> %08x frame %u %s\n", hit ? "HIT " : "    ", s_reads[i].name,
+            rt_dlog("  %s read %s pos=%ld n=%u got=%u -> %08x frame %u %s\n", hit ? "HIT " : "    ", s_reads[i].name,
                    s_reads[i].pos, s_reads[i].n, s_reads[i].got, s_reads[i].buf, s_reads[i].frame,
                    s_reads[i].main ? "main" : "other thread");
     }
@@ -532,17 +538,17 @@ void w32_read_ring_compare(uint32_t addr) {
             snprintf(m + 3 * b, 4, "%02x ", g_mem[addr + b]);
             snprintf(d + 3 * b, 4, "%02x ", disk[b]);
         }
-        rt_log("  %08x from %s offset %ld (frame %u)\n    memory: %s\n    file:   %s%s\n", addr, s_reads[i].name, at,
+        rt_dlog("  %08x from %s offset %ld (frame %u)\n    memory: %s\n    file:   %s%s\n", addr, s_reads[i].name, at,
                s_reads[i].frame, m, d, got == 16 ? (memcmp(disk, g_mem + addr, 16) ? " DIFFERENT" : " same") : " (file not read)");
         return;
     }
-    rt_log("  %08x: no recent read wrote it\n", addr);
+    rt_dlog("  %08x: no recent read wrote it\n", addr);
 }
 // SH3_TRACE_FILE=<part of a file name>: every ReadFile / SetFilePointer on matching files goes to the log.
 static int file_traced(const File *f) {
     static const char *want;
     static int init;
-    if (!init) { want = getenv("SH3_TRACE_FILE"); init = 1; }
+    if (!init) { want = HK_ENV("SH3_TRACE_FILE"); init = 1; }
     return want && *want && strstr(f->path, want);
 }
 // Missing sound files: the game's voice loader (0x45C4C1, via 0x45C406) opens ./wav/NAME.wav then ./wav/8bit/NAME.wav
@@ -574,14 +580,20 @@ static int wav_missing(const char *gp, int add) {
 typedef struct Preload_ { const char *name; char path[600]; uint8_t *data; size_t size; SDL_atomic_t state; int wait; } Preload;   // state 0 pending, 1 done, 2 failed
 // Music first (wait=1: a ReadFile that finds it pending blocks until it is loaded), then every BITMAP/*.BMP and SYSTEM/*.HDK
 // (wait=0: the area loader opens those ~10-19 times per area change with ~1500 tiny reads; a pending one is simply read from disk).
-#define NPRE_MAX 192
+#define NPRE_MAX 320
 static Preload s_pre[NPRE_MAX] = {{"Y_DEMO", "", 0, 0, {0}, 1}, {"Y_MENU", "", 0, 0, {0}, 1}, {"Y_STAGE", "", 0, 0, {0}, 1}, {"Y_BOSS", "", 0, 0, {0}, 1}};
 static int s_npre = 4;
 static int s_pre_on;
 static int preload_thread(void *arg) {
     (void)arg;
     SDL_SetThreadPriority(SDL_THREAD_PRIORITY_LOW);
-    for (int i = 0; i < s_npre; i++) {
+    // Order: the small SYSTEM/*.HDK first (1.4 MB: the stage data, t0.HDK was still pending when the first stage loaded from the
+    // title and its 1768 reads went to disk, 204 ms), then the music, then the BMPs and sound effects.
+    int order[NPRE_MAX], no = 0;
+    for (int j = 0; j < s_npre; j++) { size_t l = strlen(s_pre[j].path); if (l > 4 && !SDL_strcasecmp(s_pre[j].path + l - 4, ".HDK")) order[no++] = j; }
+    for (int j = 0; j < s_npre; j++) { size_t l = strlen(s_pre[j].path); if (!(l > 4 && !SDL_strcasecmp(s_pre[j].path + l - 4, ".HDK"))) order[no++] = j; }
+    for (int k = 0; k < no; k++) {
+        const int i = order[k];
         Preload *p = &s_pre[i];
         FILE *f = fopen(p->path, "rb");
         if (f) {
@@ -597,7 +609,7 @@ static int preload_thread(void *arg) {
     }
     size_t tot = 0;
     for (int i = 0; i < s_npre; i++) tot += s_pre[i].size;
-    rt_log("[preload] %d files, %.1f MB in RAM\n", s_npre, tot / 1048576.0);
+    rt_dlog("[preload] %d files, %.1f MB in RAM\n", s_npre, tot / 1048576.0);
     return 0;
 }
 static void preload_scan(const char *gdir, const char *ext) {   // add the files of a game directory (read-only data, total ~7 MB)
@@ -611,20 +623,26 @@ static void preload_scan(const char *gdir, const char *ext) {   // add the files
         if (l <= le || SDL_strcasecmp(e->d_name + l - le, ext)) continue;
         Preload *p = &s_pre[s_npre];
         if ((size_t)snprintf(p->path, sizeof p->path, "%s/%s", hd, e->d_name) >= sizeof p->path) continue;
+        int dup = 0;
+        for (int i = 0; i < s_npre; i++) if (!SDL_strcasecmp(s_pre[i].path, p->path)) dup = 1;   // the four music tracks are listed first
+        struct stat st;
+        if (dup || (!SDL_strcasecmp(ext, ".wav") && (stat(p->path, &st) || st.st_size > (2 << 20)))) continue;
         s_npre++;
     }
     closedir(d);
 }
 static void preload_start(void) {
-    const char *off = getenv("SH3_NO_PRELOAD");
+    const char *off = HK_ENV("SH3_NO_PRELOAD");
     if (off && *off == '1') return;
     for (int i = 0; i < s_npre; i++) {
         char g[64];
         snprintf(g, sizeof g, "./wav/%s.wav", s_pre[i].name);
         w32_host_path(g, s_pre[i].path, sizeof s_pre[i].path);
     }
-    const char *nf = getenv("SH3_NO_PRELOAD_FILES");
+    const char *nf = HK_ENV("SH3_NO_PRELOAD_FILES");
     if (!(nf && *nf == '1')) { preload_scan("./BITMAP", ".BMP"); preload_scan("./SYSTEM", ".HDK"); }
+    // cfg preload_se: the ~90 sound effect WAVs (2.8 MB) too, so their first play reads no file (default on in the player build)
+    if (hk_env_flag("HK_PRELOAD_SE", 0)) preload_scan("./WAV", ".wav");
     s_pre_on = 1;
     SDL_Thread *t = SDL_CreateThread(preload_thread, "hkpreload", NULL);
     if (t) SDL_DetachThread(t);
@@ -633,14 +651,16 @@ static void preload_start(void) {
 // The preload entry of host path `path` (NULL if none); resolved once per file handle.
 static Preload *preload_find(const char *path) {
     if (!s_pre_on) return NULL;
-    for (int i = 0; i < s_npre; i++) if (!strcmp(s_pre[i].path, path)) return &s_pre[i];
+    // Case-insensitive: the Vita host has no host_fix_case, and the game asks for "System\\a0_e.HDK" / "wav/X_STAGE.wav" while the
+    // directory scan stores the on-disk case, so a plain strcmp never matched there (0 reads served from RAM).
+    for (int i = 0; i < s_npre; i++) if (!SDL_strcasecmp(s_pre[i].path, path)) return &s_pre[i];
     return NULL;
 }
 // The preloaded bytes of `p` when [pos, pos + n) lies inside it; NULL otherwise (not loaded yet, failed, out of range).
 static const uint8_t *preload_bytes(Preload *p, long pos, uint32_t n) {
     if (!p || pos < 0) return NULL;
     static int s_hit_logged;
-    if (!p->wait && SDL_AtomicGet(&p->state) == 1 && !s_hit_logged) { s_hit_logged = 1; rt_log("[preload] first RAM hit: %s\n", p->path); }
+    if (!p->wait && SDL_AtomicGet(&p->state) == 1 && !s_hit_logged) { s_hit_logged = 1; rt_dlog("[preload] first RAM hit: %s\n", p->path); }
     if (p->wait) while (SDL_AtomicGet(&p->state) == 0) SDL_Delay(1);
     if (SDL_AtomicGet(&p->state) != 1 || (uint64_t)pos + n > p->size) return NULL;
     return p->data + pos;
@@ -657,24 +677,39 @@ void hk_load_trace_frame(void) {
     static int started;
     if (!started) { started = 1; preload_start(); }
     static uint64_t last, tw0;
-    static int init;
-    if (!init) { const char *e = getenv("HK_TRACE_LOAD"); g_trace_load = e && *e == '1'; init = 1; }
+    static int init, want_log;
+#if HK_DEVTOOLS
+    if (!init) {
+        const char *e = getenv("HK_TRACE_LOAD"), *h = getenv("HK_HITCH");
+        want_log = e && *e == '1'; g_hitch = h && *h == '1'; g_trace_load = want_log || g_hitch; init = 1;
+    }
+#else
+    (void)init; (void)want_log;
+#endif
     if (!g_trace_load) return;
     uint64_t now = SDL_GetPerformanceCounter(), f = SDL_GetPerformanceFrequency();
     double ms = (now - last) * 1000.0 / f;
     extern unsigned g_frame;
-    if (last && (ms > 60.0 || g_lt_read_n || g_lt_open_n)) {
+    if (want_log && last && (ms > 60.0 || g_lt_read_n || g_lt_open_n)) {
         double io = g_lt_read_t * 1000.0 / f, op = g_lt_open_t * 1000.0 / f, dc = g_lt_dec_t * 1000.0 / f, wt = (g_t_wait - tw0) * 1000.0 / f;
-        rt_log("[load] frame %u: %.0f ms; opens %llu %.1f ms, reads %llu %.2f MB %.1f ms, bmp decode %.1f ms, wait %.1f ms, other %.1f ms\n", g_frame, ms,
+        rt_dlog("[load] frame %u: %.0f ms; opens %llu %.1f ms, reads %llu %.2f MB %.1f ms, bmp decode %.1f ms, wait %.1f ms, other %.1f ms\n", g_frame, ms,
                (unsigned long long)g_lt_open_n, op, (unsigned long long)g_lt_read_n, g_lt_read_b / 1048576.0, io, dc, wt, ms - io - op - dc - wt);
     }
+    if (g_hitch) hk_hitch_frame_end();   // before the counters restart
     g_lt_open_t = g_lt_read_t = g_lt_dec_t = g_lt_read_n = g_lt_read_b = g_lt_open_n = 0;
     tw0 = g_t_wait;
     last = SDL_GetPerformanceCounter();
 }
+int hk_savefast_on(void);
+void hk_save_inval(const char *hp);
+void hk_save_materialize(const char *hp, int src_writes);
+void hk_save_wbuf(FILE *f);
+void hk_save_drop(const char *src);
+uint8_t *hk_save_cached_copy(const char *hp, size_t *n);
 static K(CreateFileA_impl);
 K(CreateFileA) {
     uint64_t t0 = SDL_GetPerformanceCounter();
+    if (g_hitch) { HOSTFN; hk_hitch_open(GSTR(ARG(1))); }   // before the call: it pops the arguments
     imp_KERNEL32_CreateFileA_impl(c);
     if (g_trace_load) { __atomic_fetch_add(&g_lt_open_t, SDL_GetPerformanceCounter() - t0, __ATOMIC_RELAXED); __atomic_fetch_add(&g_lt_open_n, 1, __ATOMIC_RELAXED); }
 }
@@ -696,10 +731,34 @@ static K(CreateFileA_impl) {
     // CREATE_ALWAYS truncates at once: saves, data.sys and disp.ini go to NAME.tmp, swapped in on CloseHandle, so a
     // crash during a save leaves the previous one (safe_write.h).
     char tmp[620];
-    fl->commit = (access & 0x40000000u) && disp == 2 && !sw_tmp_path(hp, tmp, sizeof tmp);
-    if (fl->commit) f = fopen(tmp, "w+b");
+    // HK_USERFAST=1 (cfg userfast=1): the game's own temporary save files (NAME.HDK.ser and .mck, created and deleted
+    // again within the same autosave) are written in place: no NAME.tmp, no rename dance (about 4 file-system
+    // operations each, slow on the Vita's memory card). The final NAME.HDK keeps the atomic path.
+    static int userfast = -1;
+    if (userfast < 0) userfast = hk_env_flag("HK_USERFAST", 0);
+    size_t hl = strlen(hp);
+    int tempname = userfast && hl > 4 && (!SDL_strcasecmp(hp + hl - 4, ".ser") || !SDL_strcasecmp(hp + hl - 4, ".mck"));
+    fl->commit = (access & 0x40000000u) && disp == 2 && !tempname && !sw_tmp_path(hp, tmp, sizeof tmp);
+    // HK_PREOPEN=1 (cfg preopen=1): a read-only game file already in the preload cache is opened as a memory stream
+    // (fmemopen): no open/fstat on the memory card for the ~44 opens of an area change. Bytes are the same.
+    static int preopen = -1;
+    if (preopen < 0) preopen = hk_env_flag("HK_PREOPEN", 0);
+    Preload *pp = preopen && !(access & 0x40000000u) ? preload_find(hp) : NULL;
+    int memf = 0;
+    uint8_t *sv = NULL;   // savefast: private RAM copy of a save slot (freed with the handle)
+    size_t svn = 0;
+    if (hk_savefast_on()) {
+        hk_save_materialize(hp, (access & 0x40000000u) != 0 && !fl->commit);   // a commit write replaces the file atomically and drops NAME.bak itself
+        if (access & 0x40000000u) hk_save_inval(hp);
+        else sv = hk_save_cached_copy(hp, &svn);
+    }
+    if (sv && svn && (f = fmemopen(sv, svn, "rb")) != NULL) { memf = 1; fl->own = sv; sv = NULL; }
+    else if (fl->commit) { f = fopen(tmp, "w+b"); if (f) hk_save_wbuf(f); }
+    else if (pp && SDL_AtomicGet(&pp->state) == 1 && pp->data && (f = fmemopen(pp->data, pp->size, "rb")) != NULL) memf = 1;
     else {
+        free(sv); sv = NULL;
         f = fopen(hp, mode);
+        if (f && (access & 0x40000000u)) hk_save_wbuf(f);
         if (!f && errno == ENOENT && sw_recover(hp)) { rt_log("[file] %s recovered from .bak\n", hp); f = fopen(hp, mode); }
     }
     if (!f && errno == ENOENT && (access & 0x40000000u) && disp == 4) f = fopen(hp, "w+b"); // OPEN_ALWAYS
@@ -715,13 +774,14 @@ static K(CreateFileA_impl) {
     fl->f = f;
     fl->ro = !(access & 0x40000000u);
     fl->mu = SDL_CreateMutex();
+    if (memf) { fl->small = 1; fl->prechk = 1; fl->pre = pp; }   // no descriptor: never read_direct, preload entry known
 #ifdef __vita__
     // Read-only files are unbuffered: read_direct reads the descriptor itself, and a buffered newlib FILE
     // moves the descriptor on its own (fseek reads a whole block ahead), so a second direct read on the same handle
     // started at the end of the file and returned 0 bytes (data/arc.arc: 17232 bytes read as 16384 + 16384).
     // Small files (the 25 KB stage .HDK, opened ~10 times per area load, ~1800 tiny reads per load) get a buffer as large
     // as the file instead: the loader's tiny reads no longer each cost a ux0 syscall. Never read_direct (fl->small).
-    if (fl->ro) {
+    if (fl->ro && !memf) {
         struct stat st;   // before any I/O on the stream: setvbuf must come first
         long fsz = fstat(fileno(f), &st) ? -1 : (long)st.st_size;
         if (fsz > 0 && fsz <= 65536 && !setvbuf(f, NULL, _IOFBF, (size_t)((fsz + 4095) & ~4095L))) fl->small = 1;
@@ -731,12 +791,12 @@ static K(CreateFileA_impl) {
     snprintf(fl->path, sizeof fl->path, "%s", hp);
     // Only immutable game archives may retain a completed stream block.
     // Saves, configuration and writable handles keep the existing policy.
-    const char *reuse=getenv("SH3_PREFETCH_REUSE"),*ext=strrchr(hp,'.');
+    const char *reuse=HK_ENV("SH3_PREFETCH_REUSE"),*ext=strrchr(hp,'.');
     fl->pfreuse=fl->ro && reuse && !strcmp(reuse,"1") && ext &&
         (!SDL_strcasecmp(ext,".arc") || !SDL_strcasecmp(ext,".afs"));   // SH3 immutable archives (SH4 used .sh4/.pac)
     w32_set_last_error(c, 0);
     uint32_t h = fl->h = h_new(H_FILE, fl);
-    if (RT_TRACE("HK_TRACE_IO")) rt_log("CreateFileA(\"%s\") -> %x%s\n", gp, h, c == g_main_cpu ? "" : " (other thread)");
+    if (RT_TRACE("HK_TRACE_IO")) rt_dlog("CreateFileA(\"%s\") -> %x%s\n", gp, h, c == g_main_cpu ? "" : " (other thread)");
     STDRET(7, h);
 }
 static File *file_of(uint32_t h) { return h_get(h, H_FILE); }
@@ -816,7 +876,7 @@ static void pf_head_pressure(File *fl,uint32_t n) {
 static void pf_head_remember(File *fl,long pos,const uint8_t *src,uint32_t n) {
     if(!fl->ro || !fl->pfreuse || pos<0 || n<(1u<<20) || n>PF_MAX)return;
     static int enabled=-1;
-    if(enabled<0){const char *e=getenv("SH3_AUDIO_HEAD_CACHE");enabled=e&&!strcmp(e,"1");}
+    if(enabled<0){const char *e=HK_ENV("SH3_AUDIO_HEAD_CACHE");enabled=e&&!strcmp(e,"1");}
     if(!enabled)return;
     const char *name=strrchr(fl->path,'/');if(!name)name=strrchr(fl->path,'\\');name=name?name+1:fl->path;
     // SH3: removido (SH4 BGM-archive head cache keyed on its file name); no SH3 equivalent known yet.
@@ -874,7 +934,7 @@ static void pf_plan(File *fl, long pos, uint32_t n) {
     // the next tail to miss even though the first tail used a prefetched range.
     int small = 0;
     if (fl->ro && fl->pfreuse && n >= 65536 && n < PF_MIN) {
-        const char *e = getenv("SH3_PREFETCH_SMALL"); small = e && !strcmp(e,"1");
+        const char *e = HK_ENV("SH3_PREFETCH_SMALL"); small = e && !strcmp(e,"1");
     }
     if (!fl->ro || (!small && n < PF_MIN) || n > PF_MAX) return;
     int stream = fl->lastn != 0;
@@ -889,7 +949,7 @@ static void pf_plan(File *fl, long pos, uint32_t n) {
     for (int i = 0; i < 8; i++) if (fl->nx[i].n && fl->nx[i].key == pos) { ppos = fl->nx[i].pos; pn = fl->nx[i].n; learned = 1; }
     static int guard = -1;
     if (guard < 0) {
-        const char *e = getenv("SH3_PREFETCH_GUARD");
+        const char *e = HK_ENV("SH3_PREFETCH_GUARD");
 #ifdef __vita__
         guard = !e || !strcmp(e, "1");
 #else
@@ -967,7 +1027,7 @@ K(ReadFile) {
         int use_pf = n >= PF_MIN;
         if (!use_pf && n >= 65536 && f->ro && f->pfreuse) {
             static int small = -1;
-            if (small < 0) { const char *e = getenv("SH3_PREFETCH_SMALL"); small = e && !strcmp(e,"1"); }
+            if (small < 0) { const char *e = HK_ENV("SH3_PREFETCH_SMALL"); small = e && !strcmp(e,"1"); }
             use_pf = small;
         }
         // A short audio tail can already lie in the full-sized pending job.
@@ -1001,23 +1061,28 @@ K(ReadFile) {
     uint64_t d_io = SDL_GetPerformanceCounter() - t_io;
     if (g_trace_load) { __atomic_fetch_add(&g_lt_read_t, d_io, __ATOMIC_RELAXED); __atomic_fetch_add(&g_lt_read_n, 1, __ATOMIC_RELAXED); __atomic_fetch_add(&g_lt_read_b, got, __ATOMIC_RELAXED); }
     if (c == g_main_cpu) { g_t_io += d_io; g_io_bytes += got; }
+    if (g_hitch && f) {
+        if (pfhit || f->own) { __atomic_fetch_add(&g_hc_ram_b, got, __ATOMIC_RELAXED); __atomic_fetch_add(&g_hc_ram_n, 1, __ATOMIC_RELAXED); }
+        else hc_end(HC_DISK, t_io, got);
+        if (c == g_main_cpu) hk_hitch_file(f->path, got, d_io * 1000.0 / SDL_GetPerformanceFrequency(), pfhit || f->own != NULL);   // own: savefast slot copy
+    }
     static int io_tail_profile = -1;
-    if (io_tail_profile < 0) { const char *e = getenv("SH3_IO_TAIL_PROFILE"); io_tail_profile = e && !strcmp(e,"1"); }
+    if (io_tail_profile < 0) { const char *e = HK_ENV("SH3_IO_TAIL_PROFILE"); io_tail_profile = e && !strcmp(e,"1"); }
     if (got >= 262144 || (io_tail_profile && got >= 65536)) {
         static unsigned s_big;
         extern unsigned g_frame;
-        if (RT_TRACE("HK_TRACE_IO") && ++s_big <= 400) rt_log("[io] frame %u h=%x pos=%ld n=%u KB=%u %.1f ms (%.1f MB/s) thread=%d ahead=%d caller=%08x head=%d\n", g_frame, ARG(1), pos0, n, got >> 10,
+        if (RT_TRACE("HK_TRACE_IO") && ++s_big <= 400) rt_dlog("[io] frame %u h=%x pos=%ld n=%u KB=%u %.1f ms (%.1f MB/s) thread=%d ahead=%d caller=%08x head=%d\n", g_frame, ARG(1), pos0, n, got >> 10,
                                    d_io * 1000.0 / SDL_GetPerformanceFrequency(), got / 1048576.0 / (d_io / (double)SDL_GetPerformanceFrequency() + 1e-9),
                                    c == g_main_cpu, pfhit, R32(c->esp), headhit);
     }
     {
         static unsigned s_rf;
         if (RT_TRACE("HK_TRACE_IO") && (++s_rf <= 20 || s_rf % 100 == 0))
-            rt_log("ReadFile #%u h=%x n=%u -> %u\n", s_rf, ARG(1), n, got);
+            rt_dlog("ReadFile #%u h=%x n=%u -> %u\n", s_rf, ARG(1), n, got);
     }
     if (f && !error) read_ring_add(f->path, pos0, n, got, buf, c == g_main_cpu);
     if (f && file_traced(f))
-        rt_log("[ftrace] ReadFile %s pos=%ld n=%u got=%u err=%u prefetch=%d direct=%d ov=%d\n", f->path, pos0, n, got, error,
+        rt_dlog("[ftrace] ReadFile %s pos=%ld n=%u got=%u err=%u prefetch=%d direct=%d ov=%d\n", f->path, pos0, n, got, error,
                pfhit, !pfhit && n >= 16384, ov != 0);
     if (outn) W32(outn, got);
     if (ov) {
@@ -1060,7 +1125,7 @@ static uint32_t file_status(uint32_t error) {
     default: return 0xc0000185u; // STATUS_IO_DEVICE_ERROR
     }
 }
-K(WriteFile) {
+HC_K(HC_WRITE, KERNEL32, WriteFile) {
     HOSTFN;
     File *f = file_acquire(ARG(1));
     uint32_t buf = ARG(2), n = ARG(3), outn = ARG(4), ov = ARG(5);
@@ -1119,7 +1184,7 @@ K(SetFilePointer) {
     if (ARG(3)) off = (int64_t)(((uint64_t)R32(ARG(3)) << 32) | ARG(2));
     fseek(f->f, (long)off, ARG(4) == 0 ? SEEK_SET : ARG(4) == 1 ? SEEK_CUR : SEEK_END);
     long pos = ftell(f->f);
-    if (file_traced(f)) rt_log("[ftrace] SetFilePointer %s off=%lld how=%u -> %ld\n", f->path, (long long)off, ARG(4), pos);
+    if (file_traced(f)) rt_dlog("[ftrace] SetFilePointer %s off=%lld how=%u -> %ld\n", f->path, (long long)off, ARG(4), pos);
     if (ARG(3)) W32(ARG(3), 0);
     file_release(f);
     STDRET(4, (uint32_t)pos);
@@ -1170,11 +1235,11 @@ K(GetFileSize) {
     long n = ftell(f->f);
     fseek(f->f, cur, SEEK_SET);
     file_release(f);
-    if (RT_TRACE("HK_TRACE_IO")) rt_log("GetFileSize h=%x -> %ld\n", ARG(1), n);
+    if (RT_TRACE("HK_TRACE_IO")) rt_dlog("GetFileSize h=%x -> %ld\n", ARG(1), n);
     if (ARG(2)) W32(ARG(2), 0);
     STDRET(2, (uint32_t)n);
 }
-K(FlushFileBuffers) {
+HC_K(HC_WRITE, KERNEL32, FlushFileBuffers) {
     HOSTFN;
     File *f = file_acquire(ARG(1));
     if (!f) { w32_set_last_error(c, 6); STDRET(1, 0); }
@@ -1198,7 +1263,10 @@ static uint32_t file_destroy(File *f) {
     pf_stop(f); pf_head_forget(f); pf_release(f->pfcap); free(f->pf);
     errno = 0;
     if (fclose(f->f)) error = file_error(errno, 29);
+    free(f->own);
+    if (!f->ro) hk_save_inval(f->path);
     if (f->commit) {
+        hk_save_drop(f->path);   // sw_commit removes NAME.bak: a recorded (never made) backup is gone as well
         if (!error && sw_commit(f->path)) error = file_error(errno, 29);
         rt_log("[file] %s %s\n", f->path, error ? "NOT saved (previous file kept)" : "saved");
     }
@@ -1214,8 +1282,8 @@ K(CloseHandle) {
     int now = 0;
     if (h_type(h) == H_FILE) {   // the file (and its number) lives until its last running call
         File *f = h_retire(h, H_FILE, &now);
-        if (f && now) error = file_destroy(f);
-        else if (f) rt_log("[file] CloseHandle h=%x while another thread still uses %s: closed when it returns\n", h, f->path);
+        if (f && now) { uint64_t th = f->ro ? 0 : hc_t0(); error = file_destroy(f); hc_end(HC_WRITE, th, 0); hk_hitch_note("CloseHandle(save)", th); }
+        else if (f) rt_dlog("[file] CloseHandle h=%x while another thread still uses %s: closed when it returns\n", h, f->path);
     } else if (h_type(h) == H_MAPPING) {
         void *m = h_retire(h, H_MAPPING, &now);
         if (m && now) free(m);   // otherwise by MapViewOfFile when it returns (sh3_imports.c)
@@ -1239,6 +1307,7 @@ K(GetFileAttributesA) {
     char hp[600];
     struct stat st;
     w32_host_path(GSTR(ARG(1)), hp, sizeof hp);
+    hk_save_materialize(hp, 0);   // savefast: a recorded (not yet made) .bak must look like a file
     if (stat(hp, &st)) { w32_set_last_error(c, 2); STDRET(1, 0xffffffffu); }
     STDRET(1, S_ISDIR(st.st_mode) ? 0x10 : 0x80);
 }

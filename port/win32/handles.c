@@ -42,7 +42,7 @@ uint32_t h_new(int type, void *obj) {
             if (!pg) break;
             h_pages[np] = pg;
             __atomic_store_n(&h_npages, ++np, __ATOMIC_RELEASE);
-            rt_log("[handles] table grown to %d slots\n", np * H_PAGE);
+            rt_dlog("[handles] table grown to %d slots\n", np * H_PAGE);
         }
         if (HT(i).type == H_FREE) {
             HT(i).type = type;
@@ -200,7 +200,7 @@ uint32_t w32_wait(uint32_t n, const uint32_t *hs, int all, uint32_t timeout_ms) 
     static unsigned s_wait_n;
     unsigned wait_id = ++s_wait_n;
     if (wait_id <= 5)   // first ones only: one line every 200 waits filled the log over hours of play
-        rt_log("w32_wait #%u n=%u all=%d to=%u h0=%x\n", wait_id, n, all, timeout_ms, n > 0 ? hs[0] : 0);
+        rt_dlog("w32_wait #%u n=%u all=%d to=%u h0=%x\n", wait_id, n, all, timeout_ms, n > 0 ? hs[0] : 0);
     for (uint32_t i = 0; i < n && i < 4; i++) w32_trace_sync("wait", hs[i], timeout_ms);
     if (n > 64) n = 64;
     uint32_t epoch0[64] = {0};
@@ -216,7 +216,7 @@ uint32_t w32_wait(uint32_t n, const uint32_t *hs, int all, uint32_t timeout_ms) 
             if (all) for (uint32_t i = 0; i < n; i++) w32_consume(hs[i]);
             register_waiter(n, hs, epoch0, -1);
             SDL_UnlockMutex(g_sync);
-            if (wait_id <= 5) rt_log("w32_wait #%u -> %u\n", wait_id, all ? 0 : first);
+            if (wait_id <= 5) rt_dlog("w32_wait #%u -> %u\n", wait_id, all ? 0 : first);
             return all ? 0 : first;
         }
         uint32_t el = SDL_GetTicks() - start;
@@ -225,18 +225,18 @@ uint32_t w32_wait(uint32_t n, const uint32_t *hs, int all, uint32_t timeout_ms) 
     }
     register_waiter(n, hs, epoch0, -1);
     SDL_UnlockMutex(g_sync);
-    if (wait_id <= 5) rt_log("w32_wait #%u -> TIMEOUT\n", wait_id);
+    if (wait_id <= 5) rt_dlog("w32_wait #%u -> TIMEOUT\n", wait_id);
     return WAIT_TIMEOUT_;
 }
 
 void w32_trace_sync(const char *what, uint32_t h, uint32_t extra) {
     static int on = -1;
     static SDL_atomic_t n;
-    if (on < 0) on = getenv("SH3_TRACE_SYNC") != NULL;
+    if (on < 0) on = HK_ENV("SH3_TRACE_SYNC") != NULL;
     if (!on || SDL_AtomicAdd(&n, 1) >= 600) return;
     static const char *names[] = {"free", "file", "event", "mutex", "thread", "regkey", "timer", "sem", "mmio", "find", "mapping"};
     int ty = h_type(h);
-    rt_log("[sync] %-14s h=%x (%s) %x host=%lu\n", what, h, ty >= 0 && ty < 11 ? names[ty] : "?", extra, SDL_ThreadID());
+    rt_dlog("[sync] %-14s h=%x (%s) %x host=%lu\n", what, h, ty >= 0 && ty < 11 ? names[ty] : "?", extra, SDL_ThreadID());
 }
 
 void w32_set_last_error(CPU *c, uint32_t e) {
@@ -246,10 +246,10 @@ void w32_set_last_error(CPU *c, uint32_t e) {
 
 // SH3_VTIME=1 (PC profiling): virtual 30 Hz clock + 10 us per read, so the game never sleeps.
 extern unsigned g_frame;
-static int vtime(void) { static int v = -1; if (v < 0) v = getenv("SH3_VTIME") != NULL; return v; }
+static int vtime(void) { static int v = -1; if (v < 0) v = HK_ENV("SH3_VTIME") != NULL; return v; }
 unsigned w32_hz(void) {   // no game logic (30 originally); SH3_HZ=60 to test a 60 Hz loop
     static unsigned h;
-    if (!h) { const char *e = getenv("SH3_HZ"); h = e && atoi(e) >= 15 && atoi(e) <= 120 ? (unsigned)atoi(e) : 30; }
+    if (!h) { const char *e = HK_ENV("SH3_HZ"); h = e && atoi(e) >= 15 && atoi(e) <= 120 ? (unsigned)atoi(e) : 30; }
     return h;
 }
 uint64_t w32_qpc(void) {

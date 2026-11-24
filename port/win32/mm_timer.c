@@ -66,7 +66,7 @@ W(timeSetEvent) {   // (delay ms, resolution, callback, user, flags)
     SDL_UnlockMutex(s_lock);
     w32_trace_sync("timer set", h, ARG(1));
     static unsigned logged;
-    if (logged++ < 4) rt_log("timeSetEvent(%u ms, cb=%08x, periodic=%u) -> %x\n", ARG(1), ARG(3), ARG(5) & TIME_PERIODIC, h);
+    if (logged++ < 4) rt_dlog("timeSetEvent(%u ms, cb=%08x, periodic=%u) -> %x\n", ARG(1), ARG(3), ARG(5) & TIME_PERIODIC, h);
     STDRET(5, h);
 }
 

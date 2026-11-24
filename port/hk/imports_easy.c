@@ -1,6 +1,7 @@
 // Win32 imports used by HDKWIN.EXE and absent from the sh3vita-derived layer: simple, self-contained ones.
 // Every function follows stdcall: STDRET(number of 4-byte arguments, return value).
 #include "win32.h"
+#include "hitch.h"
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -70,6 +71,7 @@ U(CharToOemA) { HOSTFN; if (ARG(1) != ARG(2)) memmove(mb + ARG(2), mb + ARG(1), 
 K(GlobalAlloc) {
     HOSTFN;
     uint32_t size = ARG(2) ? ARG(2) : 1;
+    gheap_site(c);
     uint32_t p = (ARG(1) & 0x40u) ? gheap_calloc(size) : gheap_alloc(size);   // GMEM_ZEROINIT
     if (!p) w32_set_last_error(c, 8);
     STDRET(2, p);
@@ -108,6 +110,10 @@ K(FormatMessageA) { HOSTFN;   // only used to describe an error: an empty messag
     STDRET(7, 0);
 }
 
+int hk_save_copy(const char *from, const char *to);
+void hk_save_materialize(const char *hp, int src_writes);
+void hk_save_inval(const char *hp);
+int hk_savefast_on(void);
 static int copy_host(const char *from, const char *to) {
     FILE *a = fopen(from, "rb"), *b = a ? fopen(to, "wb") : NULL;
     char buf[8192];
@@ -118,24 +124,28 @@ static int copy_host(const char *from, const char *to) {
     if (b) fclose(b);
     return ok;
 }
-K(CopyFileA) {
+HC_K(HC_WRITE, KERNEL32, CopyFileA) {
     HOSTFN;
     char from[600], to[600];
     w32_host_path(GSTR(ARG(1)), from, sizeof from);
     w32_host_path(GSTR(ARG(2)), to, sizeof to);
     if (ARG(3)) { FILE *e = fopen(to, "rb"); if (e) { fclose(e); w32_set_last_error(c, 80); STDRET(3, 0); } }
-    int ok = copy_host(from, to);
-    rt_log("CopyFileA(\"%s\", \"%s\") -> %d (%s)\n", GSTR(ARG(1)), GSTR(ARG(2)), ok, to);
+    int ok;
+    if (hk_savefast_on()) { hk_save_materialize(to, 1); hk_save_materialize(from, 0); hk_save_inval(to); }
+    if (hk_save_copy(from, to)) ok = 1;   // savefast: the "X -> X.bak" step of the save sequence is only recorded
+    else ok = copy_host(from, to);
+    rt_dlog("CopyFileA(\"%s\", \"%s\") -> %d (%s)\n", GSTR(ARG(1)), GSTR(ARG(2)), ok, to);
     if (!ok) w32_set_last_error(c, 2);
     STDRET(3, ok);
 }
-K(MoveFileA) {
+HC_K(HC_WRITE, KERNEL32, MoveFileA) {
     HOSTFN;
     char from[600], to[600];
     w32_host_path(GSTR(ARG(1)), from, sizeof from);
     w32_host_path(GSTR(ARG(2)), to, sizeof to);
+    if (hk_savefast_on()) { hk_save_materialize(from, 1); hk_save_materialize(to, 1); hk_save_inval(from); hk_save_inval(to); }
     int ok = rename(from, to) == 0;
-    rt_log("MoveFileA(\"%s\", \"%s\") -> %d (%s)\n", GSTR(ARG(1)), GSTR(ARG(2)), ok, to);
+    rt_dlog("MoveFileA(\"%s\", \"%s\") -> %d (%s)\n", GSTR(ARG(1)), GSTR(ARG(2)), ok, to);
     if (!ok) w32_set_last_error(c, 2);
     STDRET(2, ok);
 }
@@ -171,7 +181,7 @@ K(_lclose) {
 
 // ---------- ADVAPI32 registry writes the sh3vita layer does not cover: accepted, not persisted yet ----------
 A(RegCreateKeyExA) { HOSTFN;   // (hkey, subkey, reserved, class, options, sam, security, phkResult, disposition)
-    rt_log("[win32] RegCreateKeyExA(\"%s\") (not persisted)\n", GSTR(ARG(2)) ? GSTR(ARG(2)) : "");
+    rt_dlog("[win32] RegCreateKeyExA(\"%s\") (not persisted)\n", GSTR(ARG(2)) ? GSTR(ARG(2)) : "");
     if (ARG(8)) W32(ARG(8), 0x00080001u);
     if (ARG(9)) W32(ARG(9), 1);   // REG_CREATED_NEW_KEY
     STDRET(9, 0);

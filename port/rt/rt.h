@@ -2,6 +2,7 @@
 // Host-side runtime API (Win32, D3D8, platform implementations).
 #pragma once
 #include "x86rt.h"
+#include "hkdev.h"
 #include <stdarg.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -42,6 +43,14 @@ uint32_t gheap_alloc_aligned(uint32_t size, uint32_t align);
 void gheap_free(uint32_t a);
 uint32_t gheap_realloc(uint32_t a, uint32_t size);
 uint32_t gheap_size(uint32_t a);
+void gheap_site(CPU *c);   // heap.c: remember the guest caller of the next allocation (HK_TRACE_HEAP / cfg heaptrace=1)
+void gheap_site_report(const char *tag, int cycle);
+#if HK_DEVTOOLS
+extern int g_hk_heaptrace;
+#else
+#define g_hk_heaptrace 0   // player build: allocation-site accounting compiled out
+#endif
+extern int g_hk_heapfix;
 typedef struct { uint64_t free_total, free_largest, used_bytes, peak_bytes; unsigned free_blocks; } GHeapStats;
 void gheap_stats(GHeapStats *st);   // heap.c: free space, largest free block, free block count (walks the pool under the lock)
 void gheap_report(void);            // heap.c: live blocks grouped by size, logged ("[gheap]")
@@ -66,7 +75,13 @@ extern uint64_t g_t_sleep, g_t_gl, g_t_swap;
 
 void rt_log(const char *fmt, ...);
 // Per-call trace flag, read once from the environment (always off on the Vita, which has no env).
+#if HK_DEVTOOLS
 #define RT_TRACE(envname) ({ static int t_ = -1; if (t_ < 0) t_ = getenv(envname) != NULL; t_; })
+#define rt_dlog rt_log   // developer / diagnostic log line
+#else
+#define RT_TRACE(envname) 0
+#define rt_dlog(...) ((void)0)   // player build: compiled out with its arguments
+#endif
 // True the first time it sees this key (small table; when full, reports false so nothing floods).
 int rt_first_time(uint64_t key);
 void rt_log_flush(void);

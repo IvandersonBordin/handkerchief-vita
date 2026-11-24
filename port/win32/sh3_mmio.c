@@ -65,7 +65,7 @@ W(mmioOpenA) {   // (name, MMIOINFO * or NULL, flags)
         char hp[600];
         w32_host_path(GSTR(ARG(1)), hp, sizeof hp);
         m->s.f = fopen(hp, (flags & MMIO_CREATE) ? "w+b" : rw ? "r+b" : "rb");
-        rt_log("mmioOpenA(\"%s\", %x) -> %s\n", GSTR(ARG(1)) ? GSTR(ARG(1)) : "(null)", flags, m->s.f ? "ok" : "failed");
+        rt_dlog("mmioOpenA(\"%s\", %x) -> %s\n", GSTR(ARG(1)) ? GSTR(ARG(1)) : "(null)", flags, m->s.f ? "ok" : "failed");
         if (!m->s.f) { free(m); if (info) W16(info + MI_ERR, MMIOERR_CANNOTOPEN); STDRET(3, 0); }
         if ((flags & MMIO_ALLOCBUF) || (info && R32(info + MI_CCH))) {
             m->cap = info && R32(info + MI_CCH) ? R32(info + MI_CCH) : 8192;
@@ -75,7 +75,7 @@ W(mmioOpenA) {   // (name, MMIOINFO * or NULL, flags)
     if (info) W16(info + MI_ERR, 0);
     uint32_t hnew = h_new(H_MMIO, m);
     g_hk_mmio_opened++;
-    if (RT_TRACE("HK_TRACE_MMIO")) rt_log("[mmio] open h=%x %s caller %08x size %u\n", hnew, m->s.f ? "file" : "mem", R32(c->esp), m->s.size);
+    if (RT_TRACE("HK_TRACE_MMIO")) rt_dlog("[mmio] open h=%x %s caller %08x size %u\n", hnew, m->s.f ? "file" : "mem", R32(c->esp), m->s.size);
     STDRET(3, hnew);
 }
 W(mmioClose) {
@@ -83,7 +83,7 @@ W(mmioClose) {
     int now;
     Mmio *m = h_retire(ARG(1), H_MMIO, &now);
     if (m) g_hk_mmio_closed++;
-    if (RT_TRACE("HK_TRACE_MMIO")) rt_log("[mmio] close h=%x %s caller %08x\n", ARG(1), m ? "ok" : "BAD", R32(c->esp));
+    if (RT_TRACE("HK_TRACE_MMIO")) rt_dlog("[mmio] close h=%x %s caller %08x\n", ARG(1), m ? "ok" : "BAD", R32(c->esp));
     if (m && now) mmio_destroy(m);   // otherwise by the mmio call still running (MMIO_HELD)
     STDRET(2, 0);
 }

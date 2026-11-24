@@ -37,7 +37,7 @@ static int thread_main(void *p) {
 #ifdef __vita__
     // The game's helper threads stay off core 0,
     // which the main game thread needs whole (39 ms of CPU per frame in the park). SH3_GUEST_ANYCORE=1: any core.
-    if (!getenv("SH3_GUEST_ANYCORE"))
+    if (!HK_ENV("SH3_GUEST_ANYCORE"))
         sceKernelChangeThreadCpuAffinityMask(sceKernelGetThreadId(), SCE_KERNEL_CPU_MASK_USER_1 | SCE_KERNEL_CPU_MASK_USER_2);
 #endif
     HOSTFN;
@@ -49,7 +49,7 @@ static int thread_main(void *p) {
     jmp_buf exit_jb;   // ExitThread unwinds the guest call back to here
     t->exit_jb = &exit_jb;
     if (!setjmp(exit_jb)) rt_guest_call(t->c, t->start, 1, t->param);
-    else rt_log("ExitThread tid=%u\n", t->tid);
+    else rt_dlog("ExitThread tid=%u\n", t->tid);
     t->exit_jb = NULL;
     SDL_TLSSet(s_self, NULL, NULL);
     SDL_LockMutex(g_sync);
@@ -75,7 +75,7 @@ K(CreateThread) {   // (attrs, stack size, start, param, flags, tid *)
     t->suspend = (ARG(5) & CREATE_SUSPENDED) ? 1 : 0;
     if (ARG(6)) W32(ARG(6), t->tid);
     uint32_t h = h_new(H_THREAD, t);
-    rt_log("CreateThread start=%08x param=%08x tid=%u%s\n", t->start, t->param, t->tid, t->suspend ? " (suspended)" : "");
+    rt_dlog("CreateThread start=%08x param=%08x tid=%u%s\n", t->start, t->param, t->tid, t->suspend ? " (suspended)" : "");
     t->t = SDL_CreateThread(thread_main, "guest", t);
     STDRET(6, h);
 }
@@ -107,7 +107,7 @@ K(SuspendThread) {   // -> previous suspend count, or -1
         if (t == current_thread()) wait_resumed(t);   // self-suspension: block until ResumeThread
         else {
             static int said;
-            if (!said++) rt_log("[thread] SuspendThread of another running thread tid=%u: count raised only\n", t->tid);
+            if (!said++) rt_dlog("[thread] SuspendThread of another running thread tid=%u: count raised only\n", t->tid);
         }
     }
     SDL_UnlockMutex(g_sync);

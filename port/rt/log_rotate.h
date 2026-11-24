@@ -3,6 +3,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include "hkdev.h"
 
 /* Previous launches are kept: the last one as NAME.prev.txt (hklog.prev.txt on the Vita, sh3log.prev.txt on PC),
  * older ones as NAME.txt.01 .. NAME.txt.18 (01 = the launch before .prev). A long console session must survive at
@@ -33,6 +34,9 @@ static int sh3_log_rotate(const char *path) {
     char src[1100], dst[1100], prev[1100];
     if (strlen(path) > 1000) return 0;
     sh3_log_prev_name(path, prev, sizeof prev);
+#if !HK_DEVTOOLS
+    return sh3_log_move(path, prev);   // player build: only the current log and the previous launch's (hklog.prev.txt)
+#endif
     snprintf(dst, sizeof dst, "%s.%02d", path, 18);
     remove(dst);
     for (int i = 17; i >= 1; --i) {   // older history: a failure here only loses an old log

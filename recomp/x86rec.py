@@ -26,7 +26,11 @@ import image_patches
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 EXE = pathlib.Path(os.environ.get("HK_EXE", ROOT / "original-data" / "HDKWIN.EXE"))
-FUNCS = pathlib.Path(os.environ.get("HK_FUNCS", ROOT / "build" / "hk-recomp" / "re" / "functions.json"))
+# Function list: addresses and Ghidra-style names only (no bytes). The committed copy is used when no HK_FUNCS is set
+# and no local export exists; a .gz file is read transparently.
+_FUNCS_LOCAL = ROOT / "build" / "hk-recomp" / "re" / "functions.json"
+FUNCS = pathlib.Path(os.environ["HK_FUNCS"]) if "HK_FUNCS" in os.environ else (
+    _FUNCS_LOCAL if _FUNCS_LOCAL.exists() else ROOT / "recomp" / "data" / "hdkwin-functions.json.gz")
 GEN = pathlib.Path(os.environ.get("HK_GEN", ROOT / "build" / "hk-recomp" / "gen"))
 
 REG32 = ["eax", "ecx", "edx", "ebx", "esp", "ebp", "esi", "edi"]
@@ -69,7 +73,11 @@ class Recompiler:
         self.funcs, self.thunks, self.names = {}, {}, {}
         fj = FUNCS
         if fj.exists():   # produced by re/ghidra/ExportFunctions.java (headless Ghidra, no other tool needed)
-            for p in json.loads(fj.read_text(encoding="utf-8-sig")):
+            raw = fj.read_bytes()
+            if fj.suffix == ".gz":
+                import gzip
+                raw = gzip.decompress(raw)
+            for p in json.loads(raw.decode("utf-8-sig")):
                 a = int(p["a"], 16)
                 self.names[a] = p["name"]
                 if p["thunk"]:

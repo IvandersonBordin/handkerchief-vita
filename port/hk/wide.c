@@ -64,7 +64,7 @@ void hk_ws_flip(void) {
     if (g_hk_ws_w == 640) { g_ws_stage_drawn = 0; return; }
     const int p = !g_ws_stage_drawn;
     g_ws_stage_drawn = 0;
-    if (p != g_ws_pillar && getenv("HK_TRACE_WS")) { extern unsigned g_frame; rt_log("[ws] frame %u: %s\n", g_frame, p ? "pillarbox 640" : "wide"); }
+    if (p != g_ws_pillar && HK_ENV("HK_TRACE_WS")) { extern unsigned g_frame; rt_dlog("[ws] frame %u: %s\n", g_frame, p ? "pillarbox 640" : "wide"); }
     g_ws_pillar = p;
 }
 // Offset of the game's 640 columns in the presented frame: 0 (wide or default 640) or (g_hk_ws_w - 640) / 2.
@@ -86,7 +86,7 @@ void hk_ws_area_size(CPU *c) {
     static uint32_t last_w, last_h;
     if (c->edx == last_w && c->esi == last_h) return;
     last_w = c->edx; last_h = c->esi;
-    rt_log("[ws] area W=%u H=%u%s\n", c->edx, c->esi, (int)c->edx < g_hk_ws_w ? " (narrower than the screen)" : "");
+    rt_dlog("[ws] area W=%u H=%u%s\n", c->edx, c->esi, (int)c->edx < g_hk_ws_w ? " (narrower than the screen)" : "");
 }
 
 // ---- Milestone 2: sky and HUD ----
@@ -102,10 +102,14 @@ static void ws_blit(CPU *c, uint32_t x, uint32_t y, uint32_t clip, uint32_t flag
     sp -= 4; W32(sp, clip); sp -= 4; W32(sp, y); sp -= 4; W32(sp, x);
     sp -= 4; W32(sp, 0x4014ECu);   // return address (not used by the recompiled ret)
     c->esp = sp;
+#if HK_DEVTOOLS
     extern int g_hk_prof_on; extern double g_hk_pf_ws; extern unsigned g_hk_pf_ws_n;
     struct timespec ts0; if (g_hk_prof_on) clock_gettime(CLOCK_MONOTONIC, &ts0);
+#endif
     F_00408b7b(c);
+#if HK_DEVTOOLS
     if (g_hk_prof_on) { struct timespec ts1; clock_gettime(CLOCK_MONOTONIC, &ts1); g_hk_pf_ws += (ts1.tv_sec - ts0.tv_sec) * 1e3 + (ts1.tv_nsec - ts0.tv_nsec) / 1e6; g_hk_pf_ws_n++; }
+#endif
     c->esp += 0x18;                // cdecl: caller pops the 6 arguments
     c->eax = eax; c->ecx = ecx; c->edx = edx;
 }

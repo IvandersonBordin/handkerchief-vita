@@ -186,7 +186,11 @@ static int scripted_key(int vk) {
     return 0;
 }
 
+#if HK_DEVTOOLS
 int hk_stress_key(int vk);   // port/hk/memlog.c
+#else
+#define hk_stress_key(vk) 0
+#endif
 int plat_vk_down(int vk) {
     if (scripted_key(vk) || hk_stress_key(vk)) return 1;
     const Uint8 *k = SDL_GetKeyboardState(NULL);
@@ -260,6 +264,7 @@ int main(int argc, char **argv) {
     rt_fill_iat();
     { void hk_patch_data(void); hk_patch_data(); }
     rt_log("game loaded from %s\n", g_game_dir);
+#if HK_DEVTOOLS
     {   // memory log and stress driver (port/hk/memlog.c)
         extern int g_hk_memlog; void hk_stress_init(const char *);
         if (getenv("HK_MEMLOG")) g_hk_memlog = atoi(getenv("HK_MEMLOG"));
@@ -267,6 +272,7 @@ int main(int argc, char **argv) {
         if (getenv("HK_HANDLE_PAGES")) g_h_maxpages = atoi(getenv("HK_HANDLE_PAGES"));
         hk_stress_init(getenv("HK_STRESS"));
     }
+#endif
     if (getenv("HK_DUMP_AFTER")) SDL_CreateThread(dump_thread, "hkdump", (void *)(intptr_t)atoi(getenv("HK_DUMP_AFTER")));
     rt_run_entry();
     SDL_Quit();

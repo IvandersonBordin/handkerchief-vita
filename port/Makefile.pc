@@ -1,5 +1,6 @@
 # Linux build of the recompiled game (SDL2). Run from the repository root:
-#   make -f port/Makefile.pc -j8
+#   make -f port/Makefile.pc -j8            # developer build (HK_DEVTOOLS=1)
+#   make -f port/Makefile.pc -j8 HK_DEVTOOLS=0 OUT=build/hk-pc-player   # player flavour (no test aids)
 # Needs build/hk-recomp/gen/ (recomp/x86rec.py + recomp/gen_import_stubs.py).
 GEN   ?= build/hk-recomp/gen
 OUT   ?= build/hk-pc
@@ -7,12 +8,17 @@ CC    ?= cc
 SDL_CFLAGS := $(shell pkg-config --cflags sdl2)
 SDL_LIBS   := $(shell pkg-config --libs sdl2)
 CFLAGS ?= -O1 -g
-CFLAGS += -std=gnu11 -Iport/rt -Iport/win32 -Iport -Iport/third_party/tlsf $(SDL_CFLAGS)
+# HK_DEVTOOLS=1 (default here): developer build with the test aids; HK_DEVTOOLS=0: the player flavour (see port/hkdev.h).
+HK_DEVTOOLS ?= 1
+CFLAGS += -DHK_DEVTOOLS=$(HK_DEVTOOLS) -std=gnu11 -Iport/rt -Iport/win32 -Iport -Iport/third_party/tlsf $(SDL_CFLAGS)
 GENFLAGS := -w
 PORTFLAGS := -Wall -Wno-unused-function
 
 GEN_SRC  := $(wildcard $(GEN)/*.c)
 PORT_SRC := $(wildcard port/rt/*.c port/win32/*.c port/hk/*.c port/pc/*.c) port/third_party/tlsf/tlsf.c
+ifeq ($(HK_DEVTOOLS),0)
+PORT_SRC := $(filter-out port/hk/hitch.c port/hk/memlog.c,$(PORT_SRC))
+endif
 GEN_OBJ  := $(patsubst $(GEN)/%.c,$(OUT)/gen/%.o,$(GEN_SRC))
 PORT_OBJ := $(patsubst port/%.c,$(OUT)/port/%.o,$(PORT_SRC))
 

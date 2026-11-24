@@ -15,6 +15,7 @@
 #include "hk/font_data.h"
 #include "hk/theme.h"
 #include "hk/gameart.h"
+#include "hk/hitch.h"
 #include "hk/i18n.h"
 #include "safe_write.h"
 #include <SDL.h>
@@ -160,7 +161,7 @@ static int mtop_ok(int i) { return i >= 0 && i < g_menu.ntop && !g_menu.t[i].gra
 static int mitem_ok(const MTop *t, int i) { return i >= 0 && i < t->n && !t->it[i].grayed && !t->it[i].sep; }
 static void menu_set(uint32_t hmenu) {
     uint32_t res = (hmenu & 0xffff0000u) == 0x00050000u ? hmenu & 0xffffu : 0;
-    rt_log("[menu] SetMenu(%u)\n", res);
+    rt_dlog("[menu] SetMenu(%u)\n", res);
     if (res && res != g_menu.res && !menu_parse(res)) res = 0;
     if (res && !menu_shown()) {
         g_menu.top = 0;
@@ -298,10 +299,19 @@ static void frame(uint32_t *fb, int x, int y, int w, int h, uint32_t tl, uint32_
 // premultiplied colour, so that out = game * w / 256 + colour (the translucent panel and what is drawn on it).
 #define LAYER_CLEAR 0xFF000000u
 static uint32_t g_layer[480 * 640];
+#if HK_DEVTOOLS
+double g_hk_dlg_build_ms;
+#endif
+// hitch log: time spent rebuilding the dialog layer since the last logged frame
 static void blend(uint32_t *fb, int x0, int y0, int w, int h, uint32_t col, int a) {   // a/16 of col over what is there
+    // Fast path (identical result): an untouched layer pixel (top byte 0xFF) over which the colour goes: constant for the whole call.
+    uint32_t rc = 0;
+    for (int sh = 0; sh < 24; sh += 8) rc |= (((col >> sh) & 255u) * (uint32_t)a / 16u) << sh;
+    const uint32_t untouched = ((256u * (uint32_t)(16 - a) / 16u) << 24) | rc;
     for (int y = y0 < 0 ? 0 : y0; y < y0 + h && y < 480; y++)
         for (int x = x0 < 0 ? 0 : x0; x < x0 + w && x < 640; x++) {
             uint32_t p = fb[y * 640 + x], r = 0;
+            if ((p >> 24) == 0xFFu) { fb[y * 640 + x] = untouched; continue; }
             uint32_t top = p >> 24, wt = top == 0xFFu ? 256u : top;
             for (int sh = 0; sh < 24; sh += 8) {
                 uint32_t pc = top == 0xFFu ? 0 : (p >> sh) & 255u;
@@ -646,11 +656,12 @@ static uint64_t state_hash(void) {
 void hk_dlg_overlay(uint32_t *fb, int stride) {
     static uint64_t last; static int valid, y0, y1;
     static int timing = -1; static double t_comp, t_build; static unsigned n_comp, n_build;
-    if (timing < 0) timing = getenv("HK_DLG_TIME") != NULL;
+    if (timing < 0) timing = HK_ENV("HK_DLG_TIME") != NULL;
     struct timespec ts0, ts1; if (timing) clock_gettime(CLOCK_MONOTONIC, &ts0);
     uint64_t h = state_hash();
     int built = 0;
     if (!valid || h != last) {
+        struct timespec tb0; if (g_hitch) clock_gettime(CLOCK_MONOTONIC, &tb0);
         for (size_t i = 0; i < 480 * 640; i++) g_layer[i] = LAYER_CLEAR;
         layer_draw(g_layer);
         y0 = 480; y1 = 0;   // rows that hold anything
@@ -661,6 +672,7 @@ void hk_dlg_overlay(uint32_t *fb, int stride) {
             if (any) { if (y < y0) y0 = y; y1 = y + 1; }
         }
         last = h; valid = 1; built = 1;
+        if (g_hitch) { struct timespec tb1; clock_gettime(CLOCK_MONOTONIC, &tb1); g_hk_dlg_build_ms += (tb1.tv_sec - tb0.tv_sec) * 1e3 + (tb1.tv_nsec - tb0.tv_nsec) / 1e6; }
     }
     for (int y = y0; y < y1; y++) {
         const uint32_t *l = g_layer + y * 640;
@@ -678,7 +690,7 @@ void hk_dlg_overlay(uint32_t *fb, int stride) {
         double ms = (ts1.tv_sec - ts0.tv_sec) * 1e3 + (ts1.tv_nsec - ts0.tv_nsec) / 1e6;
         if (built) { t_build += ms; n_build++; } else { t_comp += ms; n_comp++; }
         if (n_comp + n_build >= 100) {
-            rt_log("[dlgtime] %u composites %.3f ms avg, %u rebuilds %.3f ms avg\n", n_comp, n_comp ? t_comp / n_comp : 0, n_build, n_build ? t_build / n_build : 0);
+            rt_dlog("[dlgtime] %u composites %.3f ms avg, %u rebuilds %.3f ms avg\n", n_comp, n_comp ? t_comp / n_comp : 0, n_build, n_build ? t_build / n_build : 0);
             n_comp = n_build = 0; t_comp = t_build = 0;
         }
     }
@@ -736,7 +748,7 @@ static Dlg *dlg_create(CPU *c, uint32_t res, uint32_t proc, uint32_t param, int 
             d->ctl[i].itemdata = calloc(MAX_ITEMS, sizeof *d->ctl[i].itemdata);
         }
     set_focus_default(d);
-    rt_log("[dlg] create %u \"%s\" (%s) hwnd %08x proc %08x\n", res, d->title, modal ? "modal" : "modeless", d->hwnd, proc);
+    rt_dlog("[dlg] create %u \"%s\" (%s) hwnd %08x proc %08x\n", res, d->title, modal ? "modal" : "modeless", d->hwnd, proc);
     d->visible = modal;   // a modeless dialog without WS_VISIBLE waits for ShowWindow
     uint32_t r = dlg_send(c, d, 0x110u, d->n ? ctl_hwnd(d, &d->ctl[d->focus >= 0 ? d->focus : 0]) : 0, param);   // WM_INITDIALOG
     (void)r;
@@ -802,7 +814,7 @@ static void move_focus(Dlg *d, int dx, int dy) {
         int v = (overlap ? 0 : 1 << 20) + (along > 0 ? along : 0) + 2 * gap;
         if (v < bestv) { bestv = v; best = i; }
     }
-    if (best >= 0) { d->focus = best; rt_log("[dlg] focus id %u \"%s\"\n", d->ctl[best].id, d->ctl[best].text); }
+    if (best >= 0) { d->focus = best; rt_dlog("[dlg] focus id %u \"%s\"\n", d->ctl[best].id, d->ctl[best].text); }
 }
 // K_OK presses the focused control (space, X, pad Cross); K_DEFAULT is Enter (pad Triangle): the dialog's default
 // button (OK), wherever the focus is.
@@ -818,7 +830,7 @@ static void dlg_input(CPU *c, int keys) {
     if (!d) return;
     if (game_driven(d)) {
         Ctl *b = (keys & K_RENAME) ? ctl_by_id(d, ID_RENAME) : (keys & K_DELETE) ? ctl_by_id(d, ID_DELETE) : NULL;
-        if (b && b->visible && b->enabled) { rt_log("[dlg] %u: button %u \"%s\"\n", d->res, b->id, b->text); click(c, d, b); }
+        if (b && b->visible && b->enabled) { rt_dlog("[dlg] %u: button %u \"%s\"\n", d->res, b->id, b->text); click(c, d, b); }
         return;
     }
     Ctl *f = d->focus >= 0 ? &d->ctl[d->focus] : NULL;
@@ -893,7 +905,7 @@ static void menu_input(int keys) {
     }
     if (!g_menu.open) {
         if (keys & (K_OK | K_DOWN)) {
-            if (!t->popup) { if (keys & K_OK) { rt_log("[menu] command %u\n", t->id); w32_post_message(HWND_MAIN_DLG, 0x111u, t->id, 0); } return; }
+            if (!t->popup) { if (keys & K_OK) { rt_dlog("[menu] command %u\n", t->id); w32_post_message(HWND_MAIN_DLG, 0x111u, t->id, 0); } return; }
             g_menu.open = 1; g_menu.item = 0;
             while (g_menu.item < t->n && !mitem_ok(t, g_menu.item)) g_menu.item++;
         }
@@ -908,7 +920,7 @@ static void menu_input(int keys) {
     if ((keys & K_OK) && mitem_ok(t, g_menu.item)) {
         uint16_t id = t->it[g_menu.item].id;
         g_menu.open = 0;
-        rt_log("[menu] command %u (%s)\n", id, t->it[g_menu.item].text);
+        rt_dlog("[menu] command %u (%s)\n", id, t->it[g_menu.item].text);
         w32_post_message(HWND_MAIN_DLG, 0x111u, id, 0);   // WM_COMMAND from a menu: the game hides the menu itself
     }
 }
@@ -927,7 +939,7 @@ void hk_dlg_keys(CPU *c, const uint8_t *pressed_vks, int n) {
                 set_edit_text(t, buf);
                 command(c, d, t, 0x300u);   // EN_CHANGE
             }
-            rt_log("[dlg] system keyboard closed (%s)\n", st == 1 ? "text accepted" : "cancelled");
+            rt_dlog("[dlg] system keyboard closed (%s)\n", st == 1 ? "text accepted" : "cancelled");
         }
         refresh();
         return;
@@ -1014,7 +1026,7 @@ static void cfg_save(uint32_t obj) {
     for (uint32_t o = CFG_FIRST; o < CFG_END; o += 4) fprintf(f, "%02x=%u\n", o, R32(obj + o));
     int ok = fclose(f) == 0;
     if (!ok || sw_commit(path)) { rt_log("[config] cannot save %s\n", path); return; }
-    rt_log("[config] saved %s (music %u, sound %u, screen %u)\n", path, R32(obj + 0x1C), R32(obj + 0x20), R32(obj + 0x14));
+    rt_dlog("[config] saved %s (music %u, sound %u, screen %u)\n", path, R32(obj + 0x1C), R32(obj + 0x20), R32(obj + 0x14));
 }
 // Hook at 0x414D0B (esi = the new CConfig). Unknown offsets and implausible values are ignored, field by field.
 void hk_config_loaded(CPU *c) {
@@ -1035,7 +1047,7 @@ void hk_config_loaded(CPU *c) {
         n++;
     }
     fclose(f);
-    rt_log("[config] loaded %d values from %s (music %u, sound %u)\n", n, path, R32(obj + 0x1C), R32(obj + 0x20));
+    rt_dlog("[config] loaded %d values from %s (music %u, sound %u)\n", n, path, R32(obj + 0x1C), R32(obj + 0x20));
 }
 
 // DialogBoxParamA(hInstance, template, parent, proc, param): runs its own message loop until EndDialog.
@@ -1051,7 +1063,7 @@ U(DialogBoxParamA) {
     int res = d->res;
     if (d->used) { dlg_send(c, d, 0x2u, 0, 0); dlg_free(d); }   // WM_DESTROY
     if (r == 1 && (res == 1491 || res == 1492)) cfg_save(R32(CFG_OBJ));   // Game / Key Configuration: OK
-    rt_log("[dlg] dialog %u closed -> %d\n", ARG(2), (int)r);
+    rt_dlog("[dlg] dialog %u closed -> %d\n", ARG(2), (int)r);
     STDRET(5, r);
 }
 U(EndDialog) {
@@ -1216,7 +1228,7 @@ static uint32_t ctl_message(CPU *c, Dlg *d, Ctl *t, uint32_t msg, uint32_t wp, u
     static uint32_t said[32]; static int nsaid;
     int known = 0;
     for (int i = 0; i < nsaid; i++) known |= said[i] == msg;
-    if (!known && nsaid < 32) { said[nsaid++] = msg; rt_log("[dlg] control message %04x to id %u (class %d) not handled\n", msg, t->id, t->cls); }
+    if (!known && nsaid < 32) { said[nsaid++] = msg; rt_dlog("[dlg] control message %04x to id %u (class %d) not handled\n", msg, t->id, t->cls); }
     return 0;
 }
 U(SendDlgItemMessageA) {   // (dlg, id, msg, wparam, lparam)
@@ -1227,7 +1239,7 @@ U(SendDlgItemMessageA) {   // (dlg, id, msg, wparam, lparam)
 }
 
 // Menus: LoadMenuA hands out a handle naming the resource; SetMenu shows it as the port's menu bar (see above).
-U(LoadMenuA) { HOSTFN; rt_log("[menu] LoadMenuA(%u)\n", ARG(2)); STDRET(2, ARG(2) < 0x10000u ? MENU_HANDLE(ARG(2)) : 0u); }
+U(LoadMenuA) { HOSTFN; rt_dlog("[menu] LoadMenuA(%u)\n", ARG(2)); STDRET(2, ARG(2) < 0x10000u ? MENU_HANDLE(ARG(2)) : 0u); }
 U(SetMenu) { HOSTFN; menu_set(ARG(2)); refresh(); STDRET(2, 1); }
 U(DestroyMenu) { HOSTFN; if (ARG(1) && (ARG(1) & 0xffffu) == g_menu.res) g_menu.res = 0; STDRET(1, 1); }
 
@@ -1247,22 +1259,22 @@ void hk_load_game_request(void) {
     extern unsigned g_frame;
     if (g_lg_state != LG_IDLE) return;
     g_lg_t0 = g_frame; g_lg_seen_dlg = 0;
-    if (g_hk_in_stage) { w32_post_message(HWND_MAIN_DLG, 0x111u, 40061u, 0); g_lg_state = LG_STOPPING; rt_log("[loadgame] in a stage: Stop This Game first\n"); }
-    else { w32_post_message(HWND_MAIN_DLG, 0x111u, 40053u, 0); rt_log("[loadgame] title: Continue\n"); }
+    if (g_hk_in_stage) { w32_post_message(HWND_MAIN_DLG, 0x111u, 40061u, 0); g_lg_state = LG_STOPPING; rt_dlog("[loadgame] in a stage: Stop This Game first\n"); }
+    else { w32_post_message(HWND_MAIN_DLG, 0x111u, 40053u, 0); rt_dlog("[loadgame] title: Continue\n"); }
 }
 void hk_load_game_tick(void) {   // once per presented frame
     extern unsigned g_frame;
     static long at = -2;
-    if (at == -2) { const char *e = getenv("HK_LOAD_AT"); at = e ? atol(e) : -1; }
+    if (at == -2) { const char *e = HK_ENV("HK_LOAD_AT"); at = e ? atol(e) : -1; }
     if (at >= 0 && g_frame == (unsigned)at) hk_load_game_request();
     if (g_lg_state == LG_IDLE) return;
-    if (g_frame - g_lg_t0 > 1000) { g_lg_state = LG_IDLE; rt_log("[loadgame] gave up\n"); return; }
+    if (g_frame - g_lg_t0 > 1000) { g_lg_state = LG_IDLE; rt_dlog("[loadgame] gave up\n"); return; }
     if (g_lg_state == LG_STOPPING) {
         if (hk_dlg_active()) { g_lg_seen_dlg = 1; g_lg_mark = g_frame; }
         else if (!g_hk_in_stage) { g_lg_state = LG_TITLE; g_lg_mark = g_frame; }
-        else if (g_lg_seen_dlg && g_frame - g_lg_mark > 50) { g_lg_state = LG_IDLE; rt_log("[loadgame] Stop declined\n"); }
+        else if (g_lg_seen_dlg && g_frame - g_lg_mark > 50) { g_lg_state = LG_IDLE; rt_dlog("[loadgame] Stop declined\n"); }
     } else {
         if (g_hk_in_stage || hk_dlg_active()) g_lg_mark = g_frame;
-        else if (g_frame - g_lg_mark >= 30) { g_lg_state = LG_IDLE; w32_post_message(HWND_MAIN_DLG, 0x111u, 40053u, 0); rt_log("[loadgame] title ready: Continue\n"); }
+        else if (g_frame - g_lg_mark >= 30) { g_lg_state = LG_IDLE; w32_post_message(HWND_MAIN_DLG, 0x111u, 40053u, 0); rt_dlog("[loadgame] title ready: Continue\n"); }
     }
 }

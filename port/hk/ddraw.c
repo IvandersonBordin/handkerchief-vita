@@ -17,6 +17,7 @@
 #include "win32.h"
 #include "plat.h"
 #include "hk_ddraw.h"
+#include "hitch.h"
 #include <stdlib.h>
 
 #define DD_OK 0u
@@ -27,8 +28,8 @@
 
 static int g_trace = -1;
 static void trace(const char *what) {
-    if (g_trace < 0) g_trace = getenv("HK_TRACE_DD") != NULL;
-    if (g_trace) rt_log("[dd] %s\n", what);
+    if (g_trace < 0) g_trace = HK_ENV("HK_TRACE_DD") != NULL;
+    if (g_trace) rt_dlog("[dd] %s\n", what);
 }
 
 // ---------- host objects ----------
@@ -157,7 +158,7 @@ static void com_release(CPU *c) {
 static void com_qi(CPU *c) {
     HOSTFN;
     uint32_t iid = ARG(2), out = ARG(3);
-    rt_log("[dd] QueryInterface %08x-%04x-%04x\n", R32(iid), R16(iid + 4), R16(iid + 6));
+    rt_dlog("[dd] QueryInterface %08x-%04x-%04x\n", R32(iid), R16(iid + 4), R16(iid + 6));
     uint32_t tag = R32(ARG(1) + 4);
     g_obj[tag & 0xffffu].refs++;
     W32(out, ARG(1));
@@ -198,7 +199,7 @@ static void fill_desc(uint8_t *mb, uint32_t d, Obj *s) {
 }
 
 // IDirectDraw::CreateSurface(this, desc, out, outer)
-static void dd_create_surface(CPU *c) {
+HC_WRAP(HC_SURF, dd_create_surface) {
     HOSTFN;
     uint32_t d = ARG(2), flags = R32(d + 4), caps = R32(d + 104);
     int w = (flags & DDSD_WIDTH) ? (int)R32(d + 12) : 640, h = (flags & DDSD_HEIGHT) ? (int)R32(d + 8) : 480;
@@ -215,17 +216,17 @@ static void dd_create_surface(CPU *c) {
         }
     }
     if (flags & DDSD_CKSRCBLT) { s->has_ck = 1; s->ck_lo = R32(d + 64); s->ck_hi = R32(d + 68); }
-    rt_log("[dd] CreateSurface %dx%d caps=%08x flags=%08x backbuffers=%u -> #%d\n", w, h, caps, flags,
+    rt_dlog("[dd] CreateSurface %dx%d caps=%08x flags=%08x backbuffers=%u -> #%d\n", w, h, caps, flags,
            (flags & DDSD_BACKBUFFERCOUNT) ? R32(d + 20) : 0, i);
     W32(ARG(3), s->guest);
     STDRET(4, DD_OK);
 }
 // IDirectDraw::CreatePalette(this, flags, entries[256] PALETTEENTRY {r,g,b,flags}, out, outer)
-static void dd_create_palette(CPU *c) {
+HC_WRAP(HC_SURF, dd_create_palette) {
     HOSTFN;
     int i = obj_new(OBJ_PAL, g_vt_pal);
     if (ARG(3)) memcpy(g_obj[i].rgb, mb + ARG(3), 1024);
-    rt_log("[dd] CreatePalette flags=%08x -> #%d\n", ARG(2), i);
+    rt_dlog("[dd] CreatePalette flags=%08x -> #%d\n", ARG(2), i);
     W32(ARG(4), g_obj[i].guest);
     STDRET(5, DD_OK);
 }
@@ -235,10 +236,10 @@ static void dd_create_clipper(CPU *c) {
     W32(ARG(3), g_obj[i].guest);
     STDRET(4, DD_OK);
 }
-static void dd_set_coop(CPU *c) { HOSTFN; rt_log("[dd] SetCooperativeLevel flags=%08x\n", ARG(3)); STDRET(3, DD_OK); }
+static void dd_set_coop(CPU *c) { HOSTFN; rt_dlog("[dd] SetCooperativeLevel flags=%08x\n", ARG(3)); STDRET(3, DD_OK); }
 static void dd_set_mode(CPU *c) {
     HOSTFN;
-    rt_log("[dd] SetDisplayMode %ux%ux%u\n", ARG(2), ARG(3), ARG(4));
+    rt_dlog("[dd] SetDisplayMode %ux%ux%u\n", ARG(2), ARG(3), ARG(4));
     if (ARG(2) != 640 || ARG(3) != 480 || ARG(4) != 8) rt_log("[dd] unexpected display mode\n");
     plat_show_window();
     STDRET(4, DD_OK);
@@ -274,13 +275,16 @@ static double prof_now(void) { struct timespec t; clock_gettime(CLOCK_MONOTONIC,
 // game's own waiting), blit (all 8-bit copies; ws = the widescreen extra copies, included in blit), sleep (the game's
 // Sleep calls, included in game), conv (palette LUT, pillarbox, dialog overlay, or the hand-off to the present thread),
 // plat (overlays, UpdateTexture, RenderPresent).
-int g_hk_prof, g_hk_prof_on;
 extern uint64_t g_t_sleep;
+#if HK_DEVTOOLS
+int g_hk_prof, g_hk_prof_on;
+static int g_pf_on = -1;
+#else
+#define g_pf_on 0   // player build: the profiling code below is dead and compiled out
+#endif
 double g_hk_pf_ws; unsigned g_hk_pf_ws_n;   // port/hk/wide.c: extra blits of the widescreen hooks
 static double g_pf_blit, g_pf_conv, g_pf_plat, g_pf_px, g_pf_px_opaque;
 static unsigned g_pf_bn;
-static int g_pf_on = -1;
-
 
 // ---------- present thread (Vita: core 2; PC: HK_PRESENT_THREAD=1 or 2 to compare) ----------
 extern int hk_dlg_active(void);
@@ -327,7 +331,7 @@ static int pt_thread(void *arg) {
         if (g_pf_on) {   // worker time per presented frame, logged every 300
             static unsigned n; static double acc;
             acc += prof_now() - t0;
-            if (++n == 300) { rt_log("[prof] present thread %.2f ms/frame\n", acc / n); n = 0; acc = 0; }
+            if (++n == 300) { rt_dlog("[prof] present thread %.2f ms/frame\n", acc / n); n = 0; acc = 0; }
         }
         SDL_AtomicSet(&g_pt_busy, 0);
     }
@@ -347,13 +351,16 @@ static void pt_drain(void) {
 uint32_t g_dd_present_end_ms;   // SDL_GetTicks() when the last present finished (port/hk/dialog.c refresh)
 static void present_primary(void) {
     HOSTFN;
+#if HK_DEVTOOLS
     if (g_pf_on < 0) g_hk_prof_on = g_pf_on = getenv("HK_PROF") != NULL || g_hk_prof;
-    double pf0 = g_pf_on ? prof_now() : 0;
+#endif
+    const int tm = g_pf_on || g_hitch;   // timing needed: [prof] windows or the hitch log
+    double pf0 = tm ? prof_now() : 0;
     {   // HK_TRACE_DD: presents per second (Flip, Blt/BltFast/Unlock to the primary, palette changes)
         static unsigned n; static uint32_t t0;
         uint32_t now = SDL_GetTicks();
         n++;
-        if (now - t0 >= 5000) { if (getenv("HK_TRACE_DD")) rt_log("[dd] %u presents in 5 s\n", n); n = 0; t0 = now; }
+        if (now - t0 >= 5000) { if (HK_ENV("HK_TRACE_DD")) rt_dlog("[dd] %u presents in 5 s\n", n); n = 0; t0 = now; }
     }
     if (!g_primary) return;
     Obj *p = &g_obj[g_primary];
@@ -385,7 +392,7 @@ static void present_primary(void) {
             SDL_SemPost(g_pt_sem);
             if (done) plat_show_xrgb(done, dw, 480, dw * 4);
         }
-        pf2 = g_pf_on ? prof_now() : 0;
+        pf2 = tm ? prof_now() : 0;
     } else {
         pt_drain();
         for (int y = 0; y < fh; y++) convert_row(frame + y * fw, mb + p->pixels + (uint32_t)(y * p->pitch), fw, lut);
@@ -394,19 +401,31 @@ static void present_primary(void) {
             void hk_dlg_overlay(uint32_t *fb, int stride);   // port/hk/dialog.c: cached dialog layer over the 640 centred columns
             hk_dlg_overlay(frame + (fw - 640) / 2, fw);
         }
-        pf2 = g_pf_on ? prof_now() : 0;
+        pf2 = tm ? prof_now() : 0;
         plat_present_xrgb(frame, fw, 480, fw * 4);
+    }
+    double pf3 = 0, pause_ms = 0;
+    if (tm) {   // time spent in the port's pause screen / message boxes (inside plat_present_xrgb) is not a stall
+        extern uint64_t g_pause_qpc;
+        static uint64_t pq0;
+        pf3 = prof_now();
+        pause_ms = (double)(g_pause_qpc - pq0) * 1e3 / (double)SDL_GetPerformanceFrequency();
+        pq0 = g_pause_qpc;
+        if (g_hitch) {
+            static double last_h;
+            hk_hitch_times(last_h ? pf3 - last_h : 0, pf2 - pf0, pf3 - pf2 - pause_ms, pause_ms);
+            last_h = pf3;
+        }
     }
     if (g_pf_on) {
         extern int g_hk_in_stage;
         static unsigned n; static double last, t_win, a_wall, sl_win;
-        double pf3 = prof_now();
-        if (last && g_hk_in_stage) { a_wall += pf3 - last; g_pf_conv += pf2 - pf0; g_pf_plat += pf3 - pf2; n++; }
+        if (last && g_hk_in_stage) { a_wall += pf3 - last - pause_ms; g_pf_conv += pf2 - pf0; g_pf_plat += pf3 - pf2 - pause_ms; n++; }
         if (!t_win) { t_win = pf3; sl_win = (double)g_t_sleep; }
         last = pf3;
         if (pf3 - t_win >= 5000) {
             if (n)
-                rt_log("[prof] w=%d %u fr: wall %.2f game %.2f (blit %.2f [%u calls, %.0f kpx; ws %.2f, %u calls; opaque %.0f kpx], sleep %.2f) conv %.2f plat %.2f ms/frame\n",
+                rt_dlog("[prof] w=%d %u fr: wall %.2f game %.2f (blit %.2f [%u calls, %.0f kpx; ws %.2f, %u calls; opaque %.0f kpx], sleep %.2f) conv %.2f plat %.2f ms/frame\n",
                        g_hk_ws_w, n, a_wall / n, (a_wall - g_pf_conv - g_pf_plat) / n, g_pf_blit / n, g_pf_bn / n, g_pf_px / n / 1e3,
                        g_hk_pf_ws / n, g_hk_pf_ws_n / n, g_pf_px_opaque / n / 1e3, ((double)g_t_sleep - sl_win) * 1e3 / (double)SDL_GetPerformanceFrequency() / n,
                        g_pf_conv / n, g_pf_plat / n);
@@ -421,8 +440,10 @@ static void present_primary(void) {
     hk_load_trace_frame();
     void hk_load_game_tick(void);   // port/hk/dialog.c
     hk_load_game_tick();
+#if HK_DEVTOOLS
     void hk_stress_tick(void);   // port/hk/memlog.c (HK_STRESS, HK_MEMLOG)
     hk_stress_tick();
+#endif
 }
 void hk_dd_present(void) { present_primary(); }
 
@@ -440,7 +461,7 @@ static void blit(uint8_t *mb, Obj *d, int dx, int dy, Obj *s, int sx0, int sy0, 
     if (sy0 + h > s->h) h = s->h - sy0;
     if (dx + w > d->w) w = d->w - dx;
     if (dy + h > d->h) h = d->h - dy;
-    if (getenv("HK_TRACE_CLIP") && (w != w0 || h != h0)) rt_log("[clip] dst #%d %dx%d at (%d,%d) src #%d %dx%d at (%d,%d) want %dx%d got %dx%d\n", idx_of(d), d->w, d->h, dx, dy, idx_of(s), s->w, s->h, sx0, sy0, w0, h0, w, h);
+    if (HK_ENV("HK_TRACE_CLIP") && (w != w0 || h != h0)) rt_dlog("[clip] dst #%d %dx%d at (%d,%d) src #%d %dx%d at (%d,%d) want %dx%d got %dx%d\n", idx_of(d), d->w, d->h, dx, dy, idx_of(s), s->w, s->h, sx0, sy0, w0, h0, w, h);
     if (w <= 0 || h <= 0) return;
     double pb0 = g_pf_on > 0 ? prof_now() : 0;
     for (int y = 0; y < h; y++) {
@@ -502,18 +523,18 @@ static void stretch(uint8_t *mb, Obj *d, int dx0, int dy0, int dx1, int dy1, Obj
 // the game itself (0x408D59, element bit 15 clear), which the original also shows (gameplay recording).
 static void trace_pix(uint8_t *mb, const char *op, Obj *d, int dx0, int dy0, int dx1, int dy1, Obj *s, int sx0, int sy0, int key, uint32_t ret) {
     static int px = -1, py, pf;
-    if (px == -1) { const char *e = getenv("HK_TRACE_PIX"); px = -2; if (e) sscanf(e, "%d,%d,%d", &px, &py, &pf); }
+    if (px == -1) { const char *e = HK_ENV("HK_TRACE_PIX"); px = -2; if (e) sscanf(e, "%d,%d,%d", &px, &py, &pf); }
     extern unsigned g_frame;
     if (px < 0 || !d->backbuffer || (int)g_frame + 1 != pf) return;
     if (px < dx0 || px >= dx1 || py < dy0 || py >= dy1) return;
     int sx = s ? sx0 + px - dx0 : -1, sy = s ? sy0 + py - dy0 : -1;
-    rt_log("[pix] %s dst(%d,%d)-(%d,%d) src #%d %dx%d at (%d,%d) key %d srcval %d -> %d (ret %08x)\n", op, dx0, dy0, dx1, dy1,
+    rt_dlog("[pix] %s dst(%d,%d)-(%d,%d) src #%d %dx%d at (%d,%d) key %d srcval %d -> %d (ret %08x)\n", op, dx0, dy0, dx1, dy1,
            s ? idx_of(s) : 0, s ? s->w : 0, s ? s->h : 0, sx, sy, key,
            s && sx >= 0 && sy >= 0 && sx < s->w && sy < s->h ? R8(s->pixels + (uint32_t)(sy * s->pitch + sx)) : -1,
            R8(d->pixels + (uint32_t)(py * d->pitch + px)), ret);
 }
 // IDirectDrawSurface::Blt(this, destRect, src, srcRect, flags, fx)
-static void surf_blt(CPU *c) {
+HC_WRAP(HC_BLT, surf_blt) {
     HOSTFN;
     Obj *d = obj_of(ARG(1), OBJ_SURF);
     uint32_t flags = ARG(5), fx = ARG(6);
@@ -544,7 +565,7 @@ static void surf_blt(CPU *c) {
     STDRET(6, DD_OK);
 }
 // IDirectDrawSurface::BltFast(this, x, y, src, srcRect, trans)
-static void surf_bltfast(CPU *c) {
+HC_WRAP(HC_BLT, surf_bltfast) {
     HOSTFN;
     Obj *d = obj_of(ARG(1), OBJ_SURF), *s = obj_of(ARG(4), OBJ_SURF);
     if (!d || !s) STDRET(6, DDERR_INVALIDPARAMS);
@@ -579,7 +600,7 @@ static void surf_get_attached(CPU *c) {
     STDRET(3, DD_OK);
 }
 // IDirectDrawSurface::Lock(this, rect, desc, flags, event)
-static void surf_lock(CPU *c) {
+HC_WRAP(HC_LOCK, surf_lock) {
     HOSTFN;
     Obj *s = obj_of(ARG(1), OBJ_SURF);
     if (!s) STDRET(5, DDERR_INVALIDPARAMS);
@@ -588,7 +609,7 @@ static void surf_lock(CPU *c) {
     if (ARG(2)) W32(ARG(3) + 36, s->pixels + (uint32_t)((int32_t)R32(ARG(2) + 4) * s->pitch + (int32_t)R32(ARG(2))));
     STDRET(5, DD_OK);
 }
-static void surf_unlock(CPU *c) {
+HC_WRAP(HC_LOCK, surf_unlock) {
     HOSTFN;
     Obj *s = obj_of(ARG(1), OBJ_SURF);
     if (s && s->primary) present_primary();
@@ -610,7 +631,7 @@ static void surf_set_ck(CPU *c) {
     else s->has_ck = 0;
     STDRET(3, DD_OK);
 }
-static void surf_set_palette(CPU *c) {
+HC_WRAP(HC_PAL, surf_set_palette) {
     HOSTFN;
     Obj *s = obj_of(ARG(1), OBJ_SURF);
     Obj *p = ARG(2) ? obj_of(ARG(2), OBJ_PAL) : NULL;
@@ -643,14 +664,14 @@ static void surf_get_pixel_format(CPU *c) {
     STDRET(2, DD_OK);
 }
 // GetDC/ReleaseDC: the surface becomes a GDI device context (port/hk/gdi.c).
-static void surf_get_dc(CPU *c) {
+HC_WRAP(HC_DC, surf_get_dc) {
     HOSTFN;
     Obj *s = obj_of(ARG(1), OBJ_SURF);
     if (!s) STDRET(2, DDERR_INVALIDPARAMS);
     W32(ARG(2), hk_gdi_surface_dc(ARG(1)));
     STDRET(2, DD_OK);
 }
-static void surf_release_dc(CPU *c) {
+HC_WRAP(HC_DC, surf_release_dc) {
     HOSTFN;
     Obj *s = obj_of(ARG(1), OBJ_SURF);
     if (s && s->primary) present_primary();
@@ -659,14 +680,14 @@ static void surf_release_dc(CPU *c) {
 
 // ---------- palette ----------
 // IDirectDrawPalette::SetEntries(this, flags, start, count, entries)
-static void pal_set_entries(CPU *c) {
+HC_WRAP(HC_PAL, pal_set_entries) {
     HOSTFN;
     Obj *p = obj_of(ARG(1), OBJ_PAL);
     uint32_t start = ARG(3), n = ARG(4);
     if (!p || start + n > 256) STDRET(5, DDERR_INVALIDPARAMS);
     memcpy(p->rgb[start], mb + ARG(5), n * 4u);
     {   static unsigned cnt; static uint32_t t0; uint32_t now = SDL_GetTicks(); cnt++;
-        if (now - t0 >= 5000) { if (getenv("HK_TRACE_DD")) rt_log("[dd] %u palette SetEntries in 5 s\n", cnt); cnt = 0; t0 = now; } }
+        if (now - t0 >= 5000) { if (HK_ENV("HK_TRACE_DD")) rt_dlog("[dd] %u palette SetEntries in 5 s\n", cnt); cnt = 0; t0 = now; } }
     // HDKWIN.EXE animates the palette every frame (~25 SetEntries/s) and then flips: presenting here too doubled
     // the presents (each waits for vblank) and slowed the game. The change is shown by the next Flip; only when
     // no Flip came for 60 ms (a fade over a still image) is it presented right away.
@@ -750,6 +771,6 @@ void imp_DDRAW_DirectDrawCreate(CPU *c) {
     if (!g_vt_dd) build_vtables();
     int i = obj_new(OBJ_DD, g_vt_dd);
     W32(ARG(2), g_obj[i].guest);
-    rt_log("[dd] DirectDrawCreate -> #%d\n", i);
+    rt_dlog("[dd] DirectDrawCreate -> #%d\n", i);
     STDRET(3, DD_OK);
 }

@@ -214,8 +214,9 @@ enum tlsf_public
 /* Private constants: do not modify. */
 enum tlsf_private
 {
-#if defined (TLSF_64BIT)
-	/* All allocation sizes and addresses are aligned to 8 bytes. */
+#if defined (TLSF_64BIT) && !defined (HK_TLSF_ALIGN4)
+	/* All allocation sizes and addresses are aligned to 8 bytes. (HK_TLSF_ALIGN4: test aid that makes a 64-bit PC
+	   build hand out 4-byte aligned blocks like the 32-bit Vita build.) */
 	ALIGN_SIZE_LOG2 = 3,
 #else
 	/* All allocation sizes and addresses are aligned to 4 bytes. */

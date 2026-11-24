@@ -1,5 +1,5 @@
 // PC preview of the Vita pause menu: gcc -I port -o pm_preview port/vita/pause_preview.c
-// Usage: pm_preview <main|cheats|settings|controls|results|tips|msgbox> out.ppm [width 640|848] [background.ppm (P6) or -]
+// Usage: pm_preview <main|cheats|settings|controls|results|tips|msgbox|confirm> out.ppm [width 640|848] [background.ppm (P6) or -]
 //        [capture action 0..7 (tips: page)];
 // tips: reads the tip texts from the file $HK_TIPS_FILE (one per line, \n written as the two characters \ and n; made
 // from the game's string resources 500 504 506 508 512 600 by a dev script, never committed) and fills %s with a button. HK_PM_UI=2|4 sets the menu text scale (1x, 2x); writes the 960x544 output
@@ -32,6 +32,11 @@ int main(int argc, char **argv) {
     int dim = 128;
     if (!strcmp(argv[1], "msgbox")) {   // MessageBoxA "Stop this game ?" (MB_OKCANCEL, 0x40F2A0; PT-BR HDKWINBR.EXE text)
         pm_overlay_msgbox(ovl, "Handkerchief", g_hk_lang ? "Deseja parar ?" : "Stop this game ?", "OK", hk_tr(S_CANCEL));   // caption 0x46E028
+        dim = 192;
+    } else if (!strcmp(argv[1], "confirm")) {   // Cheats > Add money confirmation
+        char q[64];
+        snprintf(q, sizeof q, hk_tr(S_M_CONF), 3);
+        pm_overlay_msgbox(ovl, hk_tr(S_CHEATS_T), q, hk_tr(S_YES), hk_tr(S_NO));
         dim = 192;
     } else if (!strcmp(argv[1], "tips")) {   // tips & controls card over the undimmed background
         static char tl[8][400];

@@ -20,8 +20,14 @@ static const char *pm_act_name(int a) { return hk_tr(S_A_NONE + a); }   // S_A_*
 static const char *const pm_act_key[PM_NACT] = {"none", "shoot", "rapid", "jump", "bomb", "switch", "shift", "menu", "tips"};
 static const char *const pm_btn_name[PM_NBTN] = {"Cross", "Square", "Circle", "Triangle", "L", "R", "Select"};
 static const char *const pm_btn_key[PM_NBTN] = {"cross", "square", "circle", "triangle", "l", "r", "select"};
+// The Shift action ("L action") does nothing in the game: it is listed only while a saved map still uses it.
+static int pm_act_visible(const int *map, int a) {
+    if (a != ACT_SHIFT) return 1;
+    for (int b = 0; b < PM_NBTN; b++) if (map && map[b] == ACT_SHIFT) return 1;
+    return 0;
+}
 static void pm_map_defaults(int *map) {
-    static const int d[PM_NBTN] = {ACT_JUMP, ACT_SHOOT, ACT_BOMB, ACT_SWITCH, ACT_SHIFT, ACT_RAPID, ACT_TIPS};   // Select (held) = tips & controls card; the game menu is Start > Game menu (assignable)
+    static const int d[PM_NBTN] = {ACT_JUMP, ACT_SHOOT, ACT_SWITCH, ACT_BOMB, ACT_BOMB, ACT_RAPID, ACT_TIPS};   // Circle = board/switch (Z), Triangle and L = turncoat bomb (C)   // Select (held) = tips & controls card; the game menu is Start > Game menu (assignable)
     for (int i = 0; i < PM_NBTN; i++) map[i] = d[i];
 }
 // Assigns action a to button b; the action that was on b moves to the button a came from (swap).
@@ -50,7 +56,7 @@ static int pm_rows(int screen, const PmState *s, int *out) {
         if (s->cheats) { out[n++] = R_INV; out[n++] = R_MONEY; }
         out[n++] = R_BACK;
     } else if (screen == PM_CONTROLS) {
-        for (int a = 1; a < PM_NACT; a++) out[n++] = R_ACT0 + a - 1;
+        for (int a = 1; a < PM_NACT; a++) if (pm_act_visible(s->map, a)) out[n++] = R_ACT0 + a - 1;
         out[n++] = R_RESET; out[n++] = R_BACK;
     } else {
         out[n++] = R_SCREEN; out[n++] = R_NATIVE; out[n++] = R_FPS; out[n++] = R_VOL; out[n++] = R_MUS; out[n++] = R_CONTROLS; out[n++] = R_LANG; out[n++] = R_BACK;
@@ -136,7 +142,7 @@ static void pm_panel(uint32_t *buf, int bw, int x0, int y0, int x1, int y1) {
     pm_blend(buf, bw, x0 + 3, y0 + 3, x1 - 3, y1 - 3, PM_FILL, 12);
     hk_art_frame(buf, bw, x0, y0, x1 - x0, y1 - y0);
 }
-// Text with pad symbols: markers \001 cross, \002 circle, \003 triangle, \004 square, \005 L, \006 R, \007 D-pad, and
+// Text with pad symbols: markers \001 cross, \002 circle, \003 triangle, \004 square, \005 L, \006 R, \007 D-pad, \010 D-pad left/right, and
 // the words Cross / Circle / Triangle / Square (a ':' right after one is dropped) become the button symbols.
 // upper: the text runs in upper case, as the title menu words. Returns the width; draws only when buf is set.
 // The menus are drawn on a 960x544 canvas (the Vita's native output, see "Overlay" below), never stretched, so the
@@ -153,7 +159,7 @@ static int pm_rich(uint32_t *buf, int bw, int x, int y, const char *s, int style
     int n = 0, x0 = x;
     for (const char *p = s;; ) {
         int sym = 0, len = 0;
-        if (*p >= 1 && *p <= 7) { sym = *p; len = 1; }
+        if (*p >= 1 && *p <= 8) { sym = *p; len = 1; }
         else for (int k = 1; k <= 4; k++) {
             int wl = (int)strlen(words[k]);
             if (!strncmp(p, words[k], (size_t)wl) && !((p[wl] | 32) >= 'a' && (p[wl] | 32) <= 'z')) { sym = k; len = wl; if (p[wl] == ':') len++; break; }
@@ -173,6 +179,13 @@ static int pm_rich(uint32_t *buf, int bw, int x, int y, const char *s, int style
         p += len;
         const int sy = y;
         if (sym <= 4) { if (buf) hk_th_glyph_s(buf, bw, HK_CANVAS_H(bw), x + sc, sy - sc, sym, sc); x += 19 * sc; }
+        else if (sym == 8) {   // D-pad left/right: a bar with an arrowhead at each end
+            if (buf) {
+                pm_rect(buf, bw, x + 6 * sc, sy + 5 * sc, x + 21 * sc, sy + 8 * sc, 0xdcd6c6u);
+                for (int i = 0; i < 5; i++) { pm_rect(buf, bw, x + i * sc, sy + (6 - i) * sc, x + (i + 1) * sc, sy + (7 + i) * sc, 0xdcd6c6u); pm_rect(buf, bw, x + (25 - i) * sc, sy + (6 - i) * sc, x + (26 - i) * sc, sy + (7 + i) * sc, 0xdcd6c6u); }
+            }
+            x += 29 * sc;
+        }
         else if (sym <= 6) {
             if (buf) { pm_rect(buf, bw, x + sc, sy, x + 20 * sc, sy + 14 * sc, 0x433a89u); pm_rect(buf, bw, x + 2 * sc, sy + sc, x + 19 * sc, sy + 13 * sc, 0x1c1838u); hk_gf_text(buf, bw, x + 7 * sc, sy - sc, sym == 5 ? "L" : "R", GF_SEL, sc); }
             x += 23 * sc;
@@ -364,12 +377,16 @@ static int pm_tips_at(uint32_t *buf, int bw, const PmTipsArg *a) {
         nl++;
     }
     if (!nl) { snprintf(lines[0], sizeof lines[0], "%s", hk_tr(S_T_NONE)); tw = pm_rich_w(lines[0], 0); nl = 1; }
-    const int na = PM_NACT - 1, rows = (na + 1) / 2;
+    int na = 0;
+    for (int k = 1; k < PM_NACT; k++) na += pm_act_visible(a->map, k);
+    const int rows = (na + 1) / 2;
     int colw = 0;
-    char val[2][PM_NACT][12];
+    char val[2][PM_NACT][24];
     for (int k = 1; k < PM_NACT; k++) {
+        if (!pm_act_visible(a->map, k)) continue;
         snprintf(val[0][k], sizeof val[0][k], "-");
-        for (int b = 0; b < PM_NBTN; b++) if (a->map[b] == k) { snprintf(val[0][k], sizeof val[0][k], "%s", pm_btn_sym(b)); break; }
+        for (int b = 0, o = 0; b < PM_NBTN; b++)   // every button with the action (Turncoat bomb is on Triangle and L by default)
+            if (a->map[b] == k) o += snprintf(val[0][k] + o, sizeof val[0][k] - (size_t)o, "%s%s", o ? " " : "", pm_btn_sym(b));
         int w = pm_uw(pm_act_name(k)) + 24 + pm_rich_w(val[0][k], 1);
         if (w > colw) colw = w;
     }
@@ -389,8 +406,11 @@ static int pm_tips_at(uint32_t *buf, int bw, const PmTipsArg *a) {
     pm_utext(buf, bw, x0 + 24, y + 2, hk_tr(S_T_CTRL), GF_GOLD);
     pm_rect(buf, bw, x0 + 30 + pm_uw(hk_tr(S_T_CTRL)), y + 2 + 7 * pm_h / 2, x1 - 24, y + 2 + 7 * pm_h / 2 + 2, 0x433a89u);
     y += cap;
+    int vi = 0;
     for (int k = 1; k < PM_NACT; k++) {
-        const int c = (k - 1) / rows, r = (k - 1) % rows;
+        if (!pm_act_visible(a->map, k)) continue;
+        const int c = vi / rows, r = vi % rows;
+        vi++;
         const int lx = x0 + 40 + c * (colw + 40 + (boxw - 96 - 2 * colw - 40) / 2), rx = lx + colw;
         pm_utext(buf, bw, lx, y + r * PITCH, pm_act_name(k), GF_NORMAL);
         pm_rich(buf, bw, rx - pm_rich_w(val[0][k], 1), y + r * PITCH, val[0][k], GF_SEL, 1);

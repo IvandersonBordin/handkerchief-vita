@@ -1,3 +1,5 @@
+#include "hkdev.h"
+#if HK_DEVTOOLS
 // Memory log ("[mem]" lines) and the in-process stress driver (HK_STRESS) of the recompiled game.
 // HK_MEMLOG=1 (hkport.cfg memlog=1 on the Vita): one [mem] line per cycle (stress) or every 600 presented frames.
 // HK_MEMLOG=2 also logs the guest heap's live-block histogram ("[gheap]"). Both are test aids: nothing is on by
@@ -96,6 +98,7 @@ void hk_mem_log(const char *tag, int cycle) {
            htot, h[H_FILE], h[H_EVENT], h[H_THREAD], h[H_SEM], h[H_FIND], h[H_MAPPING], h[H_MUTEX], h[H_REGKEY], h[H_TIMER], h[H_MMIO],
            g_hk_closed_unfreed[H_EVENT], g_hk_closed_unfreed[H_SEM], g_hk_closed_unfreed[H_THREAD], hk_cs_count(),
            bmp, (unsigned long long)(bmp_b >> 10), fonts, dcs, hk_dlg_count(), rss_kb(), mall, fd_count(), thread_count());
+    gheap_site_report(tag, cycle);
     if (g_hk_memlog >= 2) gheap_report();
 }
 
@@ -211,3 +214,5 @@ void hk_stress_tick(void) {
         }
     } else if (g_hk_memlog && !g_total && g_frame % 600 == 0 && g_frame) hk_mem_log("periodic", 0);
 }
+
+#endif   // HK_DEVTOOLS

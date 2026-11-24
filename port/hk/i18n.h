@@ -79,6 +79,7 @@ enum {
     S_T_TIP,
     S_T_HINT,
     S_T_NONE,
+    S_M_CONF,
     S_COUNT
 };
 static const char *const hk_str[S_COUNT][2] = {
@@ -158,8 +159,9 @@ static const char *const hk_str[S_COUNT][2] = {
     {"Tips & controls", "Dicas e controles"},
     {"Controls", "Controles"},
     {"Tip %d/%d", "Dica %d/%d"},
-    {"\007 more tips", "\007 mais dicas"},
+    {"\010 more tips", "\010 mais dicas"},   // \010: D-pad left/right symbol
     {"(no tips found)", "(nenhuma dica encontrada)"},
+    {"Add money x%d?", "Adicionar dinheiro x%d?"},   // Cheats > Add money confirmation
 };
 static inline const char *hk_tr(int id) { return hk_str[id][g_hk_lang ? 1 : 0]; }
 #endif

@@ -9,8 +9,9 @@
 #include "w32_time.h"
 
 #define K(name) void imp_KERNEL32_##name(CPU *c)
+#include "hk/hitch.h"
 #define G(name) void imp_GDI32_##name(CPU *c)
-#define ONCE(name) do { static int said; if (!said++) rt_log("[win32] %s (stub)\n", name); } while (0)
+#define ONCE(name) do { static int said; if (!said++) rt_dlog("[win32] %s (stub)\n", name); } while (0)
 
 // ---------- synchronisation ----------
 K(WaitForSingleObject) {
@@ -66,14 +67,14 @@ K(SetThreadPriorityBoost) { STDRET(2, 1); }
 
 // ---------- process / environment ----------
 K(FatalAppExitA) { HOSTFN; rt_fatal("FatalAppExitA: %s", GSTR(ARG(2)) ? GSTR(ARG(2)) : ""); }
-K(OutputDebugStringA) { HOSTFN; rt_log("[debug] %s", GSTR(ARG(1)) ? GSTR(ARG(1)) : ""); STDRET(1, 0); }
+K(OutputDebugStringA) { HOSTFN; rt_dlog("[debug] %s", GSTR(ARG(1)) ? GSTR(ARG(1)) : ""); STDRET(1, 0); }
 K(SetConsoleCtrlHandler) { STDRET(2, 1); }
 K(SetErrorMode) { STDRET(1, 0); }
 K(SetEnvironmentVariableA) { STDRET(2, 1); }
 K(GetLogicalDrives) { STDRET(0, 1u << 2); }   // C:
 K(GetProcessHeap) { STDRET(0, 0x00a00000u); }   // same pseudo handle as HeapCreate (kernel32.c)
 K(lstrlenA) { HOSTFN; STDRET(1, ARG(1) ? (uint32_t)strlen(GSTR(ARG(1))) : 0); }
-K(SetCurrentDirectoryA) { HOSTFN; rt_log("SetCurrentDirectoryA(\"%s\")\n", GSTR(ARG(1)) ? GSTR(ARG(1)) : ""); STDRET(1, 1); }
+K(SetCurrentDirectoryA) { HOSTFN; rt_dlog("SetCurrentDirectoryA(\"%s\")\n", GSTR(ARG(1)) ? GSTR(ARG(1)) : ""); STDRET(1, 1); }
 K(GetCurrentDirectoryA) {   // the game folder is always the guest root
     HOSTFN;
     const char *d = "C:\\SH3";
@@ -99,12 +100,14 @@ K(GetFullPathNameA) {   // (path, buffer length, buffer, file part *)
 }
 
 // ---------- files ----------
-K(DeleteFileA) {
+int hk_save_delete(const char *hp, int *ok);
+HC_K(HC_WRITE, KERNEL32, DeleteFileA) {
     HOSTFN;
     char hp[600];
     w32_host_path(GSTR(ARG(1)) ? GSTR(ARG(1)) : "", hp, sizeof hp);
-    int ok = remove(hp) == 0;
-    rt_log("DeleteFileA(\"%s\") -> %d (%s)\n", GSTR(ARG(1)), ok, hp);
+    int ok;
+    if (!hk_save_delete(hp, &ok)) ok = remove(hp) == 0;   // savefast handles the save sequence's backup/delete steps
+    rt_dlog("DeleteFileA(\"%s\") -> %d (%s)\n", GSTR(ARG(1)), ok, hp);
     if (!ok) w32_set_last_error(c, 2);
     STDRET(1, ok);
 }
@@ -147,7 +150,7 @@ K(FindFirstFileA) {
     if (!f || !f->d || !find_next(f, mb, ARG(2))) {
         if (f && f->d) closedir(f->d);
         free(f);
-        rt_log("FindFirstFileA(\"%s\") -> none\n", GSTR(ARG(1)));
+        rt_dlog("FindFirstFileA(\"%s\") -> none\n", GSTR(ARG(1)));
         w32_set_last_error(c, 2);
         STDRET(2, 0xffffffffu);
     }
@@ -207,7 +210,7 @@ K(MapViewOfFile) {   // (mapping, access, offset high, offset low, bytes)
         if (view) {
             fseek(f, (long)off, SEEK_SET);
             got = fread(mb + view, 1, n, f);
-            rt_log("MapViewOfFile(\"%s\", +%u, %u) -> %08x (%u read)\n", path, off, n, view, (unsigned)got);
+            rt_dlog("MapViewOfFile(\"%s\", +%u, %u) -> %08x (%u read)\n", path, off, n, view, (unsigned)got);
         } else error = 8;
         fseek(f, keep, SEEK_SET);
     }

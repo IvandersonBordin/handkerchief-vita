@@ -36,8 +36,10 @@ int rt_first_time(uint64_t key) {
     seen[n++] = key;
     return 1;
 }
+uint64_t g_log_flush_t, g_log_flush_b;   // hitch log: longest flush (ticks) and bytes written since the last frame
 void rt_log_flush(void) {
     if (!g_logmtx) return;
+    uint64_t t0 = HK_DEVTOOLS ? SDL_GetPerformanceCounter() : 0;
     SDL_LockMutex(g_drainmtx);
     SDL_LockMutex(g_logmtx);
     char *b = g_lq;
@@ -47,6 +49,10 @@ void rt_log_flush(void) {
     if (b && g_logf) { fwrite(b, 1, n, g_logf); fflush(g_logf); }
     free(b);
     SDL_UnlockMutex(g_drainmtx);
+#if HK_DEVTOOLS
+    uint64_t d = SDL_GetPerformanceCounter() - t0;
+    if (n) { __atomic_fetch_add(&g_log_flush_b, n, __ATOMIC_RELAXED); if (d > g_log_flush_t) g_log_flush_t = d; }
+#endif
 }
 #ifdef __vita__
 #include <psp2/kernel/threadmgr.h>
@@ -497,7 +503,7 @@ void rt_text_check(void) {
     uint8_t *const mb = g_mem;
     static uint32_t *snap;
     static int on = -1;
-    if (on < 0) on = getenv("SH3_TEXTCHECK") != NULL;
+    if (on < 0) on = HK_ENV("SH3_TEXTCHECK") != NULL;
     if (!on) return;
     const uint32_t lo = g_text_lo, np = (g_text_hi - g_text_lo) / 4096;   // .text pages (4 KiB)
     if (!snap) {
@@ -519,9 +525,9 @@ void rt_text_check(void) {
             uint32_t v = 0, w = R32(lo + p * 4096 + i * 4);
             fseek(f, (long)g_text_raw + p * 4096 + i * 4, SEEK_SET);
             if (fread(&v, 4, 1, f) != 1) break;
-            if (v != w) { if (!nd++) first = i * 4; if (shown++ < 3) rt_log("[textcheck]   +%03x : file %08x -> memory %08x\n", i * 4, v, w); }
+            if (v != w) { if (!nd++) first = i * 4; if (shown++ < 3) rt_dlog("[textcheck]   +%03x : file %08x -> memory %08x\n", i * 4, v, w); }
         }
         if (f) fclose(f);
-        rt_log("[textcheck] page 0x%08x: %u words changed, first at +%03x\n", lo + p * 4096, nd, first);
+        rt_dlog("[textcheck] page 0x%08x: %u words changed, first at +%03x\n", lo + p * 4096, nd, first);
     }
 }

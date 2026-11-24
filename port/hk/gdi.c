@@ -120,7 +120,7 @@ static uint32_t bmp_from_dib(const uint8_t *dib, uint32_t size, const char *what
         if (bpp == 8) memcpy(dst, src, (size_t)stride);
         else for (int x = 0; x < w; x++) dst[x] = (x & 1) ? (src[x / 2] & 15) : (src[x / 2] >> 4);
     }
-    rt_log("[gdi] bitmap %s: %dx%d %u bpp -> #%d\n", what, w, h, bpp, i);
+    rt_dlog("[gdi] bitmap %s: %dx%d %u bpp -> #%d\n", what, w, h, bpp, i);
     return H_BITMAP + (uint32_t)i;
 }
 
@@ -175,7 +175,7 @@ U(LoadImageA) {
         STDRET(6, h);
     }
     uint32_t size = 0, data = w32_resource(name, 2, &size);   // RT_BITMAP
-    if (!data) { rt_log("[gdi] LoadImageA: no bitmap resource %s\n", name < 0x10000 ? "(id)" : GSTR(name)); STDRET(6, 0); }
+    if (!data) { rt_dlog("[gdi] LoadImageA: no bitmap resource %s\n", name < 0x10000 ? "(id)" : GSTR(name)); STDRET(6, 0); }
     STDRET(6, bmp_from_dib(mb + data, size, name < 0x10000 ? "resource id" : GSTR(name)));
 }
 
@@ -255,7 +255,7 @@ G(GetDeviceCaps) {
     case 104: r = 256; break;          // SIZEPALETTE
     case 106: r = 20; break;           // NUMRESERVED
     case 108: r = 24; break;           // COLORRES
-    default: r = 0; rt_log("[gdi] GetDeviceCaps(%u) -> 0\n", ARG(2));
+    default: r = 0; rt_dlog("[gdi] GetDeviceCaps(%u) -> 0\n", ARG(2));
     }
     STDRET(2, r);
 }
@@ -282,7 +282,7 @@ G(StretchBlt) {
     int dx = (int32_t)ARG(2), dy = (int32_t)ARG(3), dw = (int32_t)ARG(4), dh = (int32_t)ARG(5);
     int sx = (int32_t)ARG(7), sy = (int32_t)ARG(8), sw = (int32_t)ARG(9), sh = (int32_t)ARG(10);
     if (!view_of(ARG(1), &d) || !view_of(ARG(6), &s)) { rt_log("[gdi] StretchBlt without pixels\n"); STDRET(11, 0); }
-    if (ARG(11) != 0x00CC0020u) rt_log("[gdi] StretchBlt rop %08x treated as SRCCOPY\n", ARG(11));
+    if (ARG(11) != 0x00CC0020u) rt_dlog("[gdi] StretchBlt rop %08x treated as SRCCOPY\n", ARG(11));
     if (dw <= 0 || dh <= 0 || sw <= 0 || sh <= 0) STDRET(11, 1);
     for (int y = 0; y < dh; y++) {
         int ty = dy + y, fy = sy + (int)((int64_t)y * sh / dh);
@@ -335,7 +335,7 @@ G(CreateFontIndirectA) {
             g_font_used[i] = 1;
             g_font_height[i] = ARG(1) ? (int32_t)R32(ARG(1)) : 16;
             if (ARG(1) && (RT_TRACE("HK_TRACE_GDI") || rt_first_time(0x46000000ull ^ ((uint64_t)(uint32_t)R32(ARG(1)) << 32) ^ ((uint64_t)(uint32_t)R32(ARG(1) + 4) << 16) ^ (R32(ARG(1) + 16) * 31u) ^ R8(ARG(1) + 23)) ))
-                rt_log("[gdi] CreateFontIndirectA height %d width %d weight %u charset %u face \"%s\" -> #%d\n",
+                rt_dlog("[gdi] CreateFontIndirectA height %d width %d weight %u charset %u face \"%s\" -> #%d\n",
                                (int32_t)R32(ARG(1)), (int32_t)R32(ARG(1) + 4), R32(ARG(1) + 16), R8(ARG(1) + 23),
                                (char *)mb + ARG(1) + 28, i);
             STDRET(1, H_FONT + (uint32_t)i);

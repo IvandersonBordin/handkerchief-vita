@@ -27,7 +27,7 @@ U(RegisterClassA) { HOSTFN; g_wndproc = R32(ARG(1) + 4); STDRET(1, 0xc001); }   
 U(UnregisterClassA) { STDRET(2, 1); }
 U(CreateWindowExA) {
     HOSTFN;
-    rt_log("CreateWindowExA(\"%s\", %ux%u)\n", GSTR(ARG(3)), ARG(7), ARG(8));
+    rt_dlog("CreateWindowExA(\"%s\", %ux%u)\n", GSTR(ARG(3)), ARG(7), ARG(8));
     rt_apply_res();
     STDRET(12, HWND_MAIN);
 }
@@ -182,7 +182,7 @@ U(GetClientRect) {
 
 // ---------- imported by SH3 only ----------
 #include "guest_fmt.h"
-#define ONCE(name) do { static int said; if (!said++) rt_log("[user32] %s (stub)\n", name); } while (0)
+#define ONCE(name) do { static int said; if (!said++) rt_dlog("[user32] %s (stub)\n", name); } while (0)
 U(GetWindowRect) {
     HOSTFN;
     uint32_t r = ARG(2);
@@ -226,7 +226,7 @@ U(EnumDisplaySettingsA) {   // (device, mode index or -1 current, DEVMODEA *)
     W32(dm + 104, 32); W32(dm + 108, w); W32(dm + 112, h); W32(dm + 120, 60);
     STDRET(3, 1);
 }
-U(ChangeDisplaySettingsA) { HOSTFN; rt_log("ChangeDisplaySettingsA(%08x)\n", ARG(1)); STDRET(2, 0); }   // DISP_CHANGE_SUCCESSFUL
+U(ChangeDisplaySettingsA) { HOSTFN; rt_dlog("ChangeDisplaySettingsA(%08x)\n", ARG(1)); STDRET(2, 0); }   // DISP_CHANGE_SUCCESSFUL
 U(GetWindowLongA) { HOSTFN; STDRET(2, (int32_t)ARG(2) == -4 ? g_wndproc : 0); }   // GWL_WNDPROC
 U(SetWindowLongA) {
     HOSTFN;
@@ -298,7 +298,7 @@ U(SetTimer) {
     if (!hwnd && !id) id = 0x100 + (uint32_t)slot;
     g_timers[slot].used = 1; g_timers[slot].hwnd = hwnd; g_timers[slot].id = id; g_timers[slot].ms = ms;
     g_timers[slot].proc = proc; g_timers[slot].due = w32_tick_ms() + ms; g_timers[slot].pending = 0;
-    rt_log("[user32] SetTimer(id %u, %u ms, proc %08x)\n", id, ms, proc);
+    rt_dlog("[user32] SetTimer(id %u, %u ms, proc %08x)\n", id, ms, proc);
     STDRET(4, id ? id : 1);
 }
 U(KillTimer) {
@@ -316,7 +316,7 @@ U(LoadStringA) {   // (hInstance, id, buffer, buffer size): from the image's str
     int w32_load_string(uint32_t id, char *out, size_t cap);
     char s[1024];
     int n = w32_load_string(ARG(2), s, sizeof s);
-    if (RT_TRACE("HK_TRACE_GDI") || rt_first_time(0x4c530000ull | ARG(2))) rt_log("LoadStringA(%u) -> \"%s\"\n", ARG(2), s);
+    if (RT_TRACE("HK_TRACE_GDI") || rt_first_time(0x4c530000ull | ARG(2))) rt_dlog("LoadStringA(%u) -> \"%s\"\n", ARG(2), s);
     if (!ARG(3) || !ARG(4)) STDRET(4, 0);
     if ((uint32_t)n >= ARG(4)) n = (int)ARG(4) - 1;
     memcpy(mb + ARG(3), s, (size_t)n);

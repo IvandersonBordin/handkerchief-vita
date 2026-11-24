@@ -47,7 +47,7 @@ static uint32_t reg_open(CPU *c, uint32_t subkey, uint32_t result) {
     HOSTFN;
     reg_defaults();
     const char *path = GSTR(subkey) ? GSTR(subkey) : "";
-    rt_log("RegOpenKey(\"%s\") -> %s\n", path, reg_key_exists(path) ? "ok" : "not found");
+    rt_dlog("RegOpenKey(\"%s\") -> %s\n", path, reg_key_exists(path) ? "ok" : "not found");
     W32(result, 0);
     if (!reg_key_exists(path)) return 2;
     RegKey *k = calloc(1, sizeof *k);
@@ -110,7 +110,7 @@ W(timeGetTime) { STDRET(0, w32_tick_ms()); }
 O(CoInitialize) { STDRET(1, 0); }
 O(CoUninitialize) { STDRET(0, 0); }
 O(CoFreeUnusedLibraries) { STDRET(0, 0); }
-O(CoTaskMemAlloc) { HOSTFN; STDRET(1, gheap_alloc(ARG(1))); }
+O(CoTaskMemAlloc) { HOSTFN; gheap_site(c); STDRET(1, gheap_alloc(ARG(1))); }
 O(CoTaskMemFree) { HOSTFN; gheap_free(ARG(1)); STDRET(1, 0); }
 int movie_cocreate(CPU *c, uint32_t clsid, uint32_t riid, uint32_t out, uint32_t *hr);
 O(CoCreateInstance) {
@@ -119,9 +119,9 @@ O(CoCreateInstance) {
     // Movies: the emulated DirectShow graph plays SH3's .000. SH3_MOVIES=0 skips them, as on a PC
     // without DirectShow.
     static int movies = -1;
-    if (movies < 0) movies = !(getenv("SH3_MOVIES") && !strcmp(getenv("SH3_MOVIES"), "0"));
+    if (movies < 0) movies = !(HK_ENV("SH3_MOVIES") && !strcmp(HK_ENV("SH3_MOVIES"), "0"));
     if (movies && movie_cocreate(c, g, ARG(4), ARG(5), &mhr)) STDRET(5, mhr);
-    rt_log("CoCreateInstance({%08x-...}) -> REGDB_E_CLASSNOTREG\n", R32(g));
+    rt_dlog("CoCreateInstance({%08x-...}) -> REGDB_E_CLASSNOTREG\n", R32(g));
     W32(ARG(5), 0);
     STDRET(5, 0x80040154u);
 }

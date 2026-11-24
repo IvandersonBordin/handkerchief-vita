@@ -47,6 +47,18 @@ static Bitmap *bmp_of(uint32_t h) {
     return h >= H_BITMAP && h < H_BITMAP + NSLOT && g_bmp[h - H_BITMAP].used ? &g_bmp[h - H_BITMAP] : NULL;
 }
 
+// Live GDI objects for the memory log (HK_MEMLOG): bitmaps and their guest bytes, fonts, surface and memory DCs.
+void hk_gdi_stats(int *bitmaps, uint64_t *bitmap_bytes, int *fonts, int *dcs) {
+    int b = 0, f = 0, d = 0;
+    uint64_t by = 0;
+    for (int i = 0; i < NSLOT; i++) {
+        if (g_bmp[i].used) { b++; by += (uint64_t)g_bmp[i].stride * (uint64_t)g_bmp[i].h; }
+        if (g_font_used[i]) f++;
+    }
+    for (int i = 0; i < NSLOT * 2; i++) if (g_dc[i].used) d++;
+    *bitmaps = b; *bitmap_bytes = by; *fonts = f; *dcs = d;
+}
+
 uint32_t hk_gdi_surface_dc(uint32_t surface_guest) {
     for (uint32_t i = 0; i < NSLOT; i++)
         if (g_dc[i].used && g_dc[i].surface == surface_guest) return H_SURF_DC + i;
@@ -113,9 +125,21 @@ static uint32_t bmp_from_dib(const uint8_t *dib, uint32_t size, const char *what
 }
 
 // USER32!LoadImageA(hinst, name, type, cx, cy, flags)
+// Intro tracking for the Vita's port credit (shown only during the company logos): the logo bitmaps start the
+// intro, the title bitmap ends it.
+int g_hk_in_intro = 1;
+static int name_has(const char *s, const char *w) {   // case-insensitive substring (no strcasestr on the Vita)
+    for (; *s; s++) { size_t i = 0; while (w[i] && s[i] && (s[i] | 0x20) == (w[i] | 0x20)) i++; if (!w[i]) return 1; }
+    return 0;
+}
 U(LoadImageA) {
     HOSTFN;
     uint32_t name = ARG(2), type = ARG(3), flags = ARG(6);
+    if (name >= 0x10000u) {
+        const char *n = GSTR(name);
+        if (name_has(n, "hdktitle")) g_hk_in_intro = 0;
+        else if (name_has(n, "hdkopus") || name_has(n, "hdkask")) g_hk_in_intro = 1;
+    }
     if (type != 0) { rt_log("[gdi] LoadImageA type %u not supported\n", type); STDRET(6, 0); }
     if (flags & 0x10u) {   // LR_LOADFROMFILE
         char hp[600];

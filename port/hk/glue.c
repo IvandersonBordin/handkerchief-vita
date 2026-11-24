@@ -25,15 +25,18 @@ int sh3_vcursor_click(void) { return 0; }
 // The game scene (0x454341) passes the table at 0x4899A0 (pointers to "a0", "a0_a", ... "j0_a", NULL) to 0x4255BD
 // with flags 1, which builds one stage from entry 0. Entry 0 is pointed at the table's own string for the label,
 // so the game's own loader opens System/<label>.HDK. Not a way to play: progress flags of earlier stages are unset.
-static void stage_override(uint8_t *const mb) {
-    const char *want = getenv("HK_STAGE");
+// The table's first entry is "a0" at 0x48A01C; later entries are the other stage labels (a0 again through that string).
+static void stage_override_to(uint8_t *const mb, const char *want) {
     if (!want || !*want) return;
-    const uint32_t table = 0x4899A0u, end = 0x489AD4u;
-    if (R32(table) != 0x48A01Cu || strcmp((const char *)mb + 0x48A01Cu, "a0")) {
-        rt_log("[patch] HK_STAGE: unexpected stage table, left alone\n");
-        return;
+    const uint32_t table = 0x4899A0u, end = 0x489AD4u, a0str = 0x48A01Cu;
+    static int checked;
+    if (!checked) {
+        checked = 1;
+        if (R32(table) != a0str || strcmp((const char *)mb + a0str, "a0")) { checked = -1; rt_log("[patch] HK_STAGE: unexpected stage table, left alone\n"); }
     }
-    for (uint32_t a = table; a < end && R32(a); a += 4)
+    if (checked < 0) return;
+    if (!strcasecmp(want, "a0")) { W32(table, a0str); return; }
+    for (uint32_t a = table + 4; a < end && R32(a); a += 4)
         if (!strcasecmp((const char *)mb + R32(a), want)) {
             W32(table, R32(a));
             rt_log("[patch] HK_STAGE: NEW GAME starts in %s (test aid)\n", (const char *)mb + R32(a));
@@ -41,13 +44,17 @@ static void stage_override(uint8_t *const mb) {
         }
     rt_log("[patch] HK_STAGE: no stage named %s\n", want);
 }
+static void stage_override(uint8_t *const mb) { stage_override_to(mb, getenv("HK_STAGE")); }
 
 // Hook before 0x4542C0 (recomp/image_patches.py): esi is the game scene being constructed.
 void hk_stage_scene_hook(CPU *c) {
     static int on = -1;
+    uint8_t *const mb = g_mem;
+    const char *hk_stress_stage(void);   // port/hk/memlog.c: territory stress picks the stage per NEW GAME
+    const char *lab = hk_stress_stage();
+    if (lab) { stage_override_to(mb, lab); for (uint32_t t = 1; t < 10; t++) W8(c->esi + 0x70u + t, 1); return; }
     if (on < 0) { const char *e = getenv("HK_STAGE"); on = e && *e; }
     if (!on) return;
-    uint8_t *const mb = g_mem;
     for (uint32_t t = 1; t < 10; t++) W8(c->esi + 0x70u + t, 1);
 }
 

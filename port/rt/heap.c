@@ -26,8 +26,7 @@ static void log_heap_block(void *ptr, size_t bytes, int used, void *arg) {
                (unsigned long long)bytes, used);
 }
 
-#ifdef SH3_ALLOC_PROF
-// Diagnostic only: live guest-heap blocks grouped by exact size, logged with the host profiler report (compare two reports to see what accumulates).
+// Live guest-heap blocks grouped by exact size (HK_MEMLOG=2 logs it per cycle; compare two reports to see what accumulates).
 typedef struct { size_t size; unsigned n; } SizeCount;
 static SizeCount g_hist[1024];
 static unsigned g_hist_n, g_hist_overflow;
@@ -37,6 +36,18 @@ static void hist_block(void *ptr, size_t bytes, int used, void *arg) {
     for (unsigned i = 0; i < g_hist_n; i++) if (g_hist[i].size == bytes) { g_hist[i].n++; return; }
     if (g_hist_n < 1024) g_hist[g_hist_n++] = (SizeCount){bytes, 1};
     else g_hist_overflow++;
+}
+extern uint64_t g_heap_used, g_heap_peak;
+// Free-space summary for the memory log: total free, largest free block, number of free blocks, live bytes.
+void gheap_stats(GHeapStats *st) {
+    HeapFreeStats fs = {0};
+    memset(st, 0, sizeof *st);
+    if (!g_heap_lock) return;
+    SDL_LockMutex(g_heap_lock);
+    tlsf_walk_pool(tlsf_get_pool(g_tlsf), count_free_block, &fs);
+    st->used_bytes = g_heap_used; st->peak_bytes = g_heap_peak;
+    SDL_UnlockMutex(g_heap_lock);
+    st->free_total = fs.total; st->free_largest = fs.largest; st->free_blocks = fs.blocks;
 }
 void gheap_report(void) {
     if (!g_heap_lock) return;
@@ -55,7 +66,6 @@ void gheap_report(void) {
         g_hist[best].n = 0;
     }
 }
-#endif
 
 static uint8_t *g_live;   // see live_set below
 void gheap_init(uint32_t base, uint32_t size) {
@@ -99,8 +109,25 @@ static void host_trace(uint32_t size, void *ra) {
     if (on && size >= (1u << 20)) rt_log("[heap-host] %u KB from %p\n", size >> 10, ra);
 }
 
+// A request larger than the whole guest memory fails at once, as GlobalAlloc/HeapAlloc/malloc do on Windows. TLSF
+// cannot be trusted with it on a 32-bit host: adjust_request_size() rounds the size up with align_up(), which wraps
+// 0xFFFFFFFF to 0 when size_t is 32 bits (the Vita), and then hands out a minimum-size block. HDKWIN.EXE relies on
+// this failure: its file loader 0x45BDFC checks CreateFileA's result against 0 instead of INVALID_HANDLE_VALUE, so a
+// missing WAV (12 of the names it asks for are not in the game data: A_BOMB_1, A_MGUN_0/1, B_LSER_0, C_BUND_0, F_TANK,
+// I_NOT, I_USE, J_SCRM_0/1, L_INVI ...) goes on to GetFileSize(-1) = 0xFFFFFFFF and GlobalAlloc(0x2002, 0xFFFFFFFF)
+// at 0x45BE51. On Windows (and the 64-bit PC build) that allocation fails and the voice is never loaded. On the Vita
+// it "succeeded": the voice loader 0x45C4C1 then read the data size and WAVEFORMATEX from uninitialised stack (its
+// mmioDescend calls on the bogus memory file fail unchecked) and created a 2.2 MB sound buffer of zeros in a garbage
+// format, mixed as 8-bit data: a full-scale DC voice (console log: six copies of a 571344-frame buffer, each at
+// exactly gain x master, in the a0 house explosion and the bazooka fights).
+static int too_big(uint32_t size) { return size > g_mem_size; }
+
 uint32_t gheap_alloc(uint32_t size) {
     host_trace(size, __builtin_return_address(0));
+    if (too_big(size)) {
+        if (RT_TRACE("HK_TRACE_HEAP")) rt_log("[heap] allocation of %u bytes refused (larger than guest memory)\n", size);
+        return 0;
+    }
     HeapFreeStats free_stats = {0};
     SDL_LockMutex(g_heap_lock);
     void *p = tlsf_malloc(g_tlsf, size ? size : 1);
@@ -132,6 +159,7 @@ uint32_t gheap_calloc(uint32_t size) {
 
 uint32_t gheap_alloc_aligned(uint32_t size, uint32_t align) {
     host_trace(size, __builtin_return_address(0));
+    if (too_big(size)) return 0;
     SDL_LockMutex(g_heap_lock);
     void *p = tlsf_memalign(g_tlsf, align, size ? size : 1);
     track(p, 1);
@@ -156,6 +184,7 @@ void gheap_free(uint32_t a) {
 }
 
 uint32_t gheap_realloc(uint32_t a, uint32_t size) {
+    if (too_big(size)) return 0;   // the block is left as it is, like a failed HeapReAlloc
     SDL_LockMutex(g_heap_lock);
     if (a && !live_get(a)) { SDL_UnlockMutex(g_heap_lock); rt_log("[heap] realloc of non-allocated 0x%08x\n", a); return 0; }
     if (a) { track(g_mem + a, -1); live_set(g_mem + a, 0); }

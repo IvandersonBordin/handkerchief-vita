@@ -1,9 +1,13 @@
 // PC entry point for the recompiled Handkerchief: SDL2 window, game exe loading, recompiled code start.
 // Structure derived from sh3vita port/src/pc/main.c (GPL-3.0).
 #include "rt.h"
+void w32_set_lang_overlay(const char *dir);
 #include "plat.h"
 #include "cp1252.h"
 #include <stdlib.h>
+#include <string.h>
+#include "hk/font_data.h"
+#include "vita/pause_menu.h"
 
 static SDL_Window *g_win;
 static SDL_Renderer *g_ren;
@@ -108,18 +112,59 @@ static void maybe_shot(const uint32_t *pixels, int width, int height, int pitch_
     }
 }
 
+// RESULTS panel (the Vita's Select, port/vita/pause_menu.h pm_results): while Tab is held in a stage, or for the test
+// aid HK_RESULTS_AT=frame[:frames] (default 50 frames), drawn over a copy of the frame; the game keeps running.
+int hk_results_read(uint32_t out[13]);   // port/hk/results.c
+static int results_shown(void) {
+    extern unsigned g_frame;
+    static int at = -2, len = 50;
+    if (at == -2) { const char *e = getenv("HK_RESULTS_AT"); at = e ? atoi(e) : -1; if (e && strchr(e, ':')) len = atoi(strchr(e, ':') + 1); }
+    if (at >= 0 && g_frame >= (unsigned)at && g_frame < (unsigned)at + (unsigned)len) return 1;
+    const Uint8 *k = getenv("HK_HEADLESS") ? NULL : SDL_GetKeyboardState(NULL);
+    return k && k[SDL_SCANCODE_TAB];
+}
 void plat_show_xrgb(uint32_t *pixels, int width, int height, int pitch_bytes) {
-    maybe_shot(pixels, width, height, pitch_bytes);
+    uint32_t rv[13];
+    // RESULTS is a 960x544 overlay at the output resolution (as on the Vita): composited on the CPU into a 960x544
+    // frame here (letterboxed 4:3), shown through its own texture with the logical size lifted.
+    static uint32_t ovl[PM_OW * PM_OH], comp[PM_OW * PM_OH];
+    int res = results_shown() && width <= HK_WS_MAX && height <= 480 && hk_results_read(rv);
+    if (res) {
+        pm_overlay_results(ovl, rv);
+        pm_composite(comp, pixels, width, height, pitch_bytes / 4, 0, 0, ovl);
+    }
+    maybe_shot(res ? comp : pixels, res ? PM_OW : width, res ? PM_OH : height, res ? PM_OW * 4 : pitch_bytes);
     if (!g_ren) return;
     if (!g_tex) g_tex = SDL_CreateTexture(g_ren, SDL_PIXELFORMAT_XRGB8888, SDL_TEXTUREACCESS_STREAMING, HK_WS_MAX, 480);   // fixed size, never recreated
+    static SDL_Texture *rtex;
     SDL_Rect src = {0, 0, width, height};
-    SDL_UpdateTexture(g_tex, &src, pixels, pitch_bytes);
     SDL_RenderClear(g_ren);
-    SDL_RenderCopy(g_ren, g_tex, &src, NULL);
+    if (res) {
+        if (!rtex) rtex = SDL_CreateTexture(g_ren, SDL_PIXELFORMAT_XRGB8888, SDL_TEXTUREACCESS_STREAMING, PM_OW, PM_OH);
+        SDL_UpdateTexture(rtex, NULL, comp, PM_OW * 4);
+        SDL_RenderSetLogicalSize(g_ren, 0, 0);
+        SDL_RenderCopy(g_ren, rtex, NULL, NULL);
+        SDL_RenderSetLogicalSize(g_ren, g_hk_ws_w, 480);
+    } else {
+        SDL_UpdateTexture(g_tex, &src, pixels, pitch_bytes);
+        SDL_RenderCopy(g_ren, g_tex, &src, NULL);
+    }
     SDL_RenderPresent(g_ren);
 }
 
-void plat_present_xrgb(uint32_t *pixels, int width, int height, int pitch_bytes) { plat_show_xrgb(pixels, width, height, pitch_bytes); }
+// HK_PRESENT_MS=n: each present takes at least n ms, to reproduce a slow console present on PC (the Vita needs ~45 ms
+// per frame at 848x480 with the dialog overlay).
+void plat_present_xrgb(uint32_t *pixels, int width, int height, int pitch_bytes) {
+    static int ms = -1;
+    if (ms < 0) ms = getenv("HK_PRESENT_MS") ? atoi(getenv("HK_PRESENT_MS")) : 0;
+    if (ms > 0) SDL_Delay((uint32_t)ms);
+    // HK_CHEAT=1 (test aid, like the Vita pause-screen L): Unrivaled Mode flag 0x4AC84C on; the invincibility flag
+    // 0x47BCD8 starts at 1 in .data, so the player is invincible (docs/save-and-stages.md).
+    static int cheat = -1;
+    if (cheat < 0) cheat = getenv("HK_CHEAT") != NULL;
+    if (cheat) *(uint32_t *)(g_mem + 0x4AC84Cu) = 1;
+    plat_show_xrgb(pixels, width, height, pitch_bytes);
+}
 int plat_present_threaded(void) { const char *e = getenv("HK_PRESENT_THREAD"); return e ? atoi(e) : 0; }
 int plat_poll_main(void) { return 0; }
 
@@ -141,8 +186,9 @@ static int scripted_key(int vk) {
     return 0;
 }
 
+int hk_stress_key(int vk);   // port/hk/memlog.c
 int plat_vk_down(int vk) {
-    if (scripted_key(vk)) return 1;
+    if (scripted_key(vk) || hk_stress_key(vk)) return 1;
     const Uint8 *k = SDL_GetKeyboardState(NULL);
     if (!k) return 0;
     switch (vk) {
@@ -181,6 +227,9 @@ static int dump_thread(void *arg) {
 int main(int argc, char **argv) {
     const char *dir = argc > 1 ? argv[1] : getenv("HK_GAME_DIR") ? getenv("HK_GAME_DIR") : "original-data";
     SDL_strlcpy(g_game_dir, dir, sizeof g_game_dir);
+    // Headless test runs never use the real audio device (agents' runs played through the owner's speakers);
+    // SDL_AUDIODRIVER=disk can still be set explicitly to record the mix.
+    if (getenv("HK_HEADLESS") && !getenv("SDL_AUDIODRIVER")) setenv("SDL_AUDIODRIVER", "dummy", 1);
     SDL_SetHint(SDL_HINT_NO_SIGNAL_HANDLERS, "1");   // keep default SIGINT/SIGTERM: `timeout` must stop test runs
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_TIMER | SDL_INIT_EVENTS)) {
         fprintf(stderr, "SDL_Init: %s\n", SDL_GetError());
@@ -197,11 +246,27 @@ int main(int argc, char **argv) {
     if (rt_init(256u << 20)) rt_fatal("guest memory: allocation failed");
     char exe[600];
     SDL_snprintf(exe, sizeof exe, "%s/HDKWIN.EXE", g_game_dir);
+    // HK_LANG=pt: the PT-BR translation installed in <game dir>/lang/ptbr (HDKWINBR.EXE and BITMAP/), as on the Vita.
+    if (getenv("HK_LANG") && !strcmp(getenv("HK_LANG"), "pt")) {
+        char ov[600], br[700];
+        SDL_snprintf(ov, sizeof ov, "%s/lang/ptbr", g_game_dir);
+        SDL_snprintf(br, sizeof br, "%s/HDKWINBR.EXE", ov);
+        FILE *tf = fopen(br, "rb");
+        if (tf) { fclose(tf); SDL_strlcpy(exe, br, sizeof exe); w32_set_lang_overlay(ov); }
+        else fprintf(stderr, "HK_LANG=pt: %s not found, using English\n", br);
+    }
     int r = rt_load_exe(exe);
     if (r) rt_fatal("cannot load %s (%d)", exe, r);
     rt_fill_iat();
     { void hk_patch_data(void); hk_patch_data(); }
     rt_log("game loaded from %s\n", g_game_dir);
+    {   // memory log and stress driver (port/hk/memlog.c)
+        extern int g_hk_memlog; void hk_stress_init(const char *);
+        if (getenv("HK_MEMLOG")) g_hk_memlog = atoi(getenv("HK_MEMLOG"));
+        extern int g_h_maxpages;   // port/win32/handles.c: 1 = the old fixed 1024-slot table
+        if (getenv("HK_HANDLE_PAGES")) g_h_maxpages = atoi(getenv("HK_HANDLE_PAGES"));
+        hk_stress_init(getenv("HK_STRESS"));
+    }
     if (getenv("HK_DUMP_AFTER")) SDL_CreateThread(dump_thread, "hkdump", (void *)(intptr_t)atoi(getenv("HK_DUMP_AFTER")));
     rt_run_entry();
     SDL_Quit();

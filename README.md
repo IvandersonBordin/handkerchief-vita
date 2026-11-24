@@ -16,12 +16,13 @@ Work in progress. Tested on a PS Vita 1000 (firmware 3.65, HENkaku) and on Linux
 
 | Area | State |
 | --- | --- |
-| Intro, title, stages | Running at the native 25 FPS in 4:3. Every territory's areas load; area and territory transitions tested. A full playthrough has not been confirmed yet |
-| Graphics | DirectDraw 8-bit emulated in software; 4:3, stretched 16:9, or **native widescreen** (848x480, more of the world visible; experimental, may run below 25 FPS) |
-| Sound | Music and effects through a software mixer with fixed volumes; separate music and effects levels |
+| Intro, title, stages | Running at the native 25 FPS in 4:3 and native widescreen on the console. All 10 territories, their bosses' RESULTS screens and the ending/credits run through on the port (verified on PC by triggering each boss's own death path); play-testing on the Vita is ongoing |
+| Graphics | DirectDraw 8-bit emulated in software; 4:3, stretched 16:9, or **native widescreen** (848x480, more of the world visible) |
+| Sound | Music and effects through a software mixer following DirectSound semantics, fixed volumes, separate music and effects levels. A 32-bit allocation wrap that turned missing WAVs into full-scale noise on the Vita is fixed |
 | Menus | The game's own menus and dialogs (save/load slots, game and key configuration, exit) drawn over the game and driven by the pad; on-screen keyboard for save names |
 | Save / continue | Works |
-| Extras | Pause screen with FPS counter, display options, volume, and the game's hidden cheats |
+| Extras | Pause menu in the style of the game's title screen: save, load (also inside a stage), RESULTS, cheats, settings, button remapping, language. Select shows a tips & controls card |
+| Known issue | Restarting stages many times in one session leaks guest memory on the Vita (under investigation) |
 
 ## Installing on the PS Vita
 
@@ -34,12 +35,30 @@ Work in progress. Tested on a PS Vita 1000 (firmware 3.65, HENkaku) and on Linux
 | Button | Action |
 | --- | --- |
 | D-pad / left stick | Move. Down: lie down (press again or another direction to get up) |
-| Cross | Shoot; confirm in menus |
-| Square | Jump |
-| Circle / Triangle | Turncoat bomb / switch and rotation (game actions) |
-| L / R | Shift / Ctrl (game actions) |
-| Select | The game's menu: save, load, stop, exit, configuration |
-| Start | Pause screen: display options, widescreen, FPS counter, volume, cheats |
+| Cross | Jump; always confirms in menus, dialogs and the title screen |
+| Square | Shoot |
+| Circle | Turncoat bomb; always cancels in menus and dialogs |
+| Triangle | Switch and rotation |
+| R (hold) | Rapid fire |
+| L | Shift (game action) |
+| Select (hold) | Tips & controls card during a stage: your current button map and the game's own hints, one at a time (Left/Right: next tip; the game keeps running). It is a button action, so it can be remapped |
+| Start | Pause screen: save, load, display options, widescreen, FPS counter, volume, cheats, controls, Results, and the game's menu (Game menu: save, load, stop, exit, configuration) |
+
+The gameplay buttons can be remapped in Start > Settings > Controls (choose an action, press Cross, then the new button; the previous owner of that button swaps in). The D-pad, left stick and Start are fixed, and Cross/Circle keep confirm/cancel in menus whatever the map. The map is saved in `hkport.cfg` as `map_<button>=<action>` lines. The game's menu bar can also be put on a button there (action "Game menu"); an older `hkport.cfg` that had Select on the game menu is moved to the tips card once. The RESULTS panel (time, shots, bombs, expenditure, kills, destruction, injuries) is an item of the Start menu, right below Settings (greyed outside a stage); Circle or Cross returns to the menu.
+
+## Language (Brazilian Portuguese)
+
+The game is in English. A Brazilian Portuguese fan translation exists, made by **Patryck Padilha de Oliveira**
+([patryckpo.com](https://patryckpo.com)); it is not part of this repository and is not redistributed here. Download it from
+<https://patryckpo.com/traducoes/windows/handkerchief/downloads/> (a WinRAR self-extracting archive; its contents are
+`HDKWINBR.EXE` and a `BITMAP/` folder with `HDKCON00.BMP` and `HDKSYS00.BMP`).
+
+1. Extract it and copy the files to `ux0:data/handkerchief/lang/ptbr/` (so you have `lang/ptbr/HDKWINBR.EXE`,
+   `lang/ptbr/BITMAP/HDKCON00.BMP` and `lang/ptbr/BITMAP/HDKSYS00.BMP`). Your original game files stay untouched.
+2. In the pause screen choose Start > Settings > Language > Português (BR) and restart the game. The port's own menus
+   switch to Portuguese too. If the files are not found, the game stays in English and the menu says so.
+
+On Linux, run with `HK_LANG=pt` and the same folder layout inside the game folder (`<game>/lang/ptbr/`).
 
 ## Building
 

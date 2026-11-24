@@ -7,6 +7,7 @@
 #include "plat.h"
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 int g_hk_ws_w = 640;
 
@@ -59,6 +60,7 @@ static uint32_t g_ws_hud_list, g_ws_hud_box;   // HUD list and box being drawn (
 int g_hk_in_stage;   // a stage was drawn in the last game frame (any width): used by the Vita crouch tap
 void hk_ws_flip(void) {
     g_hk_in_stage = g_ws_stage_drawn;
+    { void hk_results_tick(void); hk_results_tick(); }
     if (g_hk_ws_w == 640) { g_ws_stage_drawn = 0; return; }
     const int p = !g_ws_stage_drawn;
     g_ws_stage_drawn = 0;
@@ -100,7 +102,10 @@ static void ws_blit(CPU *c, uint32_t x, uint32_t y, uint32_t clip, uint32_t flag
     sp -= 4; W32(sp, clip); sp -= 4; W32(sp, y); sp -= 4; W32(sp, x);
     sp -= 4; W32(sp, 0x4014ECu);   // return address (not used by the recompiled ret)
     c->esp = sp;
+    extern int g_hk_prof_on; extern double g_hk_pf_ws; extern unsigned g_hk_pf_ws_n;
+    struct timespec ts0; if (g_hk_prof_on) clock_gettime(CLOCK_MONOTONIC, &ts0);
     F_00408b7b(c);
+    if (g_hk_prof_on) { struct timespec ts1; clock_gettime(CLOCK_MONOTONIC, &ts1); g_hk_pf_ws += (ts1.tv_sec - ts0.tv_sec) * 1e3 + (ts1.tv_nsec - ts0.tv_nsec) / 1e6; g_hk_pf_ws_n++; }
     c->esp += 0x18;                // cdecl: caller pops the 6 arguments
     c->eax = eax; c->ecx = ecx; c->edx = edx;
 }
@@ -170,6 +175,7 @@ void hk_ws_bar_x(CPU *c) {
     uint8_t *const mb = g_mem;
     if (R32(c->esi) == WS_TITLE_SCENE_VT) return;   // drawn 640 wide, pillarboxed
     g_ws_stage_drawn = 1;
+    { void hk_results_scene(uint32_t scene); hk_results_scene(c->esi); }   // RESULTS counters (port/hk/results.c)
     c->eax += (uint32_t)(g_hk_ws_w - 640) / 2;
 }
 // Before 0x454AD4 (hk_ws_bar_x): x origin of the list [scene+0x48] (eax = x origin 0, `xor eax,eax` at 0x454AD1), drawn instead

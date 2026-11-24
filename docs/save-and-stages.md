@@ -36,6 +36,16 @@ static reading or hypothesis.
   arrows, Enter/space, Shift/Ctrl/Z/X/C, Esc), moves the slot radio buttons (1420-1429) with 0x401726, and posts
   WM_COMMAND 0x9CA4 (confirm) / 0x9CA5 (cancel) to the dialog at 0x4329F8 / 0x432A15. Buttons 40072 Rename and
   40024 Delete exist in the template; the key loop does not reach them (mouse only on Windows).
+  The port clicks them with R / D (Vita: Square / L). Delete asks "Delete this game ?" with MB_OKCANCEL (0x40F2A0,
+  answer == IDOK); the Vita answers MessageBoxA with its own box (Cross = OK, Circle = Cancel). In this loop
+  Z/X/C/Shift/Ctrl are confirm and only Esc cancels, so on the Vita Circle sends Esc (not Z) while a dialog is up.
+- Console bug (2026-11-21, wide_native=1 only): the 1500 loop runs game frames through 0x40E9F9, whose message loop
+  (0x40EA18-0x40EA6D) runs a frame only when PeekMessageA finds the queue empty. The port's dialog refresh presented
+  from inside PeekMessageA every 33 ms counted from the start of the previous present; at 848x480 a Vita present
+  takes longer than the 40 ms window timer, so every PeekMessageA presented again and found a new WM_TIMER: no frame,
+  no key poll, the pad did nothing. The refresh now counts from the end of the last present of any kind. PC
+  reproduction: `SDL_AUDIODRIVER=dummy HK_PRESENT_MS=50 HK_WIDE=848` with sound on (the timer exists only once
+  DirectSound works) and `HK_KEYS=1300:28:3,1320:20:6,1400:28:3,1440:20:4` (no load before the fix, slot 2 after).
 
 ## Other dialogs
 
@@ -113,6 +123,48 @@ letters, which the pad does not send.
   and ~1000/s in `a1` (enemy machine guns). Windows would fail the same way; on the Vita the repeated failing
   file opens may cost time. Hypothesis to check: related to sound drops heard on the console when enemies fire.
 - Observation, not investigated: a black band in the ground under the player's house in A0 (frames 1800-2100).
+
+## Results counters
+
+The RESULTS screen (TIME, SHOT, BOMB, TURNCOAT BOMB, EXPENDITURE, KILL(S), DESTRUCTION, INJURIES) reads 13 dwords
+of the game object (vtable 0x472240, 0x768 bytes). Static evidence (HDKWIN.EXE):
+
+- Object: created by the stage scene ctor (0x454316 `push 0x768`, ctor 0x44C721 via 0x40283D at 0x454333, stored
+  at [scene+0x60] at 0x45434B) and by 0x44CD80 (same ctor at 0x44CDAA). 0x455286 reads the territory flags
+  [obj+0x45C+t*4] through [scene+0x60]. Stage scene vtable 0x4724B8.
+- Counters `c[0..12]` at obj+0x4AC: zeroed only by the ctor (0x44C95D -> 0x4015D7 -> 0x44D38B, memset 0x34),
+  saved / loaded with the game (0x44CE3F / 0x44CE66, 0x34 bytes), increased by the virtual AddStat(idx, n) at
+  vtable +0x28 (0x40433B -> 0x44D36C: `add [ecx+eax*4+0x4AC],edx`), usually through the wrapper 0x426B79 (thunk
+  0x40333C: [this+0x50]->AddStat). Calls with a constant index (call address): 2 shots fired (0x41DC90, 0x41DFB2 n = edi, 0x41E0FA),
+  4 bombs thrown (0x41E47E), 7 and 5 (0x4286C6, 0x428746, 0x4289E0; hits of turncoat bomb / bomb by the
+  display order), 9 EXPENDITURE (0x42EF87, after the money [this+0x118] -= edx), 8 (0x42F0C2, item value; not
+  shown), 11 DESTRUCTION (0x428955, 0x4336CC, 0x434501, n = 1), 12 INJURIES (0x4522DC, n = 1), 1 (0x452319, after
+  the injury loop; not shown). c[3], c[6] and c[10] were not found at a call with a constant index (0x41999F passes the index in eax); they
+  are identified by the draw code and the runs below.
+- RESULTS screen: ctor 0x4570B6 (`[this+0x8C] = [arg1+0x50] + 0x4AC`, 0x45711C..0x457126), draw 0x45735B. TIME =
+  c[0] / 25 split as h:m:s with format 0x48A2B0 `TIME    %.2d:%.2d:%.2d` (0x45749E..0x4574D4); the values use format
+  0x48A280 `%d/%d\n\n%d/%d\n\n%d/%d\n\n%c%d\n\n%d\n\n%d\n\n%d\n\n` with arguments pushed at 0x457609..0x457639: SHOT
+  c[3]/c[2], BOMB c[5]/c[4], TURNCOAT BOMB c[7]/c[6], EXPENDITURE `$`c[9] (`\` yen when [0x4AA3A0] != 0),
+  KILL(S) c[10], DESTRUCTION c[11], INJURIES c[12]. The labels are string resource 7 (LoadString at 0x4575DF):
+  `SHOT\n\nBOMB\n\nTURNCOAT BOMB\n\nEXPENDITURE\n\nKILL(S)\n\nDESTRUCTION\n\nINJURIES`; the PT-BR HDKWINBR.EXE has
+  `TIROS / BOMBAS / TURNCOAT BOMBS / GASTOS / MORTE(S) / DESTRUIÇÃO / PERDAS` there and keeps `TIME`.
+- The animal name on that screen ("GOLD FISH") is the territory's emblem sprite (table 0x489C20 indexed by
+  [this+0x88] = territory), not a rank.
+
+Runtime (PC, headless, `HK_RESULTS_LOG=1` logs the counters when one other than the time changes, 2026-11-22):
+- `HK_STAGE=a0`, Enter, X pressed every 8 frames: c[0] counts game frames (2202 at frame 3592, 25 per second),
+  c[2] goes 1, 2, ... 213 with each shot; everything else 0 (no target in reach).
+- `HK_STAGE=e2`: the enemy on the tower hits the idle player: c[12] 0 -> 1 at frame 1733 (GAME OVER follows, the
+  next game object starts from 0). In a later run c[3] = 2 of c[2] = 12 shots.
+- `HK_STAGE=a1_a`, Right + X: c[3] = 6 hits of 58 shots, c[10] = 1 kill at frame 1908; after the area change to `a2`
+  (KeyMan) the same object (0x014FE52C) keeps counting (TIME 00:00:56 at frame 2880).
+- So the counters are valid mid-stage and cumulative for the current game (new game / continue), not per territory:
+  nothing resets them when an area or territory changes. Not observed at run time: c[4..7] (bombs), c[9]
+  (expenditure), c[11] (destruction); their meaning rests on the call sites above and the draw code.
+
+Port use: `port/hk/results.c` (scene pointer recorded in hk_ws_bar_x, checks both vtables) feeds the RESULTS panel
+shown while Select is held in a stage on the Vita (`pm_results`, `port/vita/pause_menu.h`); PC: Tab, or
+`HK_RESULTS_AT=frame[:frames]` for screenshots.
 
 ## How to reproduce
 

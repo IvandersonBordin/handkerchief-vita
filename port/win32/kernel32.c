@@ -284,6 +284,7 @@ K(LCMapStringW) {
 }
 
 // ---------- memory ----------
+unsigned g_hk_closed_unfreed[16];   // CloseHandle of objects whose host struct is not freed (events, semaphores, threads): memory log
 K(HeapCreate) { STDRET(3, 0x00a00000u); }
 K(HeapDestroy) { STDRET(1, 1); }
 // Tracking of live allocations per caller (SH3_TRACE_HEAP): address -> (size, caller) table.
@@ -388,6 +389,8 @@ K(TlsGetValue) {
 // CRITICAL_SECTION: the host mutex index (+1) is stored in LockSemaphore (+16).
 #define MAX_CS 512
 static SDL_mutex *cs_tab[MAX_CS];
+int hk_cs_count(void) { int n = 0; for (int i = 0; i < MAX_CS; i++) n += cs_tab[i] != NULL; return n; }   // memory log
+int hk_wav_miss_count(void);
 static SDL_mutex *cs_of(CPU *c, uint32_t p) {
     HOSTFN;
     uint32_t i = R32(p + 16);
@@ -551,6 +554,7 @@ static int file_traced(const File *f) {
 static char g_wav_miss[WAV_MISS_MAX][64];
 static int g_wav_miss_n;
 static SDL_mutex *g_wav_miss_mx;
+int hk_wav_miss_count(void) { return g_wav_miss_n; }
 static int is_wav(const char *gp) { size_t n = gp ? strlen(gp) : 0; return n > 4 && n < 64 && !SDL_strcasecmp(gp + n - 4, ".wav"); }
 static int wav_missing(const char *gp, int add) {
     if (!g_wav_miss_mx) g_wav_miss_mx = SDL_CreateMutex();
@@ -1215,7 +1219,7 @@ K(CloseHandle) {
     } else if (h_type(h) == H_MAPPING) {
         void *m = h_retire(h, H_MAPPING, &now);
         if (m && now) free(m);   // otherwise by MapViewOfFile when it returns (sh3_imports.c)
-    } else h_close(h);   // event, thread...: never freed, the number is free at once
+    } else { if (h_type(h) < 16) g_hk_closed_unfreed[h_type(h)]++; h_close(h); }   // event, thread...: never freed, the number is free at once
     if (error) {
         rt_log("[file] CloseHandle h=%x error=%u\n", h, error);
         w32_set_last_error(c, error);

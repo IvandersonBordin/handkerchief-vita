@@ -21,6 +21,7 @@
 #define E_NOINTERFACE_ 0x80004002u
 #define E_OUTOFMEMORY_ 0x8007000Eu
 
+extern unsigned g_frame;   // presented frames (port/hk/glue.c)
 enum { K_DS = 1, K_BUF, K_NOTIFY };
 typedef struct DSBuf {
     int kind, refs;
@@ -34,9 +35,7 @@ typedef struct DSBuf {
     int nnotify;
     struct { uint32_t off, ev; } notify[32];
     uint32_t gen;               // changed by Play/Stop/SetCurrentPosition: the mixer drops stale results
-    int dup;                    // started on top of a copy of the same sound: mixed silent (see buf_play)
-    struct DSBuf *dup_of;       // the copy it is silent for; dup_release hands the sound back when that one stops
-    float ramp;                 // declick gain 0..1, rises after a (re)start
+    float ramp;                 // declick gain 0..1, rises over RAMP_FR after a (re)start
     float lp[4];                // anti-imaging low-pass state (two one-pole stages, left and right)
     int *shared_refs;           // sample memory shared between duplicates
     struct DSBuf *parent;       // K_NOTIFY: the buffer it belongs to
@@ -57,20 +56,6 @@ float g_hk_volume;   // master gain chosen by the player (0 = default)
 float g_hk_music_volume = 1.5f;
 #define MUSIC_BYTES (1u << 20)
 
-// Under mx. A buffer that stops (Stop, end of a one-shot, SetCurrentPosition, Release) no longer covers the copies
-// that were mixed silent on top of it: the first of them becomes audible again and the others now wait on it.
-// Before, a silent copy stayed silent until the game stopped it, so a looping sound the game kept playing (and
-// kept updating) disappeared when its in-phase twin was stopped: 14 such cases in 40 s at the first A0 tower.
-static void dup_release(DSBuf *o) {
-    DSBuf *heir = NULL;
-    for (int k = 1; k < MAX_OBJ; k++) {
-        DSBuf *q = g_obj[k];
-        if (!q || q == o || q->kind != K_BUF || !q->dup || q->dup_of != o) continue;
-        if (!q->playing) { q->dup = 0; q->dup_of = NULL; continue; }   // stopped meanwhile: Play decides again
-        if (!heir) { heir = q; q->dup = 0; q->dup_of = NULL; q->ramp = 0.f; q->gen = ++g_gen; }
-        else q->dup_of = heir;
-    }
-}
 static int now_ok(Uint64 *t_last) {   // true at most once every 5 s
     Uint64 now = SDL_GetPerformanceCounter();
     if (now - *t_last < 5 * SDL_GetPerformanceFrequency()) return 0;
@@ -104,11 +89,38 @@ static DSBuf *obj_of(uint32_t guest, int kind) {
 // The 16-byte guest object is kept (tag cleared) instead of freed: HDKWIN.EXE calls Stop (vtable +0x48, from
 // 0x45C921) on a buffer it has already released; with the block reused by the game heap that call jumped to
 // garbage. A dead object keeps its vtable, and every method answers DSERR_INVALIDPARAM.
+static unsigned g_ds_dead;   // guest 16-byte objects kept dead (never freed, see above): memory log
 static void obj_unwrap(DSBuf *b) {
     HOSTFN;
+    g_ds_dead++;
     uint32_t i = R32(b->guest + 4) & 0xffffu;
     if (i < MAX_OBJ && g_obj[i] == b) g_obj[i] = NULL;
     W32(b->guest + 4, 0x44530000u);   // dead: index 0
+}
+
+static int n_ghost;
+// Live DirectSound state for the memory log (HK_MEMLOG). Sample bytes count each shared sample once.
+typedef struct { int buffers, notifies, playing, dups, ghosts, top_slot; uint64_t sample_bytes; unsigned dead_guest_objs; } HkDsStats;
+void hk_ds_stats(HkDsStats *o) {
+    memset(o, 0, sizeof *o);
+    if (!mx) return;
+    SDL_LockMutex(mx);
+    for (int k = 1; k < MAX_OBJ; k++) {
+        DSBuf *b = g_obj[k];
+        if (!b) continue;
+        o->top_slot = k;
+        if (b->kind == K_NOTIFY) { o->notifies++; continue; }
+        if (b->kind != K_BUF) continue;
+        o->buffers++;
+        o->playing += b->playing != 0;
+        int first = 1;   // the first buffer of a sample owns its bytes; later ones are DuplicateSoundBuffer copies
+        for (int j = 1; j < k; j++) if (g_obj[j] && g_obj[j]->kind == K_BUF && g_obj[j]->mem == b->mem) { first = 0; break; }
+        o->dups += !first;
+        if (first && b->mem) o->sample_bytes += b->size;
+    }
+    o->ghosts = n_ghost;
+    o->dead_guest_objs = g_ds_dead;
+    SDL_UnlockMutex(mx);
 }
 
 // Callback timing: a callback that comes much later than one buffer after the previous one means the device ran
@@ -141,13 +153,15 @@ static void free_buffer(DSBuf *b);
 #define RAMP_FR 144            // 3 ms at 48 kHz: fade-in after a start/restart and fade-out tail after Stop/restart
 #define MAX_VOICES MAX_OBJ
 struct Voice {
-    DSBuf *b; uint32_t gen, mem, frames; int stereo, bits16, looping, dup, ghost;
+    DSBuf *b; uint32_t gen, mem, frames; int stereo, bits16, looping, ghost;
     uint64_t pos, st; float gl, gr, a, lp[4], vpk, ramp, dr; double before; int ended;
 };
 static struct Voice ghosts[64];   // under mx: stopped/restarted voices still fading out, consumed by the next mix()
 static int n_ghost;
+// Under mx: events counted for the 5 s "[mix] 5 s" console line (buf_play / ghost_add).
+static unsigned st_starts, st_ghost_drop;
 static void fill_voice(struct Voice *v, DSBuf *b) {
-    float g = b->dup ? 0.f : db_gain(b->volume);
+    float g = db_gain(b->volume);
     if (b->size > MUSIC_BYTES) g *= g_hk_music_volume;
     v->gl = v->gr = g;
     if (b->pan < 0) v->gr *= db_gain(b->pan); else if (b->pan > 0) v->gl *= db_gain(-b->pan);
@@ -158,27 +172,105 @@ static void fill_voice(struct Voice *v, DSBuf *b) {
     float rate_hz = (float)(b->freq ? b->freq : b->rate);
     v->a = rate_hz < 40000.f ? 1.f - expf(-6.2831853f * 0.45f * rate_hz / OUT_RATE) : 1.f;
     v->b = b; v->gen = b->gen; v->mem = b->mem; v->frames = b->size / b->align;
-    v->stereo = b->ch > 1; v->bits16 = b->bits == 16; v->looping = b->looping; v->dup = b->dup;
+    v->stereo = b->ch > 1; v->bits16 = b->bits == 16; v->looping = b->looping;
     v->before = b->pos;
     v->pos = (uint64_t)(b->pos * 65536.0); v->st = (uint64_t)(step * 65536.0);
     memcpy(v->lp, b->lp, sizeof v->lp);
     v->ended = 0; v->ghost = 0;
 }
-// Under mx. The voice leaves the game's view now, but its last ~3 ms keep sounding with a linear fade-out so the
-// cut does not click. Silent copies and buffers that are not playing leave no tail.
+// Under mx. The voice leaves the game's view now (Stop, SetCurrentPosition), but its last 3 ms keep sounding with a
+// linear fade-out so the cut does not click. Buffers that are not playing leave no tail.
 static void ghost_add(DSBuf *b) {
-    if (!b->playing || b->dup || b->primary || !b->align || n_ghost >= 64) return;
+    if (!b->playing || b->primary || !b->align) return;
+    if (n_ghost >= 64) { st_ghost_drop++; return; }
     struct Voice *v = &ghosts[n_ghost];
     fill_voice(v, b);
-    v->b = NULL; v->ghost = 1; v->ramp = b->ramp; v->dr = -1.f / RAMP_FR;
+    v->b = NULL; v->ghost = 1; v->ramp = b->ramp; v->dr = -1.f / (float)RAMP_FR;
     n_ghost++;
 }
+// ---------- Output recorder (hkport.cfg rec=1 on the Vita, HK_REC=1 or HK_REC=<file> on PC) ----------
+// The audio callback only copies each output block into a ring (REC_RING frames, 4 s); a low-priority thread (core 2
+// on the Vita) writes it every 200 ms to g_hk_rec_path as a 48 kHz 16-bit stereo WAV whose header is kept valid after
+// every write, so the file is usable even if the game is closed abruptly. After REC_FILE_S seconds the file becomes
+// <name>.prev.wav and a new one starts: the last 60-120 s are always on disk.
+const char *g_hk_rec_path;   // set by the platform (port/vita/main.c) or from HK_REC in audio_start
+#define REC_RING (OUT_RATE * 4)
+#define REC_FILE_S 60
+static int16_t *rec_ring;
+static SDL_atomic_t rec_w, rec_r, rec_drop;   // frames written by the callback / taken by the writer / dropped
+static void hk_rec_push(const int16_t *s, int n) {
+    if (!rec_ring) return;
+    unsigned w = (unsigned)SDL_AtomicGet(&rec_w), r = (unsigned)SDL_AtomicGet(&rec_r);
+    if (w - r + (unsigned)n > REC_RING) { SDL_AtomicAdd(&rec_drop, n); return; }   // writer behind: drop this block
+    for (int i = 0; i < n; i++) {
+        unsigned k = (w + (unsigned)i) % REC_RING;
+        rec_ring[2 * k] = s[2 * i]; rec_ring[2 * k + 1] = s[2 * i + 1];
+    }
+    SDL_AtomicSet(&rec_w, (int)(w + (unsigned)n));
+}
+static void rec_header(FILE *f, uint32_t frames) {
+    uint32_t data = frames * 4, riff = 36 + data, fmt_sz = 16, rate = OUT_RATE, bps = OUT_RATE * 4;
+    uint16_t pcm = 1, ch = 2, al = 4, bits = 16;
+    fseek(f, 0, SEEK_SET);
+    fwrite("RIFF", 1, 4, f); fwrite(&riff, 4, 1, f); fwrite("WAVEfmt ", 1, 8, f); fwrite(&fmt_sz, 4, 1, f);
+    fwrite(&pcm, 2, 1, f); fwrite(&ch, 2, 1, f); fwrite(&rate, 4, 1, f); fwrite(&bps, 4, 1, f);
+    fwrite(&al, 2, 1, f); fwrite(&bits, 2, 1, f); fwrite("data", 1, 4, f); fwrite(&data, 4, 1, f);
+}
+static int rec_thread(void *arg) {
+    (void)arg;
+#ifdef __vita__
+    sceKernelChangeThreadCpuAffinityMask(sceKernelGetThreadId(), SCE_KERNEL_CPU_MASK_USER_2);
+#endif
+    SDL_SetThreadPriority(SDL_THREAD_PRIORITY_LOW);
+    char prev[600];
+    snprintf(prev, sizeof prev, "%.*s.prev.wav", (int)(strlen(g_hk_rec_path) > 4 ? strlen(g_hk_rec_path) - 4 : strlen(g_hk_rec_path)), g_hk_rec_path);
+    FILE *f = NULL; uint32_t frames = 0; unsigned drops_logged = 0;
+    for (;;) {
+        SDL_Delay(200);
+        if (!f) {
+            f = fopen(g_hk_rec_path, "w+b");
+            if (!f) { rt_log("[rec] cannot create %s\n", g_hk_rec_path); return 0; }
+            frames = 0; rec_header(f, 0);
+        }
+        unsigned w = (unsigned)SDL_AtomicGet(&rec_w), r = (unsigned)SDL_AtomicGet(&rec_r);
+        if (w == r) continue;
+        fseek(f, 44 + (long)frames * 4, SEEK_SET);
+        while (r != w) {
+            unsigned k = r % REC_RING, run = REC_RING - k;
+            if (run > w - r) run = w - r;
+            fwrite(rec_ring + 2 * k, 4, run, f);
+            r += run; frames += run;
+        }
+        SDL_AtomicSet(&rec_r, (int)r);
+        rec_header(f, frames);
+        fflush(f);
+        unsigned d = (unsigned)SDL_AtomicGet(&rec_drop);
+        if (d != drops_logged) { rt_log("[rec] %u frames dropped (writer too slow)\n", d - drops_logged); drops_logged = d; }
+        if (frames >= (uint32_t)OUT_RATE * REC_FILE_S) {
+            fclose(f); f = NULL;
+            remove(prev);
+            if (rename(g_hk_rec_path, prev)) rt_log("[rec] rename to %s failed\n", prev);
+        }
+    }
+}
+static void rec_start(void) {
+    if (!g_hk_rec_path || rec_ring) return;
+    int16_t *ring = calloc((size_t)REC_RING * 2, sizeof(int16_t));
+    if (!ring) return;
+    rec_ring = ring;
+    SDL_Thread *t = SDL_CreateThread(rec_thread, "hkrec", NULL);
+    if (!t) { rt_log("[rec] no thread\n"); rec_ring = NULL; free(ring); return; }
+    SDL_DetachThread(t);
+    rt_log("[rec] recording the output to %s (previous %d s in .prev.wav)\n", g_hk_rec_path, REC_FILE_S);
+}
+
 static void mix(void *ud, Uint8 *stream, int len) {
     (void)ud;
     int n = len / 4;
     if (n <= 0) return;
     if ((unsigned)n > MIX_FRAMES) n = MIX_FRAMES;   // the device is opened with MIX_FRAMES samples
     late_check(n);
+    Uint64 t_mix0 = SDL_GetPerformanceCounter();
     float *acc = mix_acc;
     memset(acc, 0, (size_t)n * 2 * sizeof(float));
     // The mixing itself runs without the lock: the game's DirectSound calls (Play, SetVolume, GetCurrentPosition,
@@ -254,18 +346,22 @@ static void mix(void *ud, Uint8 *stream, int len) {
         v->vpk = vpk;
         v->lp[0] = z0; v->lp[1] = z1; v->lp[2] = z2; v->lp[3] = z3;
     }
+    Uint64 t_mix1 = SDL_GetPerformanceCounter();   // voices mixed: [t_mix0, t_mix1] is the per-voice work
     SDL_LockMutex(mx);
     for (int j = 0; j < nv; j++) {
         struct Voice *v = &vs[j];
         DSBuf *b = v->b;
-        if (v->ghost) continue;
+        if (v->ghost) {   // a fade-out tail longer than this block goes on in the next one
+            if (!v->ended && v->ramp > 0.f && n_ghost < 64) ghosts[n_ghost++] = *v;
+            continue;
+        }
         int alive = 0;
         for (int k = 1; k < MAX_OBJ && !alive; k++) alive = g_obj[k] == b;
         if (!alive || b->gen != v->gen || !b->playing) continue;   // released, restarted, stopped or moved
         b->pos = (double)v->pos / 65536.0;
         b->ramp = v->ramp;
         memcpy(b->lp, v->lp, sizeof b->lp);
-        if (v->ended) { b->playing = 0; dup_release(b); }
+        if (v->ended) b->playing = 0;
         double before = v->before;
         for (int q = 0; q < b->nnotify; q++) {   // position notifications crossed during this block
             uint32_t off = b->notify[q].off;
@@ -284,11 +380,8 @@ static void mix(void *ud, Uint8 *stream, int len) {
         if (!t0) t0 = now;
         if (now - t0 > 5 * SDL_GetPerformanceFrequency() && getenv("HK_TRACE_DS")) {
             rt_log("[mix] max voices %d\n", maxv); maxv = 0; t0 = now;
-            for (int k = 1; k < MAX_OBJ; k++) { DSBuf *q = g_obj[k]; if (q && q->kind == K_BUF && q->playing) {
-                int orphan = 0;   // a silent copy whose twin no longer plays (must not happen, see dup_release)
-                if (q->dup) { orphan = 1; for (int j = 1; j < MAX_OBJ; j++) if (g_obj[j] == q->dup_of && q->dup_of->playing) orphan = 0; }
-                rt_log("[mix]  #%d vol %d pan %d freq %u rate %u pos %.0f/%u loop %d dup %d%s\n", k, q->volume, q->pan, q->freq, q->rate, q->pos, q->align ? q->size / q->align : 0, q->looping, q->dup, orphan ? " ORPHAN" : "");
-            } }
+            for (int k = 1; k < MAX_OBJ; k++) { DSBuf *q = g_obj[k]; if (q && q->kind == K_BUF && q->playing)
+                rt_log("[mix]  #%d vol %d pan %d freq %u rate %u pos %.0f/%u loop %d\n", k, q->volume, q->pan, q->freq, q->rate, q->pos, q->align ? q->size / q->align : 0, q->looping); }
         }
         (void)tsum;
         static uint64_t outn; extern unsigned g_frame;   // HK_TRACE_DS: audio time -> game frame, every second
@@ -296,42 +389,91 @@ static void mix(void *ud, Uint8 *stream, int len) {
         outn += (unsigned)n;
     }
     SDL_UnlockMutex(mx);
-    // Fixed master gain (a constant volume was requested: the block limiter that ducked the whole mix in loud
-    // scenes was unpleasant). In-phase copies are already silenced in buf_play, so loud moments rarely pass the
-    // knee at 0.8 full scale; above it a soft curve rounds the peak instead of clipping hard.
-    // The Vita pause screen sets g_hk_volume (1..10 -> 0.06..0.6, saved in hkport.cfg); otherwise HK_MASTER or 0.22.
+    // Output stage. DirectSound mixes every playing voice at the gain the game set (DSBVOLUME, 0 = unity) and adds
+    // them; Windows saturates the 16-bit sum. Here the sum is scaled by a fixed master gain (the player's volume:
+    // g_hk_volume from the Vita pause screen, 1..10 -> 0.06..0.6; on PC HK_MASTER or 0.22), so a scene keeps the
+    // balance and loudness relations of the original. There is no ducking or pumping: a sample is changed only
+    // above LIM_T (0.9 full scale), where a tanh curve takes the place of Windows' hard clip and reaches full scale
+    // only asymptotically. Below LIM_T the output is the plain sum (bit-exact apart from rounding).
     extern float g_hk_volume;
     static float env_master; if (env_master == 0.f) { const char *e = getenv("HK_MASTER"); env_master = e ? (float)atof(e) : 0.22f; }
-    float master = g_hk_volume > 0.f ? g_hk_volume : env_master;   // HK_MASTER: test aid; 0.22 (was 0.35): the console log had 118 of 118 fight blocks above the knee
+    float master = g_hk_volume > 0.f ? g_hk_volume : env_master;
     int16_t *out = (int16_t *)stream;
     unsigned over = 0;
+    float pk = 0.f;   // peak of the scaled sum before the limiter
+#define LIM_T 0.9f
     for (int i = 0; i < n * 2; i++) {
         float x = acc[i] * master, m = fabsf(x);
-        if (m > 0.8f) { x = copysignf(0.8f + 0.2f * tanhf((m - 0.8f) / 0.2f), x); over++; }
+        if (m > pk) pk = m;
+        if (m > LIM_T) { x = copysignf(LIM_T + (1.f - LIM_T) * tanhf((m - LIM_T) / (1.f - LIM_T)), x); over++; }
         float v = x * 32767.f;
-        out[i] = (int16_t)(v > 32767.f ? 32767 : v < -32768.f ? -32768 : v);
+        out[i] = (int16_t)(v > 32767.f ? 32767 : v < -32768.f ? -32768 : lrintf(v));
     }
-    {   // Console evidence, at most one line every 5 s: blocks that needed the soft knee, and blocks that came
-        // out (nearly) silent although a voice louder than -20 dB was playing (sound heard cutting out on the console).
-        static Uint64 t_last; static unsigned blocks, quiet;
+    hk_rec_push(out, n);   // rec=1 / HK_REC: copy of the output for the recorder thread (no I/O here)
+    // Blocks that reached the limiter: the loudest one of each 5 s window is kept (peak of the scaled sum and its
+    // voices louder than 0.05: sample address/length in frames, gain, own peak) and logged with the 5 s line, so a
+    // console log names the sounds that pile up. HK_TRACE_DS=2 logs every such block.
+    static char lim_worst[400]; static float lim_worst_pk;
+    if (over) {
+        static int t2 = -1; if (t2 < 0) { const char *e = getenv("HK_TRACE_DS"); t2 = e && atoi(e) >= 2; }
+        if (t2 || pk > lim_worst_pk) {
+            extern unsigned g_frame;
+            char line[400]; int len = snprintf(line, sizeof line, "f%u pk %.2f nv %d:", g_frame, pk, nv);
+            for (int j = 0; j < nv && len < (int)sizeof line - 40; j++) if (vs[j].vpk * master > 0.05f)
+                len += snprintf(line + len, sizeof line - len, " [%08x/%u g %.2f pk %.2f%s]", vs[j].mem, vs[j].frames,
+                                vs[j].gl, vs[j].vpk * master, vs[j].ghost ? " gh" : "");
+            if (t2) rt_log("[lim] %s\n", line);
+            if (pk > lim_worst_pk) { lim_worst_pk = pk; memcpy(lim_worst, line, sizeof lim_worst); }
+        }
+    }
+    {   // Console evidence, at most one line every 5 s: blocks that reached the limiter, blocks that came out (nearly)
+        // silent although a voice louder than -26 dB was playing, mixed voices, peak of the scaled sum, mix time per
+        // block (voice loop only, and the whole callback) and the number of starts (Play of a stopped buffer).
+        static Uint64 t_last; static unsigned blocks, quiet, samples_over;
         if (over) blocks++;
+        samples_over += over;
         int audible = 0;
-        for (int j = 0; j < nv; j++) if (vs[j].vpk > 0.05f) audible++;   // voices whose own output was loud
-        float pk = 0.f;
-        for (int i = 0; i < n * 2; i++) { float m = fabsf(acc[i]); if (m > pk) pk = m; }
-        if (audible && pk < 0.002f) {
+        for (int j = 0; j < nv; j++) if (vs[j].vpk > 0.05f) audible++;
+        if (audible && pk < 0.002f * master) {
             quiet++;
             if (quiet <= 3) {
                 extern unsigned g_frame;
                 rt_log("[mix] silent block with %d audible voices (of %d) frame %u:", audible, nv, g_frame);
-                for (int j = 0; j < nv && j < 8; j++) rt_log(" [g %.2f pk %.2f dup %d pos %llu/%u]", vs[j].gl, vs[j].vpk, vs[j].dup, (unsigned long long)(vs[j].pos >> 16), vs[j].frames);
+                for (int j = 0; j < nv && j < 8; j++) rt_log(" [g %.2f pk %.2f pos %llu/%u]", vs[j].gl, vs[j].vpk, (unsigned long long)(vs[j].pos >> 16), vs[j].frames);
                 rt_log("\n");
             }
         }
-        if ((blocks || quiet) && now_ok(&t_last)) {
+        static unsigned nblk, nvmax, namax, ns0, ng0; static float sumpk; static double ms_max, ms_tot, cb_max;
+        int naud = 0;
+        for (int j = 0; j < nv; j++) if (!vs[j].ghost && (vs[j].gl > 0.f || vs[j].gr > 0.f)) naud++;
+        if ((unsigned)nv > nvmax) nvmax = (unsigned)nv;
+        if ((unsigned)naud > namax) namax = (unsigned)naud;
+        if (pk > sumpk) sumpk = pk;
+        double hzms = (double)SDL_GetPerformanceFrequency() / 1000.0;
+        double ms = (double)(t_mix1 - t_mix0) / hzms, cb = (double)(SDL_GetPerformanceCounter() - t_mix0) / hzms;
+        if (ms > ms_max) ms_max = ms;
+        if (cb > cb_max) cb_max = cb;
+        ms_tot += ms; nblk++;
+        // Printed when the window had something notable (limiter, silent block, >= 12 voices, a dropped tail, mix
+        // time > 5 ms per block), otherwise once a minute as a heartbeat.
+        static unsigned quiet_windows;
+        if (nvmax && now_ok(&t_last)) {
             extern unsigned g_frame;
-            rt_log("[mix] 5 s: %u blocks above the soft knee, %u silent blocks with audible voices, frame %u\n", blocks, quiet, g_frame);
-            blocks = quiet = 0;
+            SDL_LockMutex(mx);
+            unsigned s0 = st_starts, g0 = st_ghost_drop;
+            SDL_UnlockMutex(mx);
+            int notable = blocks || quiet || namax >= 12 || g0 != ng0 || ms_max > 5.0 || getenv("HK_TRACE_DS");
+            if (!notable && ++quiet_windows < 12) goto window_done;
+            quiet_windows = 0;
+            rt_log("[mix] 5 s: %u blocks (%u samples) above the limiter threshold %.2f, %u silent blocks with audible voices, frame %u\n",
+                   blocks, samples_over, LIM_T, quiet, g_frame);
+            rt_log("[mix]  load: %u blocks, voices max %u (audible %u), sum peak %.2f (master %.2f), mix ms max %.2f avg %.2f (callback max %.2f, block %.1f ms), starts %u tails-dropped %u\n",
+                   nblk, nvmax, namax, sumpk, master, ms_max, nblk ? ms_tot / nblk : 0.0, cb_max, n * 1000.0 / OUT_RATE,
+                   s0 - ns0, g0 - ng0);
+            if (lim_worst_pk > 0.f) rt_log("[mix]  loudest: %s\n", lim_worst);
+        window_done:
+            ns0 = s0; ng0 = g0;
+            blocks = quiet = samples_over = 0; nblk = nvmax = namax = 0; sumpk = 0.f; ms_max = ms_tot = cb_max = 0.0; lim_worst_pk = 0.f;
         }
     }
     if (n * 4 < len) memset(stream + n * 4, 0, (size_t)(len - n * 4));
@@ -341,6 +483,8 @@ static void audio_start(void) {
     if (audio_dev) return;
     if (!mx) mx = SDL_CreateMutex();
     if (getenv("HK_NOSOUND")) return;
+    { const char *e = getenv("HK_MUSIC"); if (e) g_hk_music_volume = (float)atof(e); }   // test aid: music gain on PC
+    { const char *e = getenv("HK_REC"); if (e && *e && !g_hk_rec_path) g_hk_rec_path = strcmp(e, "1") ? e : "rec.wav"; }
     SDL_AudioSpec want = {0}, have;
     want.freq = OUT_RATE;
     want.format = AUDIO_S16SYS;
@@ -349,12 +493,15 @@ static void audio_start(void) {
     want.callback = mix;
     audio_dev = SDL_OpenAudioDevice(NULL, 0, &want, &have, 0);
     if (!audio_dev) rt_log("[dsound] SDL audio: %s\n", SDL_GetError());
-    else { SDL_PauseAudioDevice(audio_dev, 0); rt_log("[dsound] audio %d Hz, %d frames\n", have.freq, have.samples); }
+    else {
+        rt_log("[dsound] audio %d Hz, %d frames\n", have.freq, have.samples);
+        rec_start();
+        SDL_PauseAudioDevice(audio_dev, 0);
+    }
 }
 
 // Under mx (or before the buffer is visible to the mixer).
 static void free_buffer(DSBuf *b) {
-    dup_release(b);
     if (b->shared_refs && --*b->shared_refs == 0) { gheap_free(b->mem); free(b->shared_refs); }
     obj_unwrap(b);
     free(b);
@@ -473,25 +620,38 @@ static void buf_lock(CPU *c) {
     if (ARG(7)) W32(ARG(7), n - n1);
     STDRET(8, DS_OK);
 }
+// Play/Stop/SetCurrentPosition/SetVolume/SetPan/SetFrequency follow DirectSound 5 exactly; every voice that plays is
+// mixed at the gain the game set. Until 2026-11-23 buf_play also decided which copies of a sample were heard
+// (copies started together mixed silent, at most 6 audible copies with the oldest faded out, a louder copy taking
+// over, 250 ms fade-in of ambience loops). Those rules answered console logs of block peaks of 2-9x full scale in
+// the a0 house explosion and the bazooka/a2 fights, which were caused by full-scale DC voices created for missing
+// WAVs on the Vita (port/rt/heap.c, too_big), not by the game's own copies: on PC, a0 with every copy audible
+// peaks at 0.4-0.5 of full scale (master 0.22). The game bounds its copies itself (voice pool, table 0x4A5BA0).
 #define TR2(name, val) do { static int t2 = -1; if (t2 < 0) { const char *e = getenv("HK_TRACE_DS"); t2 = e && atoi(e) >= 2; } \
-    if (t2) { extern unsigned g_frame; rt_log("[ds2] f%u %s #%u %d pl %d pos %.0f (ret %08x)\n", g_frame, name, R32(b->guest + 4) & 0xffffu, (int)(val), b->playing, b->pos, R32(c->esp)); } } while (0)
+    if (t2) { extern unsigned g_frame; rt_log("[ds2] f%u %s #%u %d pl %d pos %.0f/%u rate %u vol %d (ret %08x)\n", g_frame, name, R32(b->guest + 4) & 0xffffu, (int)(val), b->playing, b->pos, b->align ? b->size / b->align : 0, b->rate, b->volume, R32(c->esp)); } } while (0)
 static void buf_play(CPU *c) {   // (this, reserved, priority, flags): DSBPLAY_LOOPING 1
     HOSTFN; BUFN(4);
     TR2("Play", ARG(4));
+    if (b->primary) STDRET(4, DS_OK);   // the primary buffer "plays" whenever a secondary one does
     SDL_LockMutex(mx);
-    if (!b->playing) {   // Play on a playing buffer only changes the looping flag: keep its position
+    // Play on a playing buffer does not restart it: it keeps its position and only takes the new looping flag.
+    // Play on a stopped buffer resumes from its current position (0 after a one-shot ended, kept after Stop).
+    if (!b->playing) {
         b->gen = ++g_gen;
         b->ramp = 0.f;
         memset(b->lp, 0, sizeof b->lp);
-        // The game often starts the same sample on several duplicates at once (explosion debris, gunfire): the
-        // copies add up in phase (block peaks of 5-9x full scale logged on the console), which forced the limiter
-        // down to 15% gain and made the whole mix pump. A copy started within 40 ms of another playing copy of
-        // the same sample still plays for the game (status, position, notifications) but is mixed silent.
-        b->dup = 0; b->dup_of = NULL;
-        for (int k = 1; k < MAX_OBJ && b->mem; k++) {
-            DSBuf *o = g_obj[k];
-            if (o && o != b && o->kind == K_BUF && o->playing && !o->dup && o->mem == b->mem && o->rate &&
-                o->pos < (double)o->rate * 0.04 && o->pos >= b->pos - 1.0) { b->dup = 1; b->dup_of = o; break; }
+        st_starts++;
+        {   // HK_TRACE_DS=2: other copies of this sample already playing (age in ms) when it starts
+            static int t2 = -1; if (t2 < 0) { const char *e = getenv("HK_TRACE_DS"); t2 = e && atoi(e) >= 2; }
+            if (t2 && b->mem) {
+                extern unsigned g_frame; int cnt = 0;
+                for (int k = 1; k < MAX_OBJ; k++) { DSBuf *o = g_obj[k];
+                    if (o && o != b && o->kind == K_BUF && o->playing && o->mem == b->mem && o->rate) {
+                        if (!cnt++) rt_log("[copies] f%u %08x/%u vol %d:", g_frame, b->mem, b->size / b->align, b->volume);
+                        rt_log(" %.0fms", o->pos * 1000.0 / o->rate);
+                    } }
+                if (cnt) rt_log("\n");
+            }
         }
     }
     b->playing = 1;
@@ -499,28 +659,52 @@ static void buf_play(CPU *c) {   // (this, reserved, priority, flags): DSBPLAY_L
     SDL_UnlockMutex(mx);
     STDRET(4, DS_OK);
 }
+// SetCurrentPosition: playing or not, the buffer continues from the new offset (a playing one keeps playing).
 static void buf_set_position(CPU *c) {
     HOSTFN; BUFN(2);
     TR2("SetPos", ARG(2));
+    if (b->primary || !b->align || ARG(2) >= b->size) STDRET(2, DSERR_INVALIDPARAM);
     SDL_LockMutex(mx);
     ghost_add(b);   // the old position fades out while the new one fades in
-    if (b->align) b->pos = (double)(ARG(2) / b->align);
+    b->pos = (double)(ARG(2) / b->align);
     if (b->playing) { b->ramp = 0.f; memset(b->lp, 0, sizeof b->lp); }
-    dup_release(b);
     b->gen = ++g_gen;
     SDL_UnlockMutex(mx);
     STDRET(2, DS_OK);
 }
 static void buf_set_format(CPU *c) { HOSTFN; STDRET(2, DS_OK); }   // primary buffer format: the mixer resamples anyway
-static void buf_set_volume(CPU *c) { HOSTFN; BUFN(2); TR2("Vol", ARG(2)); b->volume = (int32_t)ARG(2); STDRET(2, DS_OK); }
-static void buf_set_pan(CPU *c) { HOSTFN; BUFN(2); TR2("Pan", ARG(2)); b->pan = (int32_t)ARG(2); STDRET(2, DS_OK); }
-static void buf_set_frequency(CPU *c) { HOSTFN; BUFN(2); TR2("Freq", ARG(2)); b->freq = ARG(2); STDRET(2, DS_OK); }
+// Out-of-range values fail with DSERR_INVALIDPARAM and leave the setting as it was, as in DirectSound. Logged once.
+static void bad_param(const char *what, int32_t v) {
+    static int n;
+    if (n++ < 8) rt_log("[dsound] %s(%d) out of range: DSERR_INVALIDPARAM\n", what, v);
+}
+static void buf_set_volume(CPU *c) {   // DSBVOLUME_MIN -10000 .. DSBVOLUME_MAX 0 (hundredths of dB)
+    HOSTFN; BUFN(2); TR2("Vol", ARG(2));
+    int32_t v = (int32_t)ARG(2);
+    if (v < -10000 || v > 0) { bad_param("SetVolume", v); STDRET(2, DSERR_INVALIDPARAM); }
+    b->volume = v;
+    STDRET(2, DS_OK);
+}
+static void buf_set_pan(CPU *c) {   // DSBPAN_LEFT -10000 .. DSBPAN_RIGHT 10000
+    HOSTFN; BUFN(2); TR2("Pan", ARG(2));
+    int32_t v = (int32_t)ARG(2);
+    if (v < -10000 || v > 10000) { bad_param("SetPan", v); STDRET(2, DSERR_INVALIDPARAM); }
+    b->pan = v;
+    STDRET(2, DS_OK);
+}
+static void buf_set_frequency(CPU *c) {   // DSBFREQUENCY_ORIGINAL 0, or DSBFREQUENCY_MIN 100 .. DSBFREQUENCY_MAX 100000
+    HOSTFN; BUFN(2); TR2("Freq", ARG(2));
+    uint32_t f = ARG(2);
+    if (f && (f < 100 || f > 100000)) { bad_param("SetFrequency", (int32_t)f); STDRET(2, DSERR_INVALIDPARAM); }
+    b->freq = f;
+    STDRET(2, DS_OK);
+}
+// Stop keeps the position: a later Play resumes there.
 static void buf_stop(CPU *c) {
     HOSTFN; BUFN(1);
     TR2("Stop", 0);
     SDL_LockMutex(mx);
     ghost_add(b);
-    dup_release(b);
     b->playing = 0;
     b->gen = ++g_gen;
     for (int k = 0; k < b->nnotify; k++)
@@ -540,6 +724,21 @@ static void ds_create_buffer(CPU *c) {
     HOSTFN;
     W32(ARG(3), 0);
     uint32_t d = ARG(2), flags = R32(d + 4), bytes = R32(d + 8), wfx = R32(d + 16);
+    // A secondary buffer needs a valid PCM format and DSBSIZE_MIN 4 .. DSBSIZE_MAX 0x0FFFFFFF bytes, as in DirectSound
+    // (DSERR_BADFORMAT / DSERR_INVALIDPARAM otherwise): the buffer is not created. HDKWIN.EXE's loader handles the
+    // failure (0x45C59C: Release, no voice). A garbage format used to be accepted and mixed as 8-bit (see heap.c too_big).
+    if (!(flags & 1)) {
+        uint32_t tag = wfx ? R16(wfx) : 0, ch = wfx ? R16(wfx + 2) : 0, rate = wfx ? R32(wfx + 4) : 0;
+        uint32_t al = wfx ? R16(wfx + 12) : 0, bits = wfx ? R16(wfx + 14) : 0;
+        uint32_t err = !wfx || bytes < 4 || bytes > 0x0FFFFFFFu ? DSERR_INVALIDPARAM
+                     : tag != 1 || ch < 1 || ch > 2 || (bits != 8 && bits != 16) || al != ch * bits / 8 ||
+                       rate < 100 || rate > 100000 ? 0x88780064u : 0;   // DSERR_BADFORMAT
+        if (err) {
+            rt_log("[dsound] CreateSoundBuffer refused: bytes %u format tag %u ch %u rate %u align %u bits %u (ret %08x)\n",
+                   bytes, tag, ch, rate, al, bits, R32(c->esp));
+            STDRET(4, err);
+        }
+    }
     DSBuf *b = calloc(1, sizeof *b);
     if (!b) STDRET(4, E_OUTOFMEMORY_);
     b->flags = flags;
@@ -551,6 +750,7 @@ static void ds_create_buffer(CPU *c) {
         b->shared_refs = calloc(1, sizeof(int));
         if (!b->mem || !b->shared_refs) { gheap_free(b->mem); free(b->shared_refs); free(b); STDRET(4, E_OUTOFMEMORY_); }
         *b->shared_refs = 1;
+        if (bytes >= (1u << 20) && RT_TRACE("HK_MEMLOG")) rt_log("[dsound] big buffer %u KB (guest %08x) at frame %u\n", bytes >> 10, b->mem, g_frame);
         if (b->bits == 8) memset(g_mem + b->mem, 0x80, bytes);   // 8-bit silence
     }
     SDL_LockMutex(mx);
@@ -582,7 +782,7 @@ static void ds_duplicate(CPU *c) {
     if (!b) { W32(ARG(3), 0); STDRET(3, E_OUTOFMEMORY_); }
     SDL_LockMutex(mx);
     *b = *o;
-    b->playing = 0; b->pos = 0; b->nnotify = 0; b->dup = 0; b->dup_of = NULL;
+    b->playing = 0; b->pos = 0; b->nnotify = 0; b->ramp = 0.f;
     memset(b->lp, 0, sizeof b->lp);
     if (b->shared_refs) ++*b->shared_refs;
     W32(ARG(3), obj_wrap(b, K_BUF, g_vt_buf));

@@ -12,6 +12,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "hk/font_data.h"
+#include "pause_menu.h"
+void w32_post_message(uint32_t hwnd, uint32_t msg, uint32_t wp, uint32_t lp);
+void w32_set_lang_overlay(const char *dir);
+#define HWND_MAIN_DLG 0x00010010u   // port/hk/dialog.c
 
 #define HK_DATA_DIR "ux0:data/handkerchief"
 
@@ -30,9 +34,12 @@ int plat_width(void) { return 640; }
 int plat_height(void) { return 480; }
 void plat_show_window(void) {}
 
+static int msgbox_loop(const char *title, const char *text, unsigned type);   // below, after the frame helpers
 int plat_message_box(const char *title, const char *text, unsigned type) {
     rt_log("[msgbox] %s: %s (type %u)\n", title ? title : "", text ? text : "", type);
-    return 0;   // no implicit answer
+    int r = msgbox_loop(title, text, type);
+    rt_log("[msgbox] answer %d\n", r);
+    return r;
 }
 
 // Text entry (plat.h): the system keyboard (IME dialog). SDL's GXM renderer calls sceCommonDialogUpdate on every
@@ -96,11 +103,27 @@ int plat_pump_events(void) {
 // Aspect: 0 = 4:3 letterboxed (original proportions), 1 = stretched to the full 16:9 screen.
 // Toggled with Triangle on the pause screen, saved in HK_DATA_DIR/hkport.cfg.
 // FPS counter (frames shown per second, top left): toggled with Square on the pause screen, saved there too.
+// menu_scale=2|4 (hkport.cfg only): largest text scale of the pause menus (1x, 2x; default 4; 3 counts as 2).
 // wide_native=1 (hkport.cfg only, off by default; no pause toggle yet): native widescreen, the game draws an
 // 848x480 screen (port/hk/wide.c, docs/widescreen-plan.md) that fills the 960x544 screen at the 4:3 setting.
 #define HK_CFG HK_DATA_DIR "/hkport.cfg"
+extern int g_hk_prof;   // port/hk/ddraw.c: hkport.cfg prof=1 logs per-frame timings to hklog.txt
+extern int g_h_maxpages;   // port/win32/handles.c: hkport.cfg handle_pages=<n> caps the handle table (1 = old 1024 slots)
+extern int g_hk_memlog;   // port/hk/memlog.c: hkport.cfg memlog=1 logs "[mem]" lines to hklog.txt (2: + guest heap histogram)
+void hk_stress_init(const char *spec);   // port/hk/memlog.c
+int hk_stress_key(int vk);
+static char g_stress_spec[32];   // hkport.cfg stress=<kind>:<n> (area, territory, save, menus, idle): in-process stress driver, a test aid
 static int g_present_thread;   // hkport.cfg present_thread=1 (see plat_present_threaded)
+static int g_map[PM_NBTN];   // gameplay button map (pause_menu.h), hkport.cfg map_<button>=<action>
+static const unsigned g_btn_mask[PM_NBTN] = {SCE_CTRL_CROSS, SCE_CTRL_SQUARE, SCE_CTRL_CIRCLE, SCE_CTRL_TRIANGLE, SCE_CTRL_LTRIGGER, SCE_CTRL_RTRIGGER, SCE_CTRL_SELECT};
+#define HK_LANG_DIR HK_DATA_DIR "/lang/ptbr"   // the player's copy of the PT-BR fan translation (release/README.md)
+static int g_lang, g_lang_ok, g_started_lang;   // hkport.cfg lang=pt; g_lang_ok: lang/ptbr/HDKWINBR.EXE exists
+static int lang_files_ok(void) { FILE *f = fopen(HK_LANG_DIR "/HDKWINBR.EXE", "rb"); if (f) fclose(f); return f != NULL; }
 static int g_wide, g_fps, g_wide_native, g_vol = 6, g_mus = 6;   // g_vol: master volume 1..10 (pause screen, Left/Right)
+// rec=1 (hkport.cfg only): the final sound output is recorded to HK_DATA_DIR/rec.wav (last 60 s, the minute before in
+// rec.prev.wav; port/hk/dsound.c, recorder thread on core 2) so a bad-sounding moment can be analysed on a PC.
+static int g_rec;
+extern const char *g_hk_rec_path;   // port/hk/dsound.c
 extern float g_hk_volume;   // port/hk/dsound.c
 extern float g_hk_music_volume;   // port/hk/dsound.c
 static void apply_volume(void) { if (g_mus < 1) g_mus = 1; if (g_mus > 10) g_mus = 10; g_hk_music_volume = 0.18f * (float)g_mus; if (g_vol < 1) g_vol = 1; if (g_vol > 10) g_vol = 10; g_hk_volume = 0.06f * (float)g_vol; }
@@ -110,16 +133,30 @@ static void apply_aspect(void) {
     else SDL_RenderSetLogicalSize(g_ren, g_hk_ws_w, 480);
 }
 static void load_cfg(void) {
+    pm_map_defaults(g_map);
     FILE *f = fopen(HK_CFG, "r");
     if (!f) return;
     char line[64];
-    while (fgets(line, sizeof line, f)) { sscanf(line, "wide=%d", &g_wide); sscanf(line, "fps=%d", &g_fps); sscanf(line, "volume=%d", &g_vol); sscanf(line, "music=%d", &g_mus);
-                                     sscanf(line, "wide_native=%d", &g_wide_native); sscanf(line, "present_thread=%d", &g_present_thread); }
+    int ver = 0;
+    while (fgets(line, sizeof line, f)) {
+        char bk[16], ak[16];
+        if (sscanf(line, "map_%15[a-z]=%15s", bk, ak) == 2)
+            for (int b = 0; b < PM_NBTN; b++) if (!strcmp(bk, pm_btn_key[b]))
+                for (int a = 0; a < PM_NACT; a++) if (!strcmp(ak, pm_act_key[a])) g_map[b] = a; { char lv[8]; if (sscanf(line, "lang=%7s", lv) == 1) g_lang = !strcmp(lv, "pt"); } sscanf(line, "wide=%d", &g_wide); sscanf(line, "fps=%d", &g_fps); sscanf(line, "volume=%d", &g_vol); sscanf(line, "music=%d", &g_mus);
+                                     sscanf(line, "wide_native=%d", &g_wide_native); sscanf(line, "present_thread=%d", &g_present_thread); sscanf(line, "prof=%d", &g_hk_prof); sscanf(line, "memlog=%d", &g_hk_memlog); sscanf(line, "handle_pages=%d", &g_h_maxpages); sscanf(line, "stress=%31s", g_stress_spec); sscanf(line, "menu_scale=%d", &g_pm_ui); sscanf(line, "map_version=%d", &ver); sscanf(line, "rec=%d", &g_rec); }
     fclose(f);
+    if (g_rec) g_hk_rec_path = HK_DATA_DIR "/rec.wav";
+    // Before map_version 3 Select was the game menu (v1) or RESULTS (v2, now Start > Results); both become the tips &
+    // controls card once. (A saved map_select=results no longer parses, so it already falls back to the default.)
+    if (ver < 3 && g_map[PB_SELECT] == ACT_MENU) g_map[PB_SELECT] = ACT_TIPS;
 }
 static void save_cfg(void) {
     FILE *f = fopen(HK_CFG, "w");
-    if (f) { fprintf(f, "wide=%d\nfps=%d\nwide_native=%d\nvolume=%d\nmusic=%d\npresent_thread=%d\n", g_wide, g_fps, g_wide_native, g_vol, g_mus, g_present_thread); fclose(f); }
+    if (f) { fprintf(f, "lang=%s\nwide=%d\nfps=%d\nwide_native=%d\nvolume=%d\nmusic=%d\npresent_thread=%d\nprof=%d\nmenu_scale=%d\n", g_lang ? "pt" : "en", g_wide, g_fps, g_wide_native, g_vol, g_mus, g_present_thread, g_hk_prof, g_pm_ui);
+        fprintf(f, "map_version=3\n");
+        if (g_rec) fprintf(f, "rec=%d\n", g_rec);
+        for (int b = 0; b < PM_NBTN; b++) fprintf(f, "map_%s=%s\n", pm_btn_key[b], pm_act_key[g_map[b]]);
+        fclose(f); }
 }
 // Text on a g_hk_ws_w x 480 XRGB buffer with the port's bitmap font (cell 18).
 static void draw_text(uint32_t *buf, int x, int y, const char *s, uint32_t color) {
@@ -136,11 +173,6 @@ static void draw_text(uint32_t *buf, int x, int y, const char *s, uint32_t color
     }
 }
 
-static int text_width(const char *s) {
-    int w = 0;
-    for (; *s; s++) { uint8_t ch = (uint8_t)*s; w += hk_fonts[1].glyphs[(ch < 0x20 ? '?' : ch) - 0x20].advance; }
-    return w;
-}
 
 static void show_frame(const uint32_t *pixels, int width, int height, int pitch_bytes) {
     if (!g_ren) return;
@@ -152,14 +184,89 @@ static void show_frame(const uint32_t *pixels, int width, int height, int pitch_
     SDL_RenderPresent(g_ren);
 }
 
+// Menu overlays (pause_menu.h "Overlay"): 960x544 ARGB canvases shown 1:1 at the native output resolution over the
+// (scaled) game frame, so the menu text is not filtered. 0 = pause menu / message box, 1 = RESULTS panel.
+static SDL_Texture *g_ovtex[2];
+static uint32_t g_ovl[2][PM_OW * PM_OH];
+static void ov_upload(int i) {
+    if (!g_ren) return;
+    if (!g_ovtex[i]) {
+        g_ovtex[i] = SDL_CreateTexture(g_ren, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, PM_OW, PM_OH);
+        if (!g_ovtex[i]) return;
+        SDL_SetTextureBlendMode(g_ovtex[i], SDL_BLENDMODE_BLEND);
+#if SDL_VERSION_ATLEAST(2, 0, 12)
+        SDL_SetTextureScaleMode(g_ovtex[i], SDL_ScaleModeNearest);
+#endif
+    }
+    SDL_UpdateTexture(g_ovtex[i], NULL, g_ovl[i], PM_OW * 4);
+}
+// The game frame as show_frame, then (ov >= 0) the frame darkened by dim/255 and overlay texture ov at the full 960x544
+// output (the logical size is lifted for that). Main (game) thread only, like every SDL call here.
+static void show_frame_ov(const uint32_t *pixels, int width, int height, int pitch_bytes, int ov, int dim) {
+    if (!g_ren) return;
+    if (!g_tex) g_tex = SDL_CreateTexture(g_ren, SDL_PIXELFORMAT_XRGB8888, SDL_TEXTUREACCESS_STREAMING, HK_WS_MAX, 480);
+    SDL_Rect src = {0, 0, width, height};
+    SDL_UpdateTexture(g_tex, &src, pixels, pitch_bytes);
+    SDL_RenderClear(g_ren);
+    SDL_RenderCopy(g_ren, g_tex, &src, NULL);
+    if (ov >= 0) {
+        SDL_RenderSetLogicalSize(g_ren, 0, 0);
+        if (dim) {
+            SDL_SetRenderDrawBlendMode(g_ren, SDL_BLENDMODE_BLEND);
+            SDL_SetRenderDrawColor(g_ren, 0, 0, 0, (Uint8)dim);
+            SDL_RenderFillRect(g_ren, NULL);
+        }
+        if (g_ovtex[ov]) SDL_RenderCopy(g_ren, g_ovtex[ov], NULL, NULL);
+        apply_aspect();
+    }
+    SDL_RenderPresent(g_ren);
+}
+
+// The last frame shown (plat_show_xrgb): the background of the message box.
+static const uint32_t *g_last_px;
+static int g_last_w, g_last_h, g_last_pitch;
+extern uint64_t g_pause_qpc;
+// MessageBoxA (port/win32/user32.c): the game asks with MB_OK (0x40F1EB) and MB_OKCANCEL (0x40F2A0, answer == IDOK:
+// "Stop this game ?" from File > Stop / F4, "Delete this game ?" from the Delete button of GAME DATA 1500). The text
+// is drawn over the darkened last frame; Cross = OK / Yes, Circle = Cancel / No. Other button sets get no answer (0).
+// The game's clocks skip the time spent here, as on the pause screen.
+static int msgbox_loop(const char *title, const char *text, unsigned type) {
+    const unsigned t = type & 15u;
+    if ((t != 0 && t != 1 && t != 3 && t != 4) || !g_last_px || !g_ren) return 0;
+    // Same look as the pause menu: the title screen's menu box, the game's font, the answers with button symbols.
+    const int two = t == 1 || t >= 3;   // two answers
+    const char *l1 = t == 3 || t == 4 ? hk_tr(S_YES) : "OK", *l2 = t == 3 || t == 4 ? hk_tr(S_NO) : hk_tr(S_CANCEL);
+    pm_overlay_msgbox(g_ovl[0], title, text, l1, two ? l2 : NULL);
+    ov_upload(0);
+    uint64_t t0 = SDL_GetPerformanceCounter();
+    SceCtrlData pad;
+    int armed = 0, r = 0;
+    for (;;) {
+        show_frame_ov(g_last_px, g_last_w, g_last_h, g_last_pitch, 0, 192);   // the last frame at 25% brightness
+        sceCtrlPeekBufferPositive(0, &pad, 1);
+        const int x = (pad.buttons & SCE_CTRL_CROSS) != 0, o = (pad.buttons & SCE_CTRL_CIRCLE) != 0;
+        if (!armed) { armed = !x && !o; }   // the press that opened the box does not answer it
+        else if (x) { r = t >= 3 ? 6 : 1; break; }   // IDYES / IDOK
+        else if (o) { r = t == 4 ? 7 : t == 3 ? 2 : t == 1 ? 2 : 1; break; }   // IDNO / IDCANCEL (MB_OK: IDOK)
+        SDL_Delay(16);
+    }
+    while (sceCtrlPeekBufferPositive(0, &pad, 1) >= 0 && (pad.buttons & (SCE_CTRL_CROSS | SCE_CTRL_CIRCLE))) SDL_Delay(16);
+    g_pause_qpc += SDL_GetPerformanceCounter() - t0;
+    return r;
+}
+
 // Start pauses: the last frame is shown darkened with a pause sign until Start is pressed again. The game's
 // clocks skip the paused time (g_pause_qpc, read by w32_qpc/w32_tick_ms) so it does not try to catch up.
 extern uint64_t g_pause_qpc;
 // Select on the pause screen leaves it and opens the game's menu bar (File: save / stop / exit, Option: Key and Game
 // Configuration, About): plat_vk_down reports F10 for a few frames, which USER32 turns into the game's right click
-// (port/hk/dialog.c hk_menu_key). In play Select opens the menu directly; Exit is in
-// its File menu.
+// (port/hk/dialog.c hk_menu_key). In a stage Select (default map) shows the tips & controls card instead (plat_show_xrgb); RESULTS is a pause menu item;
+// the menu bar is Start > Game menu there, or the "Game menu" action if the player assigns it to a button. Outside
+// a stage (title, no counters) Select still opens the menu bar directly; Exit is in its File menu.
+int hk_results_read(uint32_t out[13]);   // port/hk/results.c
 static unsigned g_menu_until;
+extern int g_hk_in_stage;  // port/hk/wide.c
+int hk_dlg_active(void);   // port/hk/dialog.c (also declared below)
 // Cheats (pause screen): the game's own Secret Option (dialog 1490, typed H D K on a
 // keyboard) has "Unrivaled Mode": while it is on, 'u' toggles invincibility and 'm' adds money. Its checkbox 1417
 // is stored at 0x4AC84C (0x4154F5 / 0x41555D). L sets that flag; R and Circle queue 'U' and 'M' presses that are
@@ -175,89 +282,94 @@ static void keyq_step(void) {   // once per presented frame: 3 frames down, 3 fr
     extern unsigned g_frame;
     if (g_keyq_n && g_frame >= g_keyq_at + 6) { memmove(g_keyq, g_keyq + 1, (size_t)--g_keyq_n); g_keyq_at = g_frame + 1; }
 }
+// Pause menu (Start): drawn by pause_menu.h (previewed on PC with port/vita/pause_preview.c). D-pad Up/Down moves,
+// Cross selects or toggles, Left/Right changes a value, Circle goes back, Start resumes from anywhere, Select opens the
+// game's menu bar directly. Save game queues F2 and Quit game queues Esc (the game's own commands), delivered after
+// the pause like the cheat keys.
 static void pause_loop(const uint32_t *pixels, int width, int height, int pitch_bytes) {
-    static uint32_t dim[480 * HK_WS_MAX];
-    // The text block (left-aligned lines) and the pause sign are centred on the g_hk_ws_w-wide frame.
-    const int bw = g_hk_ws_w, tx = (bw - text_width("Cross: widescreen OFF (restart game)")) / 2, sx = bw / 2 - 90;
+    static int started_native = -1;
+    if (started_native < 0) started_native = g_wide_native;
     uint64_t t0 = SDL_GetPerformanceCounter();
-    memset(dim, 0, sizeof dim);
-    for (int y = 0; y < height && y < 480; y++)
-        for (int x = 0; x < width && x < bw; x++)
-            dim[y * bw + x] = (pixels[y * (pitch_bytes / 4) + x] >> 2) & 0x3f3f3fu;
-    for (int y = 200; y < 280; y++)
-        for (int x = 0; x < 24; x++) { dim[y * bw + sx + 66 + x] = 0xffffffu; dim[y * bw + sx + 90 + x] = 0xffffffu; }
-    draw_text(dim, tx, 300, "Start: continue", 0xffffffu);
+    typedef struct { PmScreenArg a; int map[PM_NBTN]; } PmKey;
+    static PmKey shown_key;   // what g_ovl[0] currently holds (the menu is redrawn only when it changes)
+    memset(&shown_key, 0xff, sizeof shown_key);
     SceCtrlData pad;
-    int left_was = 1, right_was = 1, up_was = 1, dn_was = 1, x_was = 1;
-    int released = 0, tri_was = 1, sq_was = 1, sel_was = 1, l_was = 1, r_was = 1, o_was = 1, money = 0, inv = 0;
+    unsigned prev = 0xffffffffu;   // buttons of the previous poll: everything starts "held" so the opening press does nothing
+    int capture = 0, released = 0, screen = PM_MAIN, sel = 0, money = 0, inv = 0, action = 0;   // action: 1 save, 2 game menu, 3 quit
     extern unsigned g_frame;
+    uint32_t res_v[13] = {0};
     for (;;) {
-        static uint32_t shown[480 * HK_WS_MAX];
-        memcpy(shown, dim, sizeof shown);
-        draw_text(shown, tx, 324, g_wide ? "Triangle: screen 16:9" : "Triangle: screen 4:3", 0xffff80u);
-        draw_text(shown, tx, 348, g_fps ? "Square: FPS counter on" : "Square: FPS counter off", 0xffff80u);
-        draw_text(shown, tx, 372, "Select: game menu", 0xffff80u);
-        {
-            static int started_wide = -1;
-            if (started_wide < 0) started_wide = g_wide_native;
-            const char *w = g_wide_native == started_wide ? (g_wide_native ? "Cross: widescreen ON" : "Cross: widescreen OFF")
-                          : (g_wide_native ? "Cross: widescreen ON (restart game)" : "Cross: widescreen OFF (restart game)");
-            draw_text(shown, tx, 124, w, 0xffff80u);
+        PmState st = {g_wide, g_fps, g_wide_native, started_native, g_vol, g_mus, 0, 0, money, g_hk_in_stage, g_map, capture, g_lang, g_lang_ok, g_started_lang};
+        st.cheats = *(uint32_t *)(g_mem + HK_UNRIVALED) != 0;
+        st.inv_on = (*(uint32_t *)(g_mem + HK_INVINCIBLE) != 0) ^ inv;
+        int ids[16], n = pm_rows(screen, &st, ids);
+        if (sel >= n) sel = n - 1;
+        PmKey cur;
+        memset(&cur, 0, sizeof cur);
+        cur.a.screen = screen; cur.a.sel = sel; cur.a.st = st;
+        memcpy(cur.map, g_map, sizeof cur.map);
+        if (memcmp(&cur, &shown_key, sizeof cur)) {
+            if (screen == PM_RESULTS) pm_overlay_results_now(g_ovl[0], res_v);
+            else pm_overlay_screen(g_ovl[0], screen, sel, &st);
+            ov_upload(0);
+            shown_key = cur;
         }
-        {
-            char vl[48];
-            snprintf(vl, sizeof vl, "Left/Right: volume %d/10", g_vol);
-            draw_text(shown, tx, 148, vl, 0xffff80u);
-            snprintf(vl, sizeof vl, "Up/Down: music %d/10", g_mus);
-            draw_text(shown, tx, 172, vl, 0xffff80u);
-        }
-        int cheats = *(uint32_t *)(g_mem + HK_UNRIVALED) != 0;
-        draw_text(shown, tx, 396, cheats ? "L: cheats on" : "L: cheats off", 0x80ffffu);
-        if (cheats) {
-            char line[64];
-            int on = (*(uint32_t *)(g_mem + HK_INVINCIBLE) != 0) ^ inv;
-            snprintf(line, sizeof line, "R: invincible %s", on ? "ON" : "OFF");
-            draw_text(shown, tx, 420, line, 0x80ffffu);
-            snprintf(line, sizeof line, money ? "Circle: add money (x%d)" : "Circle: add money", money);
-            draw_text(shown, tx, 444, line, 0x80ffffu);
-        }
-        show_frame(shown, bw, 480, bw * 4);
+        show_frame_ov(pixels, width, height, pitch_bytes, 0, 128);   // the frame at 50% brightness under the menu
         sceCtrlPeekBufferPositive(0, &pad, 1);
-        int tri = (pad.buttons & SCE_CTRL_TRIANGLE) != 0, sq = (pad.buttons & SCE_CTRL_SQUARE) != 0;
-        if (tri && !tri_was) { g_wide = !g_wide; apply_aspect(); save_cfg(); }
-        if (sq && !sq_was) { g_fps = !g_fps; save_cfg(); }
-        // Cross: native widescreen (848x480, more of the world) on/off; the surfaces are created at startup, so the
-        // choice applies the next time the game starts.
-        int x = (pad.buttons & SCE_CTRL_CROSS) != 0;
-        if (x && !x_was) { g_wide_native = !g_wide_native; save_cfg(); }
-        x_was = x;
-        int l = (pad.buttons & SCE_CTRL_LTRIGGER) != 0, r = (pad.buttons & SCE_CTRL_RTRIGGER) != 0,
-            o = (pad.buttons & SCE_CTRL_CIRCLE) != 0;
-        if (l && !l_was) *(uint32_t *)(g_mem + HK_UNRIVALED) = !cheats;
-        if (cheats && r && !r_was) { inv = !inv; }
-        if (cheats && o && !o_was && money < 20) money++;
-        l_was = l; r_was = r; o_was = o;
-        int lf = (pad.buttons & SCE_CTRL_LEFT) != 0, rt = (pad.buttons & SCE_CTRL_RIGHT) != 0;
-        if ((lf && !left_was) || (rt && !right_was)) { g_vol += rt ? 1 : -1; apply_volume(); save_cfg(); }
-        int upb = (pad.buttons & SCE_CTRL_UP) != 0, dnb = (pad.buttons & SCE_CTRL_DOWN) != 0;
-        if ((upb && !up_was) || (dnb && !dn_was)) { g_mus += upb ? 1 : -1; apply_volume(); save_cfg(); }
-        up_was = upb; dn_was = dnb;
-        left_was = lf; right_was = rt;
-        int sel = (pad.buttons & SCE_CTRL_SELECT) != 0;
-        if (sel && !sel_was) { extern unsigned g_frame; g_menu_until = g_frame + 3; break; }
-        tri_was = tri;
-        sq_was = sq;
-        sel_was = sel;
-        if (!(pad.buttons & SCE_CTRL_START)) released = 1;
+        unsigned b = pad.buttons, press = b & ~prev;
+        prev = b;
+        if (capture) {   // Controls: the next face/shoulder button pressed gets the action; D-pad cancels
+            for (int k = 0; k < PM_NBTN; k++) if (press & g_btn_mask[k]) { pm_map_assign(g_map, k, capture); capture = 0; save_cfg(); break; }
+            if (press & (SCE_CTRL_UP | SCE_CTRL_DOWN | SCE_CTRL_LEFT | SCE_CTRL_RIGHT)) capture = 0;
+            if (!(b & SCE_CTRL_START)) released = 1;
+            else if (released) break;
+            SDL_Delay(16);
+            continue;
+        }
+        int dx = ((press & SCE_CTRL_RIGHT) != 0) - ((press & SCE_CTRL_LEFT) != 0);
+        if (press & SCE_CTRL_UP) sel = (sel + n - 1) % n;
+        if (press & SCE_CTRL_DOWN) sel = (sel + 1) % n;
+        int cross = (press & SCE_CTRL_CROSS) != 0, id = ids[sel], step = dx ? dx : cross;
+        if (step) switch (id) {
+        case R_CONTINUE: if (cross) action = -1; break;
+        case R_SAVE: if (cross && g_hk_in_stage) action = 1; break;
+        case R_CHEATS: if (cross) { screen = PM_CHEATS; sel = 0; } break;
+        case R_SETTINGS: if (cross) { screen = PM_SETTINGS; sel = 0; } break;
+        case R_RESULTS: if (cross && g_hk_in_stage && hk_results_read(res_v)) { screen = PM_RESULTS; sel = 0; } break;   // frozen counters while paused
+        case R_LOAD: if (cross) action = 4; break;
+        case R_LANG: if (step) { g_lang = !g_lang; g_lang_ok = lang_files_ok(); save_cfg(); } break;   // applies on restart
+        case R_GAMEMENU: if (cross) action = 2; break;
+        case R_QUIT: if (cross) action = 3; break;
+        case R_BACK: if (cross) { if (screen == PM_CONTROLS) { sel = 5; screen = PM_SETTINGS; } else { sel = screen == PM_CHEATS ? 3 : screen == PM_RESULTS ? 5 : 4; screen = PM_MAIN; } } break;
+        case R_CONTROLS: if (cross) { screen = PM_CONTROLS; sel = 0; } break;
+        case R_RESET: if (cross) { pm_map_defaults(g_map); save_cfg(); } break;
+        case R_CHEAT_ON: *(uint32_t *)(g_mem + HK_UNRIVALED) = !st.cheats; break;
+        case R_INV: inv = !inv; break;
+        case R_MONEY: if (cross && money < 20) money++; break;
+        case R_SCREEN: g_wide = !g_wide; apply_aspect(); save_cfg(); break;
+        case R_NATIVE: g_wide_native = !g_wide_native; save_cfg(); break;   // surfaces are created at startup: applies on restart
+        case R_FPS: g_fps = !g_fps; save_cfg(); break;
+        case R_VOL: g_vol += step > 0 ? 1 : -1; if (!dx) g_vol = g_vol % 10 + 1; apply_volume(); save_cfg(); break;
+        case R_MUS: g_mus += step > 0 ? 1 : -1; if (!dx) g_mus = g_mus % 10 + 1; apply_volume(); save_cfg(); break;
+        default: if (cross && id >= R_ACT0) capture = id - R_ACT0 + 1; break;
+        }
+        if (press & SCE_CTRL_CIRCLE) { if (screen == PM_MAIN) action = -1; else if (screen == PM_CONTROLS) { sel = 5; screen = PM_SETTINGS; } else { sel = screen == PM_CHEATS ? 3 : screen == PM_RESULTS ? 5 : 4; screen = PM_MAIN; } }
+        if (press & SCE_CTRL_SELECT) action = 2;
+        if (action) break;
+        if (!(b & SCE_CTRL_START)) released = 1;
         else if (released) break;
         SDL_Delay(16);
     }
+    if (action == 2) g_menu_until = g_frame + 3;
     if (*(uint32_t *)(g_mem + HK_UNRIVALED)) {
         if (inv) keyq_push('U');
         while (money-- > 0) keyq_push('M');
-        g_keyq_at = g_frame + 2;
     }
-    while (sceCtrlPeekBufferPositive(0, &pad, 1) >= 0 && (pad.buttons & (SCE_CTRL_START | SCE_CTRL_SELECT))) SDL_Delay(16);
+    if (action == 1) keyq_push(0x71);   // F2: the game's Save This Game
+    if (action == 4) { void hk_load_game_request(void); hk_load_game_request(); }   // title: File > Continue opens dialog 1500; in a stage: Stop This Game first, then Continue (port/hk/dialog.c)
+    if (action == 3) keyq_push(0x1B);   // Esc: the game's exit prompt
+    g_keyq_at = g_frame + 2;
+    while (sceCtrlPeekBufferPositive(0, &pad, 1) >= 0 && (pad.buttons & (SCE_CTRL_START | SCE_CTRL_SELECT | SCE_CTRL_CROSS | SCE_CTRL_CIRCLE))) SDL_Delay(16);
     g_pause_qpc += SDL_GetPerformanceCounter() - t0;
 }
 
@@ -284,6 +396,29 @@ void plat_present_xrgb(uint32_t *pixels, int width, int height, int pitch_bytes)
     keyq_step();
     plat_show_xrgb(pixels, width, height, pitch_bytes);
 }
+static int tips_held(void) {   // the tips button (Select by default) is held in a stage, no dialog or menu bar open
+    if (!g_hk_in_stage || hk_dlg_active()) return 0;
+    unsigned m = 0;
+    for (int i = 0; i < PM_NBTN; i++) if (g_map[i] == ACT_TIPS) m |= g_btn_mask[i];
+    SceCtrlData pad;
+    sceCtrlPeekBufferPositive(0, &pad, 1);
+    return m && (pad.buttons & m);
+}
+// The game's own hint texts (string resources of the running EXE: English, or Portuguese with the PT-BR EXE), shown
+// one at a time. %s is the key the game would name; the port fills the button mapped to the action it describes.
+int w32_load_string(uint32_t id, char *out, size_t cap);   // port/win32/kernel32.c
+static void tips_load(int page, int npages_out[1], PmTipsArg *a) {
+    static const struct { int id, act; } tips[] = {{500, ACT_BOMB}, {504, 0}, {506, 0}, {508, ACT_SWITCH}, {512, ACT_BOMB}, {600, 0}};
+    int n = 0, want = page < 0 ? 0 : page;
+    npages_out[0] = 0;
+    for (size_t i = 0; i < sizeof tips / sizeof *tips; i++) {
+        char raw[300];
+        if (w32_load_string((uint32_t)tips[i].id, raw, sizeof raw) <= 0) continue;
+        if (n == want) pm_tip_fill(a->tip, sizeof a->tip, raw, g_map, tips[i].act);
+        n++;
+    }
+    npages_out[0] = n;
+}
 void plat_show_xrgb(uint32_t *pixels, int width, int height, int pitch_bytes) {
     // FPS: frames shown in the last full second (the game targets 25).
     static uint64_t t_sec;
@@ -300,6 +435,37 @@ void plat_show_xrgb(uint32_t *pixels, int width, int height, int pitch_bytes) {
             for (int x = 2; x < 74; x++) buf[y * width + x] = (buf[y * width + x] >> 2) & 0x3f3f3fu;
         draw_text(buf, 6, 3, txt, fps >= 24 ? 0x80ff80u : 0xffff60u);
     }
+    g_last_px = pixels; g_last_w = width; g_last_h = height; g_last_pitch = pitch_bytes;
+    // Tips & controls card while its button (Select by default) is held in a stage: Left/Right page through the tips.
+    static unsigned tips_prev = 0xffffffffu;
+    static int tips_page = 0, tips_shown = 0;
+    static PmTipsArg tips_key;
+    if (width <= HK_WS_MAX && height <= 480 && tips_held()) {
+        SceCtrlData pad;
+        sceCtrlPeekBufferPositive(0, &pad, 1);
+        unsigned press = pad.buttons & ~tips_prev;
+        tips_prev = pad.buttons;
+        int np = 0;
+        PmTipsArg cur;
+        memset(&cur, 0, sizeof cur);
+        tips_load(tips_page, &np, &cur);
+        if (np > 0) {
+            tips_page = (tips_page + np + ((press & SCE_CTRL_RIGHT) != 0) - ((press & SCE_CTRL_LEFT) != 0)) % np;
+            memset(&cur, 0, sizeof cur);
+            tips_load(tips_page, &np, &cur);
+        }
+        cur.map = g_map; cur.page = tips_page; cur.npages = np;
+        static int shown_lang = -1, shown_ui = -1, shown_map[PM_NBTN];
+        if (!tips_shown || memcmp(cur.tip, tips_key.tip, sizeof cur.tip) || cur.page != tips_key.page || shown_lang != g_lang || shown_ui != g_pm_ui || memcmp(shown_map, g_map, sizeof shown_map)) {
+            pm_overlay_tips(g_ovl[1], &cur);
+            ov_upload(1);
+            tips_key = cur; shown_lang = g_lang; shown_ui = g_pm_ui; memcpy(shown_map, g_map, sizeof shown_map);
+            tips_shown = 1;
+        }
+        show_frame_ov(pixels, width, height, pitch_bytes, 1, 0);
+        return;
+    }
+    tips_prev = 0xffffffffu; tips_shown = 0;
     show_frame(pixels, width, height, pitch_bytes);
 }
 
@@ -311,8 +477,8 @@ void plat_show_xrgb(uint32_t *pixels, int width, int height, int pitch_bytes) {
 // R = Ctrl, Select = Esc. Start is the port's own pause (plat_present_xrgb), not a game key. In the game's dialogs
 // (port/hk/dialog.c) Cross presses the focused control, Triangle presses OK and Circle or Select cancel.
 int hk_dlg_active(void);   // port/hk/dialog.c
-extern int g_hk_in_stage;  // port/hk/wide.c
 int plat_vk_down(int vk) {
+    if (hk_stress_key(vk)) return 1;
     static SceCtrlData pad;
     static uint32_t last_frame = 0xffffffffu, tap_at = 0xffffffffu;
     extern unsigned g_frame;
@@ -338,26 +504,39 @@ int plat_vk_down(int vk) {
         } else if (other || hk_dlg_active()) tap_at = 0xffffffffu;
         d_prev = d_now;
     }
-    int tap = tap_at != 0xffffffffu && g_frame >= tap_at && g_frame < tap_at + 2;
+    const int dlg = hk_dlg_active();
+    int tap = !dlg && tap_at != 0xffffffffu && g_frame >= tap_at && g_frame < tap_at + 2;   // never in dialogs
     uint32_t b = pad.buttons;
     int down = (b & SCE_CTRL_DOWN) || pad.ly > 192 || tap;
+    // Menus, dialogs and the title screen use fixed buttons: Cross confirms (space), Circle cancels (Z), Triangle = C
+    // (default in dialogs), Select = Esc in dialogs and the menu bar otherwise. Only in a stage (no dialog) the
+    // gameplay map applies, so jump on Cross never also sends space; there Select is the tips card (no key, see plat_show_xrgb).
+    int menu = !g_hk_in_stage || hk_dlg_active();
+    unsigned m[PM_NACT] = {0};
+    for (int i = 0; i < PM_NBTN; i++) m[g_map[i]] |= g_btn_mask[i];
     switch (vk) {
-    case 0x25: return (b & SCE_CTRL_LEFT) || pad.lx < 64;
+    case 0x25: return !tips_held() && ((b & SCE_CTRL_LEFT) || pad.lx < 64);   // Left/Right page the tips card while it is shown
     case 0x26: return (b & SCE_CTRL_UP) || pad.ly < 64;
-    case 0x27: return (b & SCE_CTRL_RIGHT) || pad.lx > 192;
+    case 0x27: return !tips_held() && ((b & SCE_CTRL_RIGHT) || pad.lx > 192);
     case 0x28: return down;
     case 'S': return down;
-    case 'X': return (b & SCE_CTRL_CROSS) != 0;
-    case 0x20: return (b & SCE_CTRL_CROSS) != 0;
-    case 'U': case 'M': return keyq_down(vk);   // cheats from the pause screen
-    case 'A': return (b & SCE_CTRL_SQUARE) != 0;
-    case 'Z': return (b & SCE_CTRL_CIRCLE) != 0;
-    case 'C': return (b & SCE_CTRL_TRIANGLE) != 0;
-    // Select opens the game's menu bar in play (F10) and cancels (Esc) while a dialog or the menu is up.
-    case 0x1B: return (b & SCE_CTRL_SELECT) && hk_dlg_active();
-    case 0x79: return g_frame < g_menu_until || ((b & SCE_CTRL_SELECT) && !hk_dlg_active());
-    case 0x10: return (b & SCE_CTRL_LTRIGGER) != 0;
-    case 0x11: return (b & SCE_CTRL_RTRIGGER) != 0;
+    // Rapid fire (held): the game's shoot key pressed 2 frames and released 2 (about 6 shots per second at 25 fps).
+    case 'X': return !menu && ((b & m[ACT_SHOOT]) || ((b & m[ACT_RAPID]) && (g_frame & 3u) < 2u));
+    case 0x20: return menu && (b & SCE_CTRL_CROSS);
+    case 'U': case 'M': case 0x71: return keyq_down(vk);   // cheats, Save (F2) from the pause menu
+    case 'A': return !menu && (b & m[ACT_JUMP]);
+    // In dialogs Circle is Esc, not Z: the GAME DATA loop (1500, 0x4328CD) reads the game's own input object, where
+    // Z/X/C/Shift/Ctrl are confirm ([+8], 0x4118EF..0x411921 -> 0x4028FB -> WM_COMMAND 0x9CA4) and only Esc is
+    // cancel ([+0x10], 0x4118A1 -> 0x40216C -> 0x9CA5); the port's dialogs treat Z and Esc alike.
+    case 'Z': return menu ? (!dlg && (b & SCE_CTRL_CIRCLE)) : (b & m[ACT_BOMB]) != 0;
+    case 'C': return menu ? (b & SCE_CTRL_TRIANGLE) != 0 : (b & m[ACT_SWITCH]) != 0;
+    case 0x1B: return (dlg && (b & (SCE_CTRL_SELECT | SCE_CTRL_CIRCLE))) || keyq_down(0x1B);   // Esc: also Quit game from the pause menu
+    // GAME DATA (1500) Rename / Delete buttons (port/hk/dialog.c: R and D in that dialog): Square and L.
+    case 'R': return dlg && (b & SCE_CTRL_SQUARE);
+    case 'D': return dlg && (b & SCE_CTRL_LTRIGGER);
+    case 0x79: return g_frame < g_menu_until || (!hk_dlg_active() && (b & (menu ? SCE_CTRL_SELECT : m[ACT_MENU])));
+    case 0x10: return !menu && (b & m[ACT_SHIFT]);
+    case 0x11: return 0;
     default: return 0;
     }
 }
@@ -389,11 +568,16 @@ int main(int argc, char **argv) {
     apply_aspect();
     rt_log("[vita] window %p renderer %p\n", (void *)g_win, (void *)g_ren);
     if (rt_init(HK_GUEST_MB << 20)) rt_fatal("guest memory: allocation of %u MB failed", HK_GUEST_MB);
-    int r = rt_load_exe(HK_DATA_DIR "/HDKWIN.EXE");
+    g_lang_ok = lang_files_ok();
+    g_started_lang = g_lang;
+    const char *exe = HK_DATA_DIR "/HDKWIN.EXE";
+    if (g_lang && g_lang_ok) { exe = HK_LANG_DIR "/HDKWINBR.EXE"; w32_set_lang_overlay(HK_LANG_DIR); }
+    int r = rt_load_exe(exe);
     if (r) rt_fatal("cannot load " HK_DATA_DIR "/HDKWIN.EXE (%d): copy your game files there", r);
     rt_fill_iat();
     { void hk_patch_data(void); hk_patch_data(); }
     rt_log("game loaded from %s\n", g_game_dir);
+    hk_stress_init(g_stress_spec);
     rt_run_entry();
     SDL_Quit();
     return 0;

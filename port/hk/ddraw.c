@@ -119,6 +119,19 @@ static gfn miss_surf[40] = {miss_2_0, miss_2_1, miss_2_2, miss_2_3, miss_2_4, mi
 static gfn miss_pal[8] = {miss_3_0, miss_3_1, miss_3_2, miss_3_3, miss_3_4, miss_3_5, miss_3_6, miss_3_7};
 static gfn miss_clip[10] = {miss_4_0, miss_4_1, miss_4_2, miss_4_3, miss_4_4, miss_4_5, miss_4_6, miss_4_7, miss_4_8, miss_4_9};
 
+// Live DirectDraw objects for the memory log (HK_MEMLOG): surfaces, their guest pixel bytes (backbuffers share), palettes.
+void hk_dd_stats(int *surfaces, uint64_t *bytes, int *others, int *peak_slot) {
+    int s = 0, o = 0, top = 0;
+    uint64_t b = 0;
+    for (int i = 1; i < MAX_OBJ; i++) {
+        if (!g_obj[i].kind) continue;
+        top = i;
+        if (g_obj[i].kind == OBJ_SURF) { s++; if (g_obj[i].pixels && !g_obj[i].backbuffer) b += (uint64_t)g_obj[i].pitch * (uint64_t)g_obj[i].h; }
+        else o++;
+    }
+    *surfaces = s; *bytes = b; *others = o; *peak_slot = top;
+}
+
 // ---------- IUnknown ----------
 static void com_addref(CPU *c) {
     HOSTFN;
@@ -256,7 +269,16 @@ static void get_rect(uint8_t *mb, uint32_t r, Obj *s, int *x0, int *y0, int *x1,
 
 // HK_PROF=1: every 300 presented frames logs wall ms per frame and where the port spent it.
 static double prof_now(void) { struct timespec t; clock_gettime(CLOCK_MONOTONIC, &t); return t.tv_sec * 1e3 + t.tv_nsec / 1e6; }
-static double g_pf_blit, g_pf_conv, g_pf_plat;
+// Also on with `prof=1` in hkport.cfg (Vita, g_hk_prof). Counters cover frames in which a stage was drawn; every 5 s one
+// "[prof]" line gives the mean ms per frame: wall (frame to frame), game (= wall - conv - plat; includes blits and the
+// game's own waiting), blit (all 8-bit copies; ws = the widescreen extra copies, included in blit), sleep (the game's
+// Sleep calls, included in game), conv (palette LUT, pillarbox, dialog overlay, or the hand-off to the present thread),
+// plat (overlays, UpdateTexture, RenderPresent).
+int g_hk_prof, g_hk_prof_on;
+extern uint64_t g_t_sleep;
+double g_hk_pf_ws; unsigned g_hk_pf_ws_n;   // port/hk/wide.c: extra blits of the widescreen hooks
+static double g_pf_blit, g_pf_conv, g_pf_plat, g_pf_px, g_pf_px_opaque;
+static unsigned g_pf_bn;
 static int g_pf_on = -1;
 
 
@@ -264,7 +286,18 @@ static int g_pf_on = -1;
 extern int hk_dlg_active(void);
 static inline void convert_row(uint32_t *out, const uint8_t *in, int n, const uint32_t *lut) {
     int x = 0;
-    for (; x + 4 <= n; x += 4) { out[x] = lut[in[x]]; out[x + 1] = lut[in[x + 1]]; out[x + 2] = lut[in[x + 2]]; out[x + 3] = lut[in[x + 3]]; }
+    for (; x + 8 <= n; x += 8) {   // two aligned-agnostic 32-bit loads feed eight lookups (one load per four pixels instead of four)
+        uint32_t a, b;
+        memcpy(&a, in + x, 4); memcpy(&b, in + x + 4, 4);
+        uint32_t *o = out + x;
+#if defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+        o[0] = lut[a & 255]; o[1] = lut[(a >> 8) & 255]; o[2] = lut[(a >> 16) & 255]; o[3] = lut[a >> 24];
+        o[4] = lut[b & 255]; o[5] = lut[(b >> 8) & 255]; o[6] = lut[(b >> 16) & 255]; o[7] = lut[b >> 24];
+#else
+        o[0] = lut[in[x]]; o[1] = lut[in[x + 1]]; o[2] = lut[in[x + 2]]; o[3] = lut[in[x + 3]];
+        o[4] = lut[in[x + 4]]; o[5] = lut[in[x + 5]]; o[6] = lut[in[x + 6]]; o[7] = lut[in[x + 7]];
+#endif
+    }
     for (; x < n; x++) out[x] = lut[in[x]];
 }
 static int g_pt_mode = -1;
@@ -311,9 +344,10 @@ static void pt_drain(void) {
     g_pt_pending = 0;
 }
 
+uint32_t g_dd_present_end_ms;   // SDL_GetTicks() when the last present finished (port/hk/dialog.c refresh)
 static void present_primary(void) {
     HOSTFN;
-    if (g_pf_on < 0) g_pf_on = getenv("HK_PROF") != NULL;
+    if (g_pf_on < 0) g_hk_prof_on = g_pf_on = getenv("HK_PROF") != NULL || g_hk_prof;
     double pf0 = g_pf_on ? prof_now() : 0;
     {   // HK_TRACE_DD: presents per second (Flip, Blt/BltFast/Unlock to the primary, palette changes)
         static unsigned n; static uint32_t t0;
@@ -357,35 +391,42 @@ static void present_primary(void) {
         for (int y = 0; y < fh; y++) convert_row(frame + y * fw, mb + p->pixels + (uint32_t)(y * p->pitch), fw, lut);
         hk_ws_pillarbox(frame, fw, fh, hk_ws_frame_ox());
         if (dlg) {
-            void hk_dlg_overlay(uint32_t *fb);   // port/hk/dialog.c: open dialogs on top of the game (640x480 buffer)
-            if (fw == 640) hk_dlg_overlay(frame);
-            else {   // wider screen: the dialogs are drawn on the centred 640 columns
-                static uint32_t mid[480][640];
-                const int ox = (fw - 640) / 2;
-                for (int y = 0; y < 480; y++) memcpy(mid[y], frame + y * fw + ox, 640 * 4);
-                hk_dlg_overlay(&mid[0][0]);
-                for (int y = 0; y < 480; y++) memcpy(frame + y * fw + ox, mid[y], 640 * 4);
-            }
+            void hk_dlg_overlay(uint32_t *fb, int stride);   // port/hk/dialog.c: cached dialog layer over the 640 centred columns
+            hk_dlg_overlay(frame + (fw - 640) / 2, fw);
         }
         pf2 = g_pf_on ? prof_now() : 0;
         plat_present_xrgb(frame, fw, 480, fw * 4);
     }
     if (g_pf_on) {
-        static unsigned n; static double last;
+        extern int g_hk_in_stage;
+        static unsigned n; static double last, t_win, a_wall, sl_win;
         double pf3 = prof_now();
-        g_pf_conv += pf2 - pf0; g_pf_plat += pf3 - pf2;
-        if (++n == 300) {
-            rt_log("[prof] %.2f ms/frame wall, convert+overlay %.2f, plat_present %.2f, blits %.2f\n", (pf3 - last) / n, g_pf_conv / n, g_pf_plat / n, g_pf_blit / n);
-            n = 0; g_pf_conv = g_pf_plat = g_pf_blit = 0; last = pf3;
-        } else if (n == 1 && last == 0) last = pf3;
+        if (last && g_hk_in_stage) { a_wall += pf3 - last; g_pf_conv += pf2 - pf0; g_pf_plat += pf3 - pf2; n++; }
+        if (!t_win) { t_win = pf3; sl_win = (double)g_t_sleep; }
+        last = pf3;
+        if (pf3 - t_win >= 5000) {
+            if (n)
+                rt_log("[prof] w=%d %u fr: wall %.2f game %.2f (blit %.2f [%u calls, %.0f kpx; ws %.2f, %u calls; opaque %.0f kpx], sleep %.2f) conv %.2f plat %.2f ms/frame\n",
+                       g_hk_ws_w, n, a_wall / n, (a_wall - g_pf_conv - g_pf_plat) / n, g_pf_blit / n, g_pf_bn / n, g_pf_px / n / 1e3,
+                       g_hk_pf_ws / n, g_hk_pf_ws_n / n, g_pf_px_opaque / n / 1e3, ((double)g_t_sleep - sl_win) * 1e3 / (double)SDL_GetPerformanceFrequency() / n,
+                       g_pf_conv / n, g_pf_plat / n);
+            n = 0; a_wall = 0; g_pf_conv = g_pf_plat = g_pf_blit = g_pf_px = g_pf_px_opaque = 0; g_pf_bn = 0; g_hk_pf_ws = 0; g_hk_pf_ws_n = 0;
+            t_win = pf3; sl_win = (double)g_t_sleep;
+        }
     }
     extern unsigned g_frame;
     g_frame++;
+    g_dd_present_end_ms = SDL_GetTicks();
     void hk_load_trace_frame(void);
     hk_load_trace_frame();
+    void hk_load_game_tick(void);   // port/hk/dialog.c
+    hk_load_game_tick();
+    void hk_stress_tick(void);   // port/hk/memlog.c (HK_STRESS, HK_MEMLOG)
+    hk_stress_tick();
 }
 void hk_dd_present(void) { present_primary(); }
 
+typedef uint8_t v16u __attribute__((vector_size(16)));
 // Copies a rectangle, clipped to both surfaces; key >= 0 skips that source index (8-bit colour key).
 // HK_TRACE_CLIP=1 logs every blit whose source or destination had to be clipped ("[clip]" lines).
 static void blit(uint8_t *mb, Obj *d, int dx, int dy, Obj *s, int sx0, int sy0, int sx1, int sy1, int key) {
@@ -405,10 +446,20 @@ static void blit(uint8_t *mb, Obj *d, int dx, int dy, Obj *s, int sx0, int sy0, 
     for (int y = 0; y < h; y++) {
         uint8_t *dr = mb + d->pixels + (uint32_t)((dy + y) * d->pitch + dx);
         const uint8_t *sr = mb + s->pixels + (uint32_t)((sy0 + y) * s->pitch + sx0);
-        if (key < 0) memmove(dr, sr, (size_t)w);
-        else {   // colour key: 4 pixels per step, a byte mask built from "source != key" (SWAR), no branches
-            const uint32_t kk = 0x01010101u * (uint8_t)key;
+        if (key < 0) { if (d != s) memcpy(dr, sr, (size_t)w); else memmove(dr, sr, (size_t)w); }
+        else {   // colour key: 16 pixels per step (GCC vector extension: NEON on the Vita, SSE2 on PC), then 4 with SWAR, then single
+            const v16u kv = {(uint8_t)key, (uint8_t)key, (uint8_t)key, (uint8_t)key, (uint8_t)key, (uint8_t)key, (uint8_t)key, (uint8_t)key,
+                             (uint8_t)key, (uint8_t)key, (uint8_t)key, (uint8_t)key, (uint8_t)key, (uint8_t)key, (uint8_t)key, (uint8_t)key};
             int x = 0;
+            for (; x + 16 <= w; x += 16) {
+                v16u sv, dv;
+                memcpy(&sv, sr + x, 16);
+                memcpy(&dv, dr + x, 16);
+                const v16u m = (v16u)(sv != kv);   // 0xff where the source is not the key
+                dv = (sv & m) | (dv & ~m);
+                memcpy(dr + x, &dv, 16);
+            }
+            const uint32_t kk = 0x01010101u * (uint8_t)key;
             for (; x + 4 <= w; x += 4) {
                 uint32_t sv, dv;
                 memcpy(&sv, sr + x, 4);
@@ -424,7 +475,7 @@ static void blit(uint8_t *mb, Obj *d, int dx, int dy, Obj *s, int sx0, int sy0, 
             for (; x < w; x++) if (sr[x] != (uint8_t)key) dr[x] = sr[x];
         }
     }
-    if (g_pf_on > 0) g_pf_blit += prof_now() - pb0;
+    if (g_pf_on > 0) { g_pf_blit += prof_now() - pb0; g_pf_px += (double)w * h; g_pf_bn++; if (key < 0) g_pf_px_opaque += (double)w * h; }
 }
 // Stretched copy (nearest), used when Blt's source and destination rectangles differ in size.
 static void stretch(uint8_t *mb, Obj *d, int dx0, int dy0, int dx1, int dy1, Obj *s, int sx0, int sy0, int sx1, int sy1, int key) {

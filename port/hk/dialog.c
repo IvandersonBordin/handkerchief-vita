@@ -13,8 +13,14 @@
 #include "win32.h"
 #include "plat.h"
 #include "hk/font_data.h"
+#include "hk/theme.h"
+#include "hk/gameart.h"
+#include "hk/i18n.h"
 #include "safe_write.h"
 #include <SDL.h>
+#include <stddef.h>
+#include <string.h>
+#include <time.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -31,6 +37,7 @@ typedef struct {
     char text[160];
     int checked, enabled, visible;
     int nitems, cursel, top;
+    int rh;                  // list row height
     int limit;               // EM_LIMITTEXT (0: the port's 159-character buffer)
     char (*items)[48];
     uint32_t *itemdata;
@@ -43,12 +50,13 @@ typedef struct {
     int x, y, w, h;          // pixels on the 640x480 screen, including the title bar
     Ctl ctl[MAX_CTL];
     int n, focus;
+    int big;                 // the template was scaled up (>= 125%): 18 px font, taller rows
     int drop, drop_orig;     // the focused combo box shows its list; selection to restore on cancel
 } Dlg;
 
 static Dlg g_dlg[MAX_DLG];
 #define DLG_HWND(k) (0x00030000u | ((uint32_t)(k) << 8))
-#define TITLE_H 18
+#define TITLE_H 26
 #define DU_X(v) ((v) * 3 / 2)   // dialog units -> pixels: MS P Gothic 9pt has ~6x12 base units
 #define DU_Y(v) ((v) * 3 / 2)
 
@@ -161,7 +169,11 @@ static void menu_set(uint32_t hmenu) {
     }
     g_menu.res = res;
 }
+int hk_dlg_count(void) { int n = 0; for (int i = 0; i < MAX_DLG; i++) n += g_dlg[i].used != 0; return n; }   // memory log
+int hk_dlg_top_res(void) { Dlg *d = top_dlg(); return d ? d->res : 0; }   // template id of the top dialog (stress driver)
+int hk_menu_shown(void);
 int hk_dlg_active(void) { return top_dlg() != NULL || menu_shown(); }
+int hk_menu_shown(void) { return menu_shown(); }
 
 // ---------- template ----------
 static const uint8_t *res_sz(const uint8_t *p, char *out, size_t cap, int *ord) {
@@ -198,7 +210,12 @@ static int parse_template(Dlg *d, uint32_t ga) {
     p = res_sz(p, NULL, 0, NULL);                      // class
     p = res_sz(p, d->title, sizeof d->title, NULL);    // title
     if (style & 0x40) { p += ex ? 6 : 2; p = res_sz(p, NULL, 0, NULL); }   // DS_SETFONT: size (weight, italic, charset), face
-    d->w = DU_X(cx) + 6; d->h = DU_Y(cy) + TITLE_H + 6;
+    // Scaled up to fill the screen (at most 150%): big text and rows for a handheld screen. Control ids and messages
+    // are unchanged; only the geometry differs from the template.
+    int sc = 100, w0 = DU_X(cx), h0 = DU_Y(cy);
+    if (w0 > 0 && h0 > 0) { sc = 150; if (620 * 100 / w0 < sc) sc = 620 * 100 / w0; if ((480 - TITLE_H - 6 - 70) * 100 / h0 < sc) sc = (480 - TITLE_H - 6 - 70) * 100 / h0; if (sc < 100) sc = 100; }
+    d->big = sc >= 125;
+    d->w = w0 * sc / 100 + 6; d->h = h0 * sc / 100 + TITLE_H + 6;
     if (d->w > 636) d->w = 636;
     if (d->h > 476) d->h = 476;
     d->x = (640 - d->w) / 2; d->y = (480 - d->h) / 2;
@@ -225,8 +242,10 @@ static int parse_template(Dlg *d, uint32_t ga) {
                : ord == 0x82 || !strcasecmp(cls, "static") ? C_STATIC : ord == 0x83 || !strcasecmp(cls, "listbox") ? C_LISTBOX
                : ord == 0x85 || !strcasecmp(cls, "combobox") ? C_COMBO : C_OTHER;
         t->id = id;
-        t->x = DU_X(x); t->y = DU_Y(y); t->w = DU_X(w);
-        t->h = t->cls == C_COMBO ? 20 : DU_Y(h);
+        t->x = DU_X(x) * sc / 100; t->y = DU_Y(y) * sc / 100; t->w = DU_X(w) * sc / 100;
+        t->h = t->cls == C_COMBO ? (d->big ? 28 : 20) : DU_Y(h) * sc / 100;
+        t->rh = d->big ? 22 : 14;
+        if (t->cls == C_BUTTON && d->big && t->h < 26 && (t->style & 15u) != 7 && !(t->style & 0x1000u)) { t->y -= (26 - t->h) / 2; t->h = 26; }
         t->enabled = !(t->style & 0x08000000u);
         t->visible = (t->style & 0x10000000u) != 0;
         t->cursel = -1;
@@ -244,7 +263,8 @@ static int focusable(const Ctl *t) {
 }
 
 // ---------- drawing ----------
-static const HkFont *font(void) { return &hk_fonts[0]; }
+static int g_fi;   // font in use: 0 = 14 px, 1 = 18 px (hk_fonts)
+static const HkFont *font(void) { return &hk_fonts[g_fi]; }
 static int text_w(const char *s) {
     int w = 0;
     for (; *s; s++) { uint8_t ch = (uint8_t)*s; w += font()->glyphs[(ch < 0x20 ? '?' : ch) - 0x20].advance; }
@@ -271,11 +291,57 @@ static void frame(uint32_t *fb, int x, int y, int w, int h, uint32_t tl, uint32_
     fill(fb, x, y, w, 1, tl); fill(fb, x, y, 1, h, tl);
     fill(fb, x, y + h - 1, w, 1, br); fill(fb, x + w - 1, y, 1, h, br);
 }
-#define C_FACE 0xc0c0c0u
-#define C_LIGHT 0xffffffu
-#define C_SHADOW 0x808080u
-#define C_DARK 0x000000u
-#define C_FOCUS 0xffd000u
+// Theme (hk/theme.h): flat dark controls, purple frames, red dots on the focused one.
+// The dialogs are drawn into a cached layer (g_layer, 640x480) that is rebuilt only when the dialog state changes, and
+// composited over each game frame (hk_dlg_overlay). Layer pixel: top byte 0 = opaque colour; 0xFF = untouched (the
+// game shows through); otherwise the top byte w is the weight of the game pixel (w/256) and the low 24 bits the
+// premultiplied colour, so that out = game * w / 256 + colour (the translucent panel and what is drawn on it).
+#define LAYER_CLEAR 0xFF000000u
+static uint32_t g_layer[480 * 640];
+static void blend(uint32_t *fb, int x0, int y0, int w, int h, uint32_t col, int a) {   // a/16 of col over what is there
+    for (int y = y0 < 0 ? 0 : y0; y < y0 + h && y < 480; y++)
+        for (int x = x0 < 0 ? 0 : x0; x < x0 + w && x < 640; x++) {
+            uint32_t p = fb[y * 640 + x], r = 0;
+            uint32_t top = p >> 24, wt = top == 0xFFu ? 256u : top;
+            for (int sh = 0; sh < 24; sh += 8) {
+                uint32_t pc = top == 0xFFu ? 0 : (p >> sh) & 255u;
+                r |= ((pc * (uint32_t)(16 - a) + ((col >> sh) & 255u) * (uint32_t)a) / 16u) << sh;
+            }
+            uint32_t nw = wt * (uint32_t)(16 - a) / 16u;
+            fb[y * 640 + x] = (top == 0 ? 0 : nw << 24) | r;   // opaque stays opaque (a mix of two opaque colours)
+        }
+}
+static void dot(uint32_t *fb, int cx, int cy, int r, uint32_t col) {
+    for (int y = -r; y <= r; y++)
+        for (int x = -r; x <= r; x++)
+            if (x * x + y * y <= r * r + r / 2 && cx + x >= 0 && cx + x < 640 && cy + y >= 0 && cy + y < 480) fb[(cy + y) * 640 + cx + x] = col;
+}
+// A flat box with its corners cut by one pixel.
+static void rbox(uint32_t *fb, int x, int y, int w, int h, uint32_t bg, uint32_t border) {
+    fill(fb, x + 1, y, w - 2, h, bg); fill(fb, x, y + 1, w, h - 2, bg);
+    fill(fb, x + 1, y, w - 2, 1, border); fill(fb, x + 1, y + h - 1, w - 2, 1, border);
+    fill(fb, x, y + 1, 1, h - 2, border); fill(fb, x + w - 1, y + 1, 1, h - 2, border);
+}
+// The title menu's red dot (HDKSYS00 (0,0), hk/gameart.h) centred at cx, cy.
+static void red_dot(uint32_t *fb, int cx, int cy) { hk_art_dot(fb, 640, cx - 4, cy - 4); }
+// Text in the game's font, upper case like the title menu words (hk/gameart.h). Returns the width.
+static int gtext(uint32_t *fb, int x, int y, const char *s, int style) {
+    char u[160];
+    hk_gf_upper(u, s, sizeof u);
+    return fb ? hk_gf_text(fb, 640, x, y, u, style, 1) : hk_gf_width(u, 1);
+}
+static int gtext_w(const char *s) { return gtext(NULL, 0, 0, s, 0); }
+// The title screen's menu box around x, y, w, h over a dark translucent inside.
+static void art_box(uint32_t *fb, int x, int y, int w, int h) {
+    blend(fb, x + 3, y + 3, w - 6, h - 6, HK_TH_FILL, 13);
+    hk_art_frame(fb, 640, x, y, w, h);
+}
+// Marks the focused control: purple outline (two pixels) and a red dot at each side.
+static void focus_mark(uint32_t *fb, int x, int y, int w, int h, int dots) {
+    frame(fb, x - 1, y - 1, w + 2, h + 2, HK_TH_BORDER, HK_TH_BORDER);
+    frame(fb, x - 2, y - 2, w + 4, h + 4, HK_TH_BORDER_IN, HK_TH_BORDER_IN);
+    if (dots) { red_dot(fb, x + 7, y + h / 2); red_dot(fb, x + w - 8, y + h / 2); }
+}
 
 // Static text as Windows draws it: word-wrapped to the control width, '\n' breaks lines, aligned left (0), centre (1)
 // or right (2); vertically centred when vc is set. A word wider than the control is not split (it may spill over).
@@ -320,202 +386,318 @@ static void set_edit_text(Ctl *t, const char *s) {
 
 static const char *item_text(const Ctl *t, int i) { return i >= 0 && i < t->nitems ? t->items[i] : ""; }
 
+// Uses the 18 px font when the control is tall enough and the text fits, else the 14 px one.
+static void pick_font(const Ctl *t, const char *s, int avail) {
+    g_fi = 0;
+    if (t->h >= 20 || t->rh > 14) { g_fi = 1; if (text_w(s) > avail) g_fi = 0; }
+}
+
 static void draw_ctl(uint32_t *fb, const Dlg *d, const Ctl *t, int focused) {
     int x = d->x + 3 + t->x, y = d->y + TITLE_H + 3 + t->y, w = t->w, h = t->h;
-    uint32_t ink = t->enabled ? C_DARK : C_SHADOW;
+    uint32_t ink = t->enabled ? HK_TH_TEXT : HK_TH_DIM;
+    g_fi = d->big;
     int ty = y + (h - font()->cell) / 2;
     switch (t->cls) {
     case C_BUTTON:
         switch (btype(t)) {
-        case 7:   // group box
-            frame(fb, x, y + 6, w, h - 6, C_SHADOW, C_LIGHT);
-            if (t->text[0]) { fill(fb, x + 6, y, text_w(t->text) + 4, 13, C_FACE); put_text(fb, x + 8, y, t->text, ink, x + w); }
+        case 7: {   // group box: frame with a gap for the heading
+            int gf = t->text[0] && gtext_w(t->text) <= w - 24;   // heading in the game's font when it fits
+            int tw = t->text[0] ? (gf ? gtext_w(t->text) : text_w(t->text)) + 6 : 0;
+            fill(fb, x, y + 6, 6, 1, HK_TH_BORDER_IN); fill(fb, x + 6 + tw, y + 6, w - 6 - tw, 1, HK_TH_BORDER_IN);
+            fill(fb, x, y + 6, 1, h - 6, HK_TH_BORDER_IN); fill(fb, x + w - 1, y + 6, 1, h - 6, HK_TH_BORDER_IN);
+            fill(fb, x, y + h - 1, w, 1, HK_TH_BORDER_IN);
+            if (gf) gtext(fb, x + 9, y - 1, t->text, t->enabled ? GF_GOLD : GF_DIM);
+            else if (t->text[0]) put_text(fb, x + 9, y, t->text, t->enabled ? HK_TH_HEAD : HK_TH_DIM, x + w);
             break;
+        }
         case 2: case 3: case 4: case 9: {   // check box / radio button
-            if (t->style & 0x1000u) {      // BS_PUSHLIKE (save slots 1500): a push button, sunk while checked
-                fill(fb, x, y, w, h, t->checked ? 0xe0e0e0u : C_FACE);
-                if (t->checked) { frame(fb, x, y, w, h, C_DARK, C_LIGHT); frame(fb, x + 1, y + 1, w - 2, h - 2, C_SHADOW, C_FACE); }
-                else { frame(fb, x, y, w, h, C_LIGHT, C_DARK); frame(fb, x + 1, y + 1, w - 2, h - 2, C_FACE, C_SHADOW); }
-                text_box(fb, x + 3, y, w - 6, h, t->text, 1, 1, ink);
-                if (focused) { frame(fb, x - 2, y - 2, w + 4, h + 4, C_FOCUS, C_FOCUS); frame(fb, x - 3, y - 3, w + 6, h + 6, C_FOCUS, C_FOCUS); }
+            if (t->style & 0x1000u) {      // BS_PUSHLIKE (save slots 1500): a dark row, lit while checked
+                rbox(fb, x, y, w, h, t->checked ? HK_TH_BAR : HK_TH_BTN, t->checked ? HK_TH_BORDER : HK_TH_BORDER_IN);
+                pick_font(t, t->text, w - 10);
+                text_box(fb, x + 3, y, w - 6, h, t->text, 1, 1, focused || t->checked ? HK_TH_SEL : ink);
+                if (focused) focus_mark(fb, x, y, w, h, 1);
                 break;
             }
-            int r = btype(t) == 4 || btype(t) == 9, by = y + (h - 11) / 2;
-            if (r) {   // round: rows of a 11x11 circle
-                static const uint8_t half[11] = {2, 1, 0, 0, 0, 0, 0, 0, 0, 1, 2};
-                for (int j = 0; j < 11; j++) {
-                    int k = half[j] + (j == 0 || j == 10 ? 1 : 0);
-                    fill(fb, x + k, by + j, 11 - 2 * k, 1, C_LIGHT);
-                    fill(fb, x + k, by + j, 1, 1, j < 6 ? C_SHADOW : C_LIGHT);
-                    fill(fb, x + 10 - k, by + j, 1, 1, j < 6 ? C_SHADOW : C_LIGHT);
-                }
-                fill(fb, x + 3, by, 5, 1, C_SHADOW);
-                if (t->checked) { fill(fb, x + 4, by + 3, 3, 5, C_DARK); fill(fb, x + 3, by + 4, 5, 3, C_DARK); }
+            pick_font(t, t->text, w - 20);
+            ty = y + (h - font()->cell) / 2;
+            int r = btype(t) == 4 || btype(t) == 9, by = y + (h - 12) / 2;
+            if (focused) blend(fb, x - 3, ty - 1, text_w(t->text) + 24, font()->cell + 2, HK_TH_BORDER, 6);
+            if (r) {   // round mark
+                dot(fb, x + 6, by + 6, 6, HK_TH_BORDER);
+                dot(fb, x + 6, by + 6, 5, HK_TH_INK);
+                if (t->checked) dot(fb, x + 6, by + 6, 3, HK_TH_HEAD);
             } else {
-                fill(fb, x, by, 11, 11, C_LIGHT);
-                frame(fb, x, by, 11, 11, C_SHADOW, C_LIGHT);
-                if (t->checked) for (int i = 0; i < 7; i++) { fill(fb, x + 2 + i, by + 2 + i, 1, 1, C_DARK); fill(fb, x + 8 - i, by + 2 + i, 1, 1, C_DARK); }
+                fill(fb, x, by, 12, 12, HK_TH_BORDER);
+                fill(fb, x + 1, by + 1, 10, 10, HK_TH_INK);
+                if (t->checked) fill(fb, x + 3, by + 3, 6, 6, HK_TH_HEAD);
             }
-            put_text(fb, x + 15, ty, t->text, ink, x + w + 40);
-            if (focused) frame(fb, x - 2, ty - 1, text_w(t->text) + 19, font()->cell + 2, C_FOCUS, C_FOCUS);
+            put_text(fb, x + 17, ty, t->text, focused ? HK_TH_SEL : ink, x + w + 40);
+            if (focused) red_dot(fb, x - 6, y + h / 2);
             break;
         }
         default:  // push button
-            fill(fb, x, y, w, h, C_FACE);
-            frame(fb, x, y, w, h, C_LIGHT, C_DARK);
-            frame(fb, x + 1, y + 1, w - 2, h - 2, C_FACE, C_SHADOW);
-            put_text(fb, x + (w - text_w(t->text)) / 2, ty, t->text, ink, x + w);
-            if (btype(t) == 1) frame(fb, x - 1, y - 1, w + 2, h + 2, C_DARK, C_DARK);
-            if (focused) { frame(fb, x - 2, y - 2, w + 4, h + 4, C_FOCUS, C_FOCUS); frame(fb, x - 3, y - 3, w + 6, h + 6, C_FOCUS, C_FOCUS); }
+            pick_font(t, t->text, w - 10);
+            ty = y + (h - font()->cell) / 2;
+            rbox(fb, x, y, w, h, focused ? HK_TH_BAR : HK_TH_BTN, btype(t) == 1 || focused ? HK_TH_BORDER : HK_TH_BORDER_IN);
+            int gw = hk_gf_width(t->text, 1), gf = gw <= w - 8 && h >= 14;   // the game's font (mixed case) when it fits
+            if (gf) hk_gf_text(fb, 640, x + (w - gw) / 2, y + h / 2 - 7, t->text, !t->enabled ? GF_DIM : focused ? GF_SEL : btype(t) == 1 ? GF_GOLD : GF_NORMAL, 1);
+            else put_text(fb, x + (w - text_w(t->text)) / 2, ty, t->text, focused ? HK_TH_SEL : btype(t) == 1 ? HK_TH_HEAD : ink, x + w);
+            if (focused) focus_mark(fb, x, y, w, h, (gf ? gw : text_w(t->text)) + 28 <= w);
         }
         break;
     case C_STATIC:
-        if ((t->style & 0x1fu) == 0x12u) { frame(fb, x, y, w, h, C_SHADOW, C_LIGHT); break; }   // SS_ETCHEDFRAME
+        if ((t->style & 0x1fu) == 0x12u) { frame(fb, x, y, w, h, HK_TH_BORDER_IN, HK_TH_BORDER_IN); break; }   // SS_ETCHEDFRAME
         if ((t->style & 0x1fu) >= 3 && (t->style & 0x1fu) <= 9) break;                         // icon, rectangles, frames
         if ((t->style & 0x1fu) == 0xEu) break;                                                 // SS_BITMAP
         text_box(fb, x, y, w, h, t->text, (int)(t->style & 3u), (t->style & 0x200u) != 0, ink);   // SS_CENTERIMAGE: vertically centred
         break;
     case C_EDIT: {
-        fill(fb, x, y, w, h, t->enabled ? C_LIGHT : C_FACE);
-        frame(fb, x, y, w, h, C_SHADOW, C_LIGHT);
+        pick_font(t, t->text, w - 8);
+        ty = y + (h - font()->cell) / 2;
+        rbox(fb, x, y, w, h, HK_TH_INK, focused ? HK_TH_BORDER : HK_TH_BORDER_IN);
         int a = (int)(t->style & 3u), tw = text_w(t->text);   // ES_CENTER 1, ES_RIGHT 2
-        int tx = a == 1 ? x + (w - tw) / 2 : a == 2 ? x + w - 3 - tw : x + 3;
-        if (tx < x + 3) tx = x + 3;
-        put_text(fb, tx, ty, t->text, C_DARK, x + w - 2);
-        if (focused && editing(t)) fill(fb, tx + tw + 1 < x + w - 2 ? tx + tw + 1 : x + w - 3, ty, 1, font()->cell, C_DARK);   // caret
-        if (focused) frame(fb, x - 2, y - 2, w + 4, h + 4, C_FOCUS, C_FOCUS);
+        int tx = a == 1 ? x + (w - tw) / 2 : a == 2 ? x + w - 4 - tw : x + 4;
+        if (tx < x + 4) tx = x + 4;
+        put_text(fb, tx, ty, t->text, ink, x + w - 3);
+        if (focused && editing(t)) fill(fb, tx + tw + 1 < x + w - 3 ? tx + tw + 1 : x + w - 4, ty + 1, 2, font()->cell - 2, HK_TH_SEL);   // caret
+        if (focused) focus_mark(fb, x, y, w, h, 0);
         break;
     }
-    case C_COMBO:
-        fill(fb, x, y, w, h, t->enabled ? C_LIGHT : C_FACE);
-        frame(fb, x, y, w, h, C_SHADOW, C_LIGHT);
-        put_text(fb, x + 3, ty, item_text(t, t->cursel), ink, x + w - 14);
-        fill(fb, x + w - 13, y + 2, 11, h - 4, C_FACE);   // drop-down button with a small triangle
-        frame(fb, x + w - 13, y + 2, 11, h - 4, C_LIGHT, C_SHADOW);
-        for (int i = 0; i < 3; i++) fill(fb, x + w - 11 + i, y + h / 2 - 1 + i, 7 - 2 * i, 1, ink);
-        if (focused) frame(fb, x - 2, y - 2, w + 4, h + 4, C_FOCUS, C_FOCUS);
+    case C_COMBO: {   // "< value >"
+        const char *v = item_text(t, t->cursel);
+        char buf[64];
+        snprintf(buf, sizeof buf, "< %s >", v);
+        pick_font(t, buf, w - 8);
+        ty = y + (h - font()->cell) / 2;
+        rbox(fb, x, y, w, h, focused ? HK_TH_BAR : HK_TH_BTN, focused ? HK_TH_BORDER : HK_TH_BORDER_IN);
+        if (text_w(buf) > w - 6) snprintf(buf, sizeof buf, "%s", v);
+        put_text(fb, x + (w - text_w(buf)) / 2, ty, buf, focused ? HK_TH_SEL : ink, x + w - 2);
+        if (focused) focus_mark(fb, x, y, w, h, 0);
         break;
+    }
     case C_LISTBOX: {
-        fill(fb, x, y, w, h, C_LIGHT);
-        frame(fb, x, y, w, h, C_SHADOW, C_LIGHT);
-        int rows = (h - 4) / 14;
+        rbox(fb, x, y, w, h, HK_TH_INK, focused ? HK_TH_BORDER : HK_TH_BORDER_IN);
+        int rh = t->rh, rows = (h - 4) / rh;
+        g_fi = rh > 14;
         for (int i = 0; i < rows && t->top + i < t->nitems; i++) {
             int it = t->top + i;
-            if (it == t->cursel) fill(fb, x + 2, y + 2 + i * 14, w - 4, 14, 0x000080u);
-            put_text(fb, x + 3, y + 2 + i * 14, t->items[it], it == t->cursel ? C_LIGHT : C_DARK, x + w - 2);
+            if (it == t->cursel) { fill(fb, x + 2, y + 2 + i * rh, w - 4, rh, HK_TH_BAR); red_dot(fb, x + 8, y + 2 + i * rh + rh / 2); }
+            put_text(fb, x + 16, y + 2 + i * rh + (rh - font()->cell) / 2, t->items[it], it == t->cursel ? HK_TH_SEL : ink, x + w - 2);
         }
-        if (focused) frame(fb, x - 2, y - 2, w + 4, h + 4, C_FOCUS, C_FOCUS);
+        if (focused) focus_mark(fb, x, y, w, h, 0);
         break;
     }
     default: break;
     }
+    g_fi = 0;
 }
 
 // The open list of a combo box, below it (above if it would leave the screen), scrolled to the selection.
 static void draw_drop(uint32_t *fb, const Dlg *d, const Ctl *t) {
-    int rows = t->nitems < 10 ? t->nitems : 10, rh = 14, w = t->w, h = rows * rh + 4;
+    int rows = t->nitems < 10 ? t->nitems : 10, rh = t->rh, w = t->w, h = rows * rh + 4;
     int x = d->x + 3 + t->x, y = d->y + TITLE_H + 3 + t->y + t->h;
     if (y + h > 478) y = d->y + TITLE_H + 3 + t->y - h;
     int first = t->cursel - rows / 2;
     if (first > t->nitems - rows) first = t->nitems - rows;
     if (first < 0) first = 0;
-    fill(fb, x, y, w, h, C_LIGHT);
-    frame(fb, x, y, w, h, C_DARK, C_DARK);
+    rbox(fb, x, y, w, h, HK_TH_INK, HK_TH_BORDER);
+    g_fi = rh > 14;
     for (int i = 0; i < rows; i++) {
         int it = first + i, sel = it == t->cursel;
-        if (sel) fill(fb, x + 2, y + 2 + i * rh, w - 4, rh, 0x000080u);
-        put_text(fb, x + 4, y + 2 + i * rh, t->items[it], sel ? C_LIGHT : C_DARK, x + w - 2);
+        if (sel) { fill(fb, x + 2, y + 2 + i * rh, w - 4, rh, HK_TH_BAR); red_dot(fb, x + 8, y + 2 + i * rh + rh / 2); }
+        put_text(fb, x + 16, y + 2 + i * rh + (rh - font()->cell) / 2, t->items[it], sel ? HK_TH_SEL : HK_TH_TEXT, x + w - 2);
     }
+    g_fi = 0;
 }
 
 // Called by the DirectDraw present with the converted 640x480 frame.
+// Hints: on the Vita (and on PC with HK_PAD_HINTS=1) the pad buttons are drawn as symbols; markers: 1 cross,
+// 2 circle, 3 triangle, 4 square, 5 L, 6 R, 7 D-pad. On PC the keyboard keys are spelled out.
+static int pad_hints(void) {
 #ifdef __vita__
-#define HINT_BAR "Left/Right: menu   Cross: open   Circle: close"
-#define HINT_DROP "Up/Down: choose   Cross: select   Circle: back"
-#define HINT_DLG "D-pad: move   Cross: select   Triangle: OK   Circle: cancel"
-#define HINT_LIST "Up/Down: choose   Cross: keep   Circle: undo"
-#define HINT_EDIT "Cross: type text   Triangle: OK   Circle: cancel"
+    return 1;
 #else
-#define HINT_BAR "Left/Right: menu   Enter: open   Esc/F10: close"
-#define HINT_DROP "Up/Down: choose   Enter: select   Esc: back"
-#define HINT_DLG "Arrows: move   Space: select   Enter: OK   Esc: cancel"
-#define HINT_LIST "Up/Down: choose   Enter/Space: keep   Esc: undo"
-#define HINT_EDIT "Type text   Backspace: erase   Enter: OK   Esc: cancel"
+    static int v = -1;
+    if (v < 0) v = getenv("HK_PAD_HINTS") != NULL;
+    return v;
 #endif
+}
+#define HINT(id) hk_tr(pad_hints() ? id##_PAD : id##_PC)
+#define HINT_BAR HINT(S_D_BAR)
+#define HINT_DROP HINT(S_D_DROP)
+#define HINT_DLG HINT(S_D_DLG)
+#define HINT_LIST HINT(S_D_LIST)
+#define HINT_EDIT HINT(S_D_EDIT)
+#define HINT_GAME HINT(S_D_GAME)
+// Hint line: the markers become button symbols, the words are in the game's font (as the pause menu).
+static int hint_run(uint32_t *fb, const char *hint, int x, int y) {
+    char run[160];
+    int n = 0, x0 = x;
+    for (const char *p = hint;; p++) {
+        uint8_t c = (uint8_t)*p;
+        if ((c && c < 8) || !c || n >= (int)sizeof run - 1) {
+            run[n] = 0;
+            if (n) { if (fb) hk_gf_text(fb, 640, x, y, run, GF_NORMAL, 1); x += hk_gf_width(run, 1); }
+            n = 0;
+        }
+        if (!c) break;
+        if (c >= 8) { run[n++] = (char)c; continue; }
+        if (c <= 4) { if (fb) hk_th_glyph(fb, 640, x + 1, y - 1, c); x += 19; }
+        else if (c <= 6) {
+            if (fb) { rbox(fb, x + 1, y, 19, 14, HK_TH_BTN, HK_TH_BORDER_IN); hk_gf_text(fb, 640, x + 7, y - 1, c == 5 ? "L" : "R", GF_SEL, 1); }
+            x += 23;
+        } else { if (fb) { fill(fb, x + 3, y + 5, 13, 3, HK_TH_TEXT); fill(fb, x + 8, y, 3, 13, HK_TH_TEXT); } x += 20; }
+    }
+    return x - x0;
+}
+static void hint_pill(uint32_t *fb, const char *hint, int hy) {
+    int tw = hint_run(NULL, hint, 0, 0), hw = tw + 40;
+    if (hy > 446) hy = 446;
+    art_box(fb, (640 - hw) / 2, hy - 3, hw, 32);
+    hint_run(fb, hint, (640 - tw) / 2, hy + 6);
+}
 static void menu_draw(uint32_t *fb) {
-    const int bh = 20;
-    fill(fb, 0, 0, 640, bh, C_FACE);
-    fill(fb, 0, bh - 1, 640, 1, C_SHADOW);
+    const int bh = 28;
+    blend(fb, 0, 0, 640, bh, HK_TH_FILL, 14);
+    fill(fb, 0, bh - 3, 640, 1, HK_TH_BORDER_IN); fill(fb, 0, bh - 2, 640, 1, HK_TH_BORDER); fill(fb, 0, bh - 1, 640, 1, 0x2c1e6du);
     int x = 6, top_x = 6, has_dlg = top_dlg() != NULL;
     for (int i = 0; i < g_menu.ntop; i++) {
         MTop *t = &g_menu.t[i];
-        int w = text_w(t->text) + 14;
-        if (i == g_menu.top && !has_dlg) { fill(fb, x, 1, w, bh - 2, 0x000080u); top_x = x; }
-        put_text(fb, x + 7, 3, t->text, i == g_menu.top && !has_dlg ? C_LIGHT : t->grayed ? C_SHADOW : C_DARK, 640);
+        int w = gtext_w(t->text) + 40, sel = i == g_menu.top && !has_dlg;
+        if (sel) { red_dot(fb, x + 10, 12); red_dot(fb, x + w - 10, 12); top_x = x; }
+        gtext(fb, x + 20, 5, t->text, sel ? GF_SEL : t->grayed ? GF_DIM : GF_NORMAL);
         x += w;
     }
     if (has_dlg) return;
-    if (!g_menu.open || g_menu.top >= g_menu.ntop || !g_menu.t[g_menu.top].popup) {
-        const char *hint = HINT_BAR;
-        fill(fb, (640 - text_w(hint)) / 2 - 4, 465, text_w(hint) + 8, 15, 0x202020u);
-        put_text(fb, (640 - text_w(hint)) / 2, 466, hint, 0xe0e0e0u, 640);
-        return;
-    }
+    if (!g_menu.open || g_menu.top >= g_menu.ntop || !g_menu.t[g_menu.top].popup) { hint_pill(fb, HINT_BAR, 446); return; }
     MTop *t = &g_menu.t[g_menu.top];
     int w = 0;
-    for (int i = 0; i < t->n; i++) { int iw = text_w(t->it[i].text) + (t->it[i].key[0] ? text_w(t->it[i].key) + 30 : 0); if (iw > w) w = iw; }
-    w += 34;
-    int h = 4, px = top_x + w > 638 ? 638 - w : top_x, py = bh;
-    for (int i = 0; i < t->n; i++) h += t->it[i].sep ? 8 : 18;
-    fill(fb, px, py, w, h, C_FACE);
-    frame(fb, px, py, w, h, C_LIGHT, C_DARK);
-    frame(fb, px + 1, py + 1, w - 2, h - 2, C_FACE, C_SHADOW);
-    int y = py + 2;
+    for (int i = 0; i < t->n; i++) { int iw = gtext_w(t->it[i].text) + (t->it[i].key[0] ? gtext_w(t->it[i].key) + 30 : 0); if (iw > w) w = iw; }
+    w += 64;
+    int h = 28, px = top_x + w > 636 ? 636 - w : top_x, py = bh;
+    for (int i = 0; i < t->n; i++) h += t->it[i].sep ? 10 : 22;
+    art_box(fb, px, py, w, h);
+    int y = py + 14;
     for (int i = 0; i < t->n; i++) {
         MItem *m = &t->it[i];
-        if (m->sep) { fill(fb, px + 4, y + 3, w - 8, 1, C_SHADOW); fill(fb, px + 4, y + 4, w - 8, 1, C_LIGHT); y += 8; continue; }
-        int sel = i == g_menu.item;
-        uint32_t ink = sel ? C_LIGHT : m->grayed ? C_SHADOW : C_DARK;
-        if (sel) fill(fb, px + 3, y, w - 6, 18, 0x000080u);
-        put_text(fb, px + 18, y + 2, m->text, ink, px + w);
-        if (m->key[0]) put_text(fb, px + w - 12 - text_w(m->key), y + 2, m->key, ink, px + w);
-        y += 18;
+        if (m->sep) { fill(fb, px + 14, y + 4, w - 28, 2, HK_TH_BORDER_IN); y += 10; continue; }
+        int sel = i == g_menu.item, st = sel ? GF_SEL : m->grayed ? GF_DIM : GF_NORMAL;
+        if (sel) red_dot(fb, px + 14, y + 8);
+        gtext(fb, px + 26, y, m->text, st);
+        if (m->key[0]) gtext(fb, px + w - 18 - gtext_w(m->key), y, m->key, st);
+        y += 22;
     }
-    const char *hint = HINT_DROP;
-    fill(fb, (640 - text_w(hint)) / 2 - 4, 465, text_w(hint) + 8, 15, 0x202020u);
-    put_text(fb, (640 - text_w(hint)) / 2, 466, hint, 0xe0e0e0u, 640);
+    hint_pill(fb, HINT_DROP, 446);
 }
 
-void hk_dlg_overlay(uint32_t *fb) {
+static int game_driven(const Dlg *d) { return d->res == 1500; }   // GAME DATA: see dlg_input
+static void layer_draw(uint32_t *fb) {
     if (menu_shown()) menu_draw(fb);
     for (int k = 1; k < MAX_DLG; k++) {
         Dlg *d = &g_dlg[k];
         if (!d->used || !d->visible) continue;
-        fill(fb, d->x, d->y, d->w, d->h, C_FACE);
-        frame(fb, d->x, d->y, d->w, d->h, C_LIGHT, C_DARK);
-        frame(fb, d->x + 1, d->y + 1, d->w - 2, d->h - 2, C_FACE, C_SHADOW);
-        fill(fb, d->x + 3, d->y + 3, d->w - 6, TITLE_H - 2, 0x000080u);
-        put_text(fb, d->x + 6, d->y + 4, d->title, C_LIGHT, d->x + d->w - 4);
+        // The panel: the title screen's menu box, drawn 5 pixels outside the template's area (its border is about
+        // 4 pixels thick and the controls start 3 pixels in), title in the game's font.
+        art_box(fb, d->x - 5, d->y - 5, d->w + 10, d->h + 10);
+        gtext(fb, d->x + (d->w - gtext_w(d->title)) / 2, d->y + 5, d->title, GF_SEL);
+        fill(fb, d->x + 12, d->y + TITLE_H + 1, d->w - 24, 2, HK_TH_BORDER_IN);
         for (int i = 0; i < d->n; i++) if (d->ctl[i].visible) draw_ctl(fb, d, &d->ctl[i], i == d->focus && d == top_dlg());
         if (d->drop && d->focus >= 0) draw_drop(fb, d, &d->ctl[d->focus]);
         if (d == top_dlg()) {
-            const char *hint = d->drop ? HINT_LIST : HINT_DLG;
-            if (d->focus >= 0 && editing(&d->ctl[d->focus])) hint = g_ime_ctl ? "System keyboard open" : HINT_EDIT;
-            int hy = d->y + d->h + 4 < 466 ? d->y + d->h + 4 : 466;
+            const char *hint = d->drop ? HINT_LIST : game_driven(d) ? HINT_GAME : HINT_DLG;
+            if (d->focus >= 0 && editing(&d->ctl[d->focus])) hint = g_ime_ctl ? hk_tr(S_D_KBD) : HINT_EDIT;
+            int hy = d->y + d->h + 10 < 446 ? d->y + d->h + 10 : 446;
             for (int j = 1; j < MAX_DLG; j++)   // over another dialog: at the bottom of the screen instead
-                if (&g_dlg[j] != d && g_dlg[j].used && g_dlg[j].visible && hy + 14 > g_dlg[j].y && hy < g_dlg[j].y + g_dlg[j].h) hy = 466;
-            fill(fb, (640 - text_w(hint)) / 2 - 4, hy - 1, text_w(hint) + 8, 15, 0x202020u);
-            put_text(fb, (640 - text_w(hint)) / 2, hy, hint, 0xe0e0e0u, 640);
+                if (&g_dlg[j] != d && g_dlg[j].used && g_dlg[j].visible && hy + 30 > g_dlg[j].y - 5 && hy < g_dlg[j].y + g_dlg[j].h + 5) hy = 446;
+            hint_pill(fb, hint, hy);
         }
     }
 }
 
-// Presents the last game frame with the dialogs on top (the game stops flipping while a dialog is up).
+// FNV-style hash of everything the drawing reads (dialogs, controls, list items, menu bar, input mode).
+static uint64_t hash_mem(uint64_t h, const void *p, size_t n) {
+    const uint8_t *b = p;
+    for (; n >= 8; n -= 8, b += 8) { uint64_t v; memcpy(&v, b, 8); h = (h ^ v) * 0x100000001b3ull; h ^= h >> 29; }
+    for (; n; n--, b++) h = (h ^ *b) * 0x100000001b3ull;
+    return h;
+}
+static uint64_t state_hash(void) {
+    uint64_t h = 0xcbf29ce484222325ull;
+    h = hash_mem(h, &g_menu, offsetof(typeof(g_menu), t));
+    if (menu_shown()) h = hash_mem(h, g_menu.t, (size_t)g_menu.ntop * sizeof(MTop));
+    for (int k = 1; k < MAX_DLG; k++) {
+        const Dlg *d = &g_dlg[k];
+        if (!d->used || !d->visible) continue;
+        h = hash_mem(h, &k, sizeof k);
+        h = hash_mem(h, d, offsetof(Dlg, ctl));
+        h = hash_mem(h, &d->n, sizeof d->n + sizeof d->focus + sizeof d->big + sizeof d->drop);
+        for (int i = 0; i < d->n; i++) {
+            const Ctl *t = &d->ctl[i];
+            h = hash_mem(h, t, offsetof(Ctl, items));
+            if (t->items && t->nitems > 0) h = hash_mem(h, t->items, (size_t)t->nitems * sizeof t->items[0]);
+        }
+    }
+    h = hash_mem(h, &g_ime_ctl, sizeof g_ime_ctl);
+    return h;
+}
+
+// Composites the cached dialog layer over a game frame: fb points at the first of the 640 columns, stride in pixels.
+// HK_DLG_TIME=1 logs the average cost of a composite and of a rebuild.
+void hk_dlg_overlay(uint32_t *fb, int stride) {
+    static uint64_t last; static int valid, y0, y1;
+    static int timing = -1; static double t_comp, t_build; static unsigned n_comp, n_build;
+    if (timing < 0) timing = getenv("HK_DLG_TIME") != NULL;
+    struct timespec ts0, ts1; if (timing) clock_gettime(CLOCK_MONOTONIC, &ts0);
+    uint64_t h = state_hash();
+    int built = 0;
+    if (!valid || h != last) {
+        for (size_t i = 0; i < 480 * 640; i++) g_layer[i] = LAYER_CLEAR;
+        layer_draw(g_layer);
+        y0 = 480; y1 = 0;   // rows that hold anything
+        for (int y = 0; y < 480; y++) {
+            const uint32_t *r = g_layer + y * 640;
+            int any = 0;
+            for (int x = 0; x < 640 && !any; x++) any = r[x] != LAYER_CLEAR;
+            if (any) { if (y < y0) y0 = y; y1 = y + 1; }
+        }
+        last = h; valid = 1; built = 1;
+    }
+    for (int y = y0; y < y1; y++) {
+        const uint32_t *l = g_layer + y * 640;
+        uint32_t *o = fb + (size_t)y * stride;
+        for (int x = 0; x < 640; x++) {
+            uint32_t v = l[x], top = v >> 24;
+            if (top == 0xFFu) continue;
+            if (top == 0) { o[x] = v; continue; }
+            uint32_t p = o[x];
+            o[x] = ((((p & 0xFF00FFu) * top) >> 8) & 0xFF00FFu) + (((((p >> 8) & 0xFFu) * top) >> 8) << 8) + (v & 0xFFFFFFu);
+        }
+    }
+    if (timing) {
+        clock_gettime(CLOCK_MONOTONIC, &ts1);
+        double ms = (ts1.tv_sec - ts0.tv_sec) * 1e3 + (ts1.tv_nsec - ts0.tv_nsec) / 1e6;
+        if (built) { t_build += ms; n_build++; } else { t_comp += ms; n_comp++; }
+        if (n_comp + n_build >= 100) {
+            rt_log("[dlgtime] %u composites %.3f ms avg, %u rebuilds %.3f ms avg\n", n_comp, n_comp ? t_comp / n_comp : 0, n_build, n_build ? t_build / n_build : 0);
+            n_comp = n_build = 0; t_comp = t_build = 0;
+        }
+    }
+}
+
+// Presents the last game frame with the dialogs on top (the game stops flipping while a modal dialog is up).
+// Called from PeekMessageA/GetMessageA, so it must leave the game time to run: the interval is counted from the
+// end of the last present of any kind, and nothing is presented while the game flips by itself. The GAME DATA loop
+// (1500, 0x4328CD) keeps running game frames through 0x40E9F9, whose message loop (0x40EA18-0x40EA6D) only runs a
+// frame once PeekMessageA finds the queue empty. When the refresh was timed from its start and a present took
+// longer than the 40 ms window timer (Vita at 848x480: ~45 ms), every PeekMessageA presented again and found a
+// new WM_TIMER, so the queue was never empty: no frame, no key poll (0x4117D1), the slots did not react to the pad.
+// Reproduced on PC with HK_PRESENT_MS=50 HK_WIDE=848 and sound on (the timer exists only with DirectSound).
 static void refresh(void) {
-    static uint32_t last;
-    uint32_t now = SDL_GetTicks();
-    if (now - last < 33) return;
-    last = now;
+    extern uint32_t g_dd_present_end_ms;   // port/hk/ddraw.c
+    // Only when the game itself has not presented for 60 ms (a modal loop or a paused game): while the game runs
+    // (25 fps, a present every 40 ms) its own presents already show the overlay, and extra presents halved the
+    // frame rate on the Vita (14 fps with the menu bar open).
+    if (SDL_GetTicks() - g_dd_present_end_ms < 60) return;
     void hk_dd_present(void);
     hk_dd_present();
 }
@@ -593,7 +775,7 @@ static void change(CPU *c, Dlg *d, Ctl *t, int dir) {   // left/right on a combo
     if (!t->nitems) return;
     int n = t->cursel < 0 ? (dir > 0 ? 0 : t->nitems - 1) : (t->cursel + dir + t->nitems) % t->nitems;
     t->cursel = n;
-    if (t->cls == C_LISTBOX) { int rows = (t->h - 4) / 14; if (rows < 1) rows = 1; if (n < t->top) t->top = n; if (n >= t->top + rows) t->top = n - rows + 1; }
+    if (t->cls == C_LISTBOX) { int rows = (t->h - 4) / t->rh; if (rows < 1) rows = 1; if (n < t->top) t->top = n; if (n >= t->top + rows) t->top = n - rows + 1; }
     command(c, d, t, 1);
 }
 // Spatial focus move for a pad: the next control must lie past the focused one's edge in that direction; controls
@@ -624,14 +806,21 @@ static void move_focus(Dlg *d, int dx, int dy) {
 }
 // K_OK presses the focused control (space, X, pad Cross); K_DEFAULT is Enter (pad Triangle): the dialog's default
 // button (OK), wherever the focus is.
-enum { K_UP = 1, K_DOWN = 2, K_LEFT = 4, K_RIGHT = 8, K_OK = 16, K_CANCEL = 32, K_DEFAULT = 64 };
+enum { K_UP = 1, K_DOWN = 2, K_LEFT = 4, K_RIGHT = 8, K_OK = 16, K_CANCEL = 32, K_DEFAULT = 64, K_RENAME = 128, K_DELETE = 256 };
 // Dialogs the game drives itself: GAME DATA (1500, save/load slots) runs its own loop at 0x4328CD that polls the game's
 // input object and moves the slot radio buttons (0x401726) or posts WM_COMMAND 0x9CA4 (confirm) / 0x9CA5 (cancel).
 // Port-side navigation on top of it moved the focus to Cancel while the game moved the slot, so Enter cancelled.
-static int game_driven(const Dlg *d) { return d->res == 1500; }
+// Its Rename (40072, 0x432428) and Delete (40024) buttons are mouse-only on Windows: R / D (pad Square / L) click them.
+#define ID_RENAME 40072
+#define ID_DELETE 40024
 static void dlg_input(CPU *c, int keys) {
     Dlg *d = top_dlg();
-    if (!d || game_driven(d)) return;
+    if (!d) return;
+    if (game_driven(d)) {
+        Ctl *b = (keys & K_RENAME) ? ctl_by_id(d, ID_RENAME) : (keys & K_DELETE) ? ctl_by_id(d, ID_DELETE) : NULL;
+        if (b && b->visible && b->enabled) { rt_log("[dlg] %u: button %u \"%s\"\n", d->res, b->id, b->text); click(c, d, b); }
+        return;
+    }
     Ctl *f = d->focus >= 0 ? &d->ctl[d->focus] : NULL;
     if (f && d->drop) {   // an open combo box list: arrows choose, OK keeps the choice, cancel restores the old one
         if (keys & K_CANCEL) { f->cursel = d->drop_orig; d->drop = 0; return; }
@@ -691,7 +880,7 @@ static void menu_input(int keys) {
     int lr = (keys & K_LEFT) ? -1 : (keys & K_RIGHT) ? 1 : 0;
     if (keys & K_CANCEL) {
         if (g_menu.open) g_menu.open = 0;
-        else w32_post_message(HWND_MAIN_DLG, 0x204u, 0x2u, 0);   // right click again: the game hides the menu
+        else w32_post_message(HWND_MAIN_DLG, 0x111u, 0u, 0);   // WM_COMMAND with no command: the game hides the menu bar on any WM_COMMAND (a second right click did not)
         return;
     }
     if (lr) {
@@ -767,6 +956,8 @@ void hk_dlg_keys(CPU *c, const uint8_t *pressed_vks, int n) {
         case 0x20: case 'X': keys |= K_OK; break;
         case 0x0D: case 'C': keys |= K_DEFAULT; break;
         case 0x1B: case 'Z': keys |= K_CANCEL; break;
+        case 'R': keys |= K_RENAME; break;
+        case 'D': keys |= K_DELETE; break;
         default: break;
         }
     }
@@ -1039,3 +1230,39 @@ U(SendDlgItemMessageA) {   // (dlg, id, msg, wparam, lparam)
 U(LoadMenuA) { HOSTFN; rt_log("[menu] LoadMenuA(%u)\n", ARG(2)); STDRET(2, ARG(2) < 0x10000u ? MENU_HANDLE(ARG(2)) : 0u); }
 U(SetMenu) { HOSTFN; menu_set(ARG(2)); refresh(); STDRET(2, 1); }
 U(DestroyMenu) { HOSTFN; if (ARG(1) && (ARG(1) & 0xffffu) == g_menu.res) g_menu.res = 0; STDRET(1, 1); }
+
+// ---------- "Load game" from the pause screen ----------
+// The title menu's File > Continue (WM_COMMAND 40053) opens dialog 1500 in load mode, but only exists in the title
+// menu (1505); the in-stage menu (1504) has Stop This Game (40061) instead. So inside a stage the request first
+// posts 40061: the game asks "Stop this game ?" (dialog 1497, answered by the player with the usual dialog keys:
+// OK stops, Cancel keeps playing, and then the pending load is dropped). Once the title is showing again (no stage
+// drawn, no dialog or menu bar open, a short settle time), 40053 is posted once. The request is ignored while
+// another one is pending, and gives up after 40 s.
+// HK_LOAD_AT=<frame> (test aid, PC): requests it at that presented frame.
+extern int g_hk_in_stage;   // port/hk/wide.c
+enum { LG_IDLE, LG_STOPPING, LG_TITLE };
+static int g_lg_state, g_lg_seen_dlg;
+static unsigned g_lg_t0, g_lg_mark;
+void hk_load_game_request(void) {
+    extern unsigned g_frame;
+    if (g_lg_state != LG_IDLE) return;
+    g_lg_t0 = g_frame; g_lg_seen_dlg = 0;
+    if (g_hk_in_stage) { w32_post_message(HWND_MAIN_DLG, 0x111u, 40061u, 0); g_lg_state = LG_STOPPING; rt_log("[loadgame] in a stage: Stop This Game first\n"); }
+    else { w32_post_message(HWND_MAIN_DLG, 0x111u, 40053u, 0); rt_log("[loadgame] title: Continue\n"); }
+}
+void hk_load_game_tick(void) {   // once per presented frame
+    extern unsigned g_frame;
+    static long at = -2;
+    if (at == -2) { const char *e = getenv("HK_LOAD_AT"); at = e ? atol(e) : -1; }
+    if (at >= 0 && g_frame == (unsigned)at) hk_load_game_request();
+    if (g_lg_state == LG_IDLE) return;
+    if (g_frame - g_lg_t0 > 1000) { g_lg_state = LG_IDLE; rt_log("[loadgame] gave up\n"); return; }
+    if (g_lg_state == LG_STOPPING) {
+        if (hk_dlg_active()) { g_lg_seen_dlg = 1; g_lg_mark = g_frame; }
+        else if (!g_hk_in_stage) { g_lg_state = LG_TITLE; g_lg_mark = g_frame; }
+        else if (g_lg_seen_dlg && g_frame - g_lg_mark > 50) { g_lg_state = LG_IDLE; rt_log("[loadgame] Stop declined\n"); }
+    } else {
+        if (g_hk_in_stage || hk_dlg_active()) g_lg_mark = g_frame;
+        else if (g_frame - g_lg_mark >= 30) { g_lg_state = LG_IDLE; w32_post_message(HWND_MAIN_DLG, 0x111u, 40053u, 0); rt_log("[loadgame] title ready: Continue\n"); }
+    }
+}

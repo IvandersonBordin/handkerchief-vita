@@ -42,6 +42,9 @@ uint32_t gheap_alloc_aligned(uint32_t size, uint32_t align);
 void gheap_free(uint32_t a);
 uint32_t gheap_realloc(uint32_t a, uint32_t size);
 uint32_t gheap_size(uint32_t a);
+typedef struct { uint64_t free_total, free_largest, used_bytes, peak_bytes; unsigned free_blocks; } GHeapStats;
+void gheap_stats(GHeapStats *st);   // heap.c: free space, largest free block, free block count (walks the pool under the lock)
+void gheap_report(void);            // heap.c: live blocks grouped by size, logged ("[gheap]")
 uint32_t gstrdup(const char *s);
 
 // Guest threads

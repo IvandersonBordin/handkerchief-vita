@@ -4,6 +4,8 @@
 
 An unofficial, non-commercial port of the Windows game *Handkerchief* (OPUS Corp. / ASK Co., Ltd., 1999-2000) to the PlayStation Vita. The original executable is statically recompiled from x86 to C, so the game's own code runs unchanged; the port supplies the Windows environment it expects. **You need your own copy of the game.**
 
+> **Beta.** This is the first public beta: the whole game runs from start to finish on the port, but it has not been played through on every console setup yet. If something goes wrong, please [open an issue](../../issues/new/choose) (English or Portuguese) and attach `ux0:data/handkerchief/hklog.txt` and `hklog.prev.txt`. Every report helps us fix it as soon as possible.
+
 <p align="center"><img src="docs/media/gameplay.gif" alt="Title screen and the first stage running in the port" width="480"></p>
 
 Screenshots are captured from the port running the original game data. The game's artwork belongs to its rights holders.
@@ -120,3 +122,14 @@ This project was built with the help of AI. The recompiler, the runtime and the 
 ## License
 
 GPL-3.0 (see [LICENSE](LICENSE)). Third-party components and their licences are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). *Handkerchief* is a trademark of its respective owners; this project is not affiliated with them and distributes no game data.
+
+## Reporting bugs
+
+The port is in **beta**. If the game crashes, freezes, sounds wrong, or something does not behave like the original:
+
+1. Open a new issue with the **Bug report** template: <https://github.com/IvandersonBordin/handkerchief-vita/issues/new/choose>. English or Portuguese are both fine.
+2. Say what happened, where in the game, and how to make it happen again.
+3. Attach `ux0:data/handkerchief/hklog.txt` and `hklog.prev.txt` (copy them with VitaShell) and, if you can, a screenshot (PS + Start).
+
+We read every report and fix what we can as soon as possible.
+

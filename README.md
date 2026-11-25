@@ -2,7 +2,7 @@
 
 ![Handkerchief for PlayStation Vita](docs/media/cover.png)
 
-An unofficial, non-commercial port of the Windows game *Handkerchief* (OPUS Corp. / ASK Co., Ltd., 1999-2000) to the PlayStation Vita. The original executable is statically recompiled from x86 to C, so the game's own code runs unchanged; the port supplies the Windows environment it expects. **You need your own copy of the game.** Two editions of `HDKWIN.EXE` are supported: the original release (preserved at <https://archive.org/details/Handkerchief>) and the one with the community fix (it only rewrites the file-path strings).
+An unofficial, non-commercial port of the Windows game *Handkerchief* (OPUS Corp. / ASK Co., Ltd., 1999-2000) to the PlayStation Vita. The original executable is statically recompiled from x86 to C, so the game's own code runs unchanged; the port supplies the Windows environment it expects. **You need your own copy of the game.** Two editions of `HDKWIN.EXE` are supported: the original release and the one with the community fix (it only rewrites the file-path strings). Where to get the game: 1. My Abandonware <https://www.myabandonware.com/game/handkerchief-h0j>, 2. archive.org <https://archive.org/details/Handkerchief>.
 
 > **Beta.** This is the first public beta: the whole game runs from start to finish on the port, but it has not been played through on every console setup yet. If something goes wrong, please [open an issue](../../issues/new/choose) (English or Portuguese) and attach `ux0:data/handkerchief/hklog.txt` and `hklog.prev.txt`. Every report helps us fix it as soon as possible.
 

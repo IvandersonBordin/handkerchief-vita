@@ -13,7 +13,7 @@ No Windows pode aparecer o aviso "O Windows protegeu o computador" (o programa n
 
 ## 2. Use a janela (3 passos)
 
-1. **Escolha a pasta do seu Handkerchief**: a pasta onde está o `HDKWIN.EXE`. O programa tenta achá-la sozinho e avisa se faltar algo ou se a versão do jogo não for suportada. Duas versões funcionam: a **original (archive.org)** e a **com o fix da comunidade**. Se você escolher a pasta de fora (a que contém `HDKWIN/`), o programa acha a subpasta sozinho. Não tem o jogo? Ele está preservado no archive.org: <https://archive.org/details/Handkerchief> (há um botão para abrir a página).
+1. **Escolha a pasta do seu Handkerchief**: a pasta onde está o `HDKWIN.EXE`. O programa tenta achá-la sozinho e avisa se faltar algo ou se a versão do jogo não for suportada. Duas versões funcionam: a **original (archive.org)** e a **com o fix da comunidade**. Se você escolher a pasta de fora (a que contém `HDKWIN/`), o programa acha a subpasta sozinho. Não tem o jogo? Baixe em: **1.** My Abandonware <https://www.myabandonware.com/game/handkerchief-h0j> ou **2.** archive.org <https://archive.org/details/Handkerchief> (o programa tem um botão para cada um).
 2. **(Opcional) Escolha a pasta da tradução em português**: tradução feita por fãs, do Patryck (<https://patryckpo.com/traducoes/windows/handkerchief/downloads/>). Baixe, execute o arquivo para extrair e escolha a pasta extraída. Sem isso, o jogo fica em inglês.
 3. **Criar o jogo para o Vita**: espere a barra de progresso. Na primeira vez leva de 5 a 20 minutos e baixa cerca de 250 MB de ferramentas gratuitas (precisa de internet e de uns 3 GB livres no disco). Das próximas vezes leva cerca de 1 minuto.
 

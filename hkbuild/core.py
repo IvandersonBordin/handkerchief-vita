@@ -17,7 +17,8 @@ EXE_EDITIONS = {
     "da76ca668b49d0754379416a6f4eb324eb1126b4cb079bfb4d93f4e2dbcdc08d": "original release",
 }
 EXE_SHA256 = "3deeb9b18ac2f6ee7b4af4769d1499fdfe0bde8de44482b57ab4bf6196617b76"   # recompilation cache key (code is identical)
-ARCHIVE_URL = "https://archive.org/details/Handkerchief"
+MYABANDONWARE_URL = "https://www.myabandonware.com/game/handkerchief-h0j"  # option 1 (owner choice)
+ARCHIVE_URL = "https://archive.org/details/Handkerchief"  # option 2
 GAME_ITEMS = ["HDKWIN.EXE", "BITMAP", "SYSTEM", "WAV"]   # USER is not shipped: updating must never overwrite the saves (the port creates it at boot)
 REQUIRED_DIRS = ["BITMAP", "SYSTEM", "WAV"]
 FUNCS = ROOT / "recomp" / "data" / "hdkwin-functions.json.gz"

@@ -13,6 +13,8 @@
 #include <stdlib.h>
 #include "hk/font_data.h"
 #include "pause_menu.h"
+#include "safe_write.h"
+#include "dlg_menu.h"
 void w32_post_message(uint32_t hwnd, uint32_t msg, uint32_t wp, uint32_t lp);
 void w32_set_lang_overlay(const char *dir);
 #define HWND_MAIN_DLG 0x00010010u   // port/hk/dialog.c
@@ -30,6 +32,15 @@ static SDL_Renderer *g_ren;
 static SDL_Texture *g_tex;
 
 SDL_Window *plat_sdl_window(void) { return g_win; }
+// ExitProcess path (hk_host_shutdown): the present worker and audio are already stopped; release the renderer and
+// window before the process exits so the GPU is idle and unused when the system tears it down.
+void plat_shutdown(void) {
+    SDL_Renderer *r = g_ren; SDL_Window *w = g_win;
+    g_ren = NULL; g_win = NULL;
+    if (r) SDL_DestroyRenderer(r);
+    if (w) SDL_DestroyWindow(w);
+    SDL_Quit();
+}
 int plat_width(void) { return 640; }
 int plat_height(void) { return 480; }
 void plat_show_window(void) {}
@@ -115,10 +126,9 @@ extern int g_hk_memlog;   // port/hk/memlog.c: hkport.cfg memlog=1 logs "[mem]" 
 void hk_stress_init(const char *spec);   // port/hk/memlog.c
 int hk_stress_key(int vk);
 static char g_stress_spec[32];   // hkport.cfg stress=<kind>:<n> (area, territory, save, menus, idle): in-process stress driver, a test aid
-static int g_present_thread;   // hkport.cfg present_thread=1 (see plat_present_threaded)
-#else
-#define g_present_thread 0
 #endif
+#define HK_PT_DEFAULT 3   // asynchronous present: stable over exit/pause/dialogs/game-over/options in the console soak (2026-11-24)
+static int g_present_thread = HK_PT_DEFAULT;   // hkport.cfg present_thread=0|1|2|3 (see plat_present_threaded); player build too
 static int g_map[PM_NBTN];   // gameplay button map (pause_menu.h), hkport.cfg map_<button>=<action>
 static const unsigned g_btn_mask[PM_NBTN] = {SCE_CTRL_CROSS, SCE_CTRL_SQUARE, SCE_CTRL_CIRCLE, SCE_CTRL_TRIANGLE, SCE_CTRL_LTRIGGER, SCE_CTRL_RTRIGGER, SCE_CTRL_SELECT};
 #define HK_LANG_DIR HK_DATA_DIR "/lang/ptbr"   // the player's copy of the PT-BR fan translation (release/README.md)
@@ -155,8 +165,12 @@ static const struct { const char *cfg, *env; } g_dbgkey[] = {
     {"preopen", "HK_PREOPEN"}, {"userfast", "HK_USERFAST"}, {"preload_se", "HK_PRELOAD_SE"}, {"savefast", "HK_SAVEFAST"}};
 #define NDBGKEY ((int)(sizeof g_dbgkey / sizeof g_dbgkey[0]))
 
+int hk_gameover_hiding(void);   // port/hk/gameover.c: the hidden load chain runs
+extern int g_hk_last_slot;   // port/hk/gameover.c: slot last saved to / loaded from, 1..10
+extern void (*hk_last_slot_cb)(void);
 static void load_cfg(void) {
     pm_map_defaults(g_map);
+    sw_recover(HK_CFG);   // a crash between the two renames of save_cfg leaves hkport.cfg.bak
     FILE *f = fopen(HK_CFG, "r");
     if (!f) return;
     char line[64];
@@ -165,10 +179,11 @@ static void load_cfg(void) {
         char bk[16], ak[16];
         if (sscanf(line, "map_%15[a-z]=%15s", bk, ak) == 2 && ++nmap)
             for (int b = 0; b < PM_NBTN; b++) if (!strcmp(bk, pm_btn_key[b])) { got[b] = 1;
-                for (int a = 0; a < PM_NACT; a++) if (!strcmp(ak, pm_act_key[a])) g_map[b] = a; } { char lv[8]; if (sscanf(line, "lang=%7s", lv) == 1) g_lang = !strcmp(lv, "pt"); } sscanf(line, "wide=%d", &g_wide); sscanf(line, "fps=%d", &g_fps); sscanf(line, "volume=%d", &g_vol); sscanf(line, "music=%d", &g_mus);
+                for (int a = 0; a < PM_NACT; a++) if (!strcmp(ak, pm_act_key[a])) g_map[b] = a; } { char lv[8]; if (sscanf(line, "lang=%7s", lv) == 1) g_lang = !strcmp(lv, "pt"); } sscanf(line, "wide=%d", &g_wide); sscanf(line, "fps=%d", &g_fps); sscanf(line, "volume=%d", &g_vol); sscanf(line, "music=%d", &g_mus); sscanf(line, "last_slot=%d", &g_hk_last_slot);
                                      sscanf(line, "wide_native=%d", &g_wide_native); 
+                                     sscanf(line, "present_thread=%d", &g_present_thread);
 #if HK_DEVTOOLS
-                                     sscanf(line, "present_thread=%d", &g_present_thread); sscanf(line, "prof=%d", &g_hk_prof); sscanf(line, "memlog=%d", &g_hk_memlog); sscanf(line, "handle_pages=%d", &g_h_maxpages); sscanf(line, "stress=%31s", g_stress_spec); sscanf(line, "rec=%d", &g_rec);
+                                     sscanf(line, "prof=%d", &g_hk_prof); sscanf(line, "memlog=%d", &g_hk_memlog); sscanf(line, "handle_pages=%d", &g_h_maxpages); sscanf(line, "stress=%31s", g_stress_spec); sscanf(line, "rec=%d", &g_rec);
                 { int hv; if (sscanf(line, "heaptrace=%d", &hv) == 1 && hv) setenv("HK_TRACE_HEAP", "1", 1); }
 #endif
                                      sscanf(line, "menu_scale=%d", &g_pm_ui); sscanf(line, "map_version=%d", &ver);
@@ -193,7 +208,7 @@ static void load_cfg(void) {
         }
 }
 static void save_cfg(void) {
-    FILE *f = fopen(HK_CFG, "w");
+    FILE *f = fopen(HK_CFG ".tmp", "w");   // written whole or not at all (safe_write.h): tmp, then commit
     if (!f) return;
     fprintf(f, "lang=%s\nwide=%d\nfps=%d\nwide_native=%d\nvolume=%d\nmusic=%d\n", g_lang ? "pt" : "en", g_wide, g_fps, g_wide_native, g_vol, g_mus);
 #if HK_DEVTOOLS
@@ -201,7 +216,9 @@ static void save_cfg(void) {
     if (g_rec) fprintf(f, "rec=%d\n", g_rec);
 #else
     if (g_pm_ui != 4) fprintf(f, "menu_scale=%d\n", g_pm_ui);   // only when the player changed it by hand
+    if (g_present_thread != HK_PT_DEFAULT) fprintf(f, "present_thread=%d\n", g_present_thread);   // kept if set by hand (0 included)
 #endif
+    if (g_hk_last_slot >= 1 && g_hk_last_slot <= 10) fprintf(f, "last_slot=%d\n", g_hk_last_slot);
     fprintf(f, "map_version=4\n");
     for (int k = 0; k < NDBGKEY; k++) {
         const char *v = getenv(g_dbgkey[k].env);
@@ -209,7 +226,8 @@ static void save_cfg(void) {
     }
     if (getenv("HK_HEAPFIX") && !strcmp(getenv("HK_HEAPFIX"), "0")) fprintf(f, "heapfix=0\n");
     for (int b = 0; b < PM_NBTN; b++) fprintf(f, "map_%s=%s\n", pm_btn_key[b], pm_act_key[g_map[b]]);
-    fclose(f);
+    if (fclose(f) == 0) sw_commit(HK_CFG);
+    else remove(HK_CFG ".tmp");
 }
 // Text on a g_hk_ws_w x 480 XRGB buffer with the port's bitmap font (cell 18).
 static void draw_text(uint32_t *buf, int x, int y, const char *s, uint32_t color) {
@@ -252,17 +270,32 @@ static void show_frame(const uint32_t *pixels, int width, int height, int pitch_
 
 // Menu overlays (pause_menu.h "Overlay"): 960x544 ARGB canvases shown 1:1 at the native output resolution over the
 // (scaled) game frame, so the menu text is not filtered. 0 = pause menu / message box, 1 = RESULTS panel.
+// Boot breadcrumbs (player build too): written synchronously so a death right after them still leaves the line in hklog.txt.
+#define BOOT(...) do { rt_log(__VA_ARGS__); rt_log_flush(); } while (0)
 static SDL_Texture *g_ovtex[2];
 static uint32_t g_ovl[2][PM_OW * PM_OH];
+static const char *g_loading_built;   // text overlay 0 holds for plat_show_loading; any other write to overlay 0 invalidates it
 static void ov_upload(int i) {
+    if (i == 0) g_loading_built = NULL;
     if (!g_ren) return;
+    int fresh = 0;
     if (!g_ovtex[i]) {
+        fresh = 1;
         g_ovtex[i] = SDL_CreateTexture(g_ren, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, PM_OW, PM_OH);
-        if (!g_ovtex[i]) return;
+        if (!g_ovtex[i]) { BOOT("[boot] overlay %d texture failed: %s\n", i, SDL_GetError()); return; }
+        BOOT("[boot] overlay %d texture ok\n", i);
         SDL_SetTextureBlendMode(g_ovtex[i], SDL_BLENDMODE_BLEND);
 #if SDL_VERSION_ATLEAST(2, 0, 12)
         SDL_SetTextureScaleMode(g_ovtex[i], SDL_ScaleModeNearest);
 #endif
+    }
+    // pm_overlay_build says which part of the buffer changed since the last build (= since the last upload): upload only that.
+    if (!fresh && g_pm_dirty_ovl == g_ovl[i]) {
+        const PmRect d = g_pm_dirty;
+        if (d.x1 <= d.x0) return;   // identical to what the texture holds
+        const SDL_Rect r = {d.x0, d.y0, d.x1 - d.x0, d.y1 - d.y0};
+        SDL_UpdateTexture(g_ovtex[i], &r, &g_ovl[i][d.y0 * PM_OW + d.x0], PM_OW * 4);
+        return;
     }
     SDL_UpdateTexture(g_ovtex[i], NULL, g_ovl[i], PM_OW * 4);
 }
@@ -334,6 +367,9 @@ extern uint64_t g_pause_qpc;
 // the menu bar is Start > Game menu there, or the "Game menu" action if the player assigns it to a button. Outside
 // a stage (title, no counters) Select still opens the menu bar directly; Exit is in its File menu.
 int hk_results_read(uint32_t out[13]);   // port/hk/results.c
+int hk_gameover_ask_pending(void);       // port/hk/gameover.c: "Continue from the last save?" after GAME OVER
+void hk_gameover_answer(int yes);
+int hk_gameover_key(int vk);
 static unsigned g_menu_until;
 extern int g_hk_in_stage;  // port/hk/wide.c
 int hk_dlg_active(void);   // port/hk/dialog.c (also declared below)
@@ -356,6 +392,7 @@ static void keyq_step(void) {   // once per presented frame: 3 frames down, 3 fr
 // Cross selects or toggles, Left/Right changes a value, Circle goes back, Start resumes from anywhere, Select opens the
 // game's menu bar directly. Save game queues F2 and Quit game queues Esc (the game's own commands), delivered after
 // the pause like the cheat keys.
+static int g_opt_mode;   // 1: opened from the title menu's OPTIONS item: starts on Settings, Back / Circle / Start leave
 static void pause_loop(const uint32_t *pixels, int width, int height, int pitch_bytes) {
     static int started_native = -1;
     if (started_native < 0) started_native = g_wide_native;
@@ -365,7 +402,7 @@ static void pause_loop(const uint32_t *pixels, int width, int height, int pitch_
     memset(&shown_key, 0xff, sizeof shown_key);
     SceCtrlData pad;
     unsigned prev = 0xffffffffu;   // buttons of the previous poll: everything starts "held" so the opening press does nothing
-    int capture = 0, released = 0, screen = PM_MAIN, sel = 0, money = 0, amt = 1, confirm = 0, inv = 0, action = 0;   // action: 1 save, 2 game menu, 3 quit
+    int capture = 0, released = 0, screen = g_opt_mode ? PM_SETTINGS : PM_MAIN, sel = 0, money = 0, amt = 1, confirm = 0, inv = 0, action = 0;   // action: 1 save, 2 game menu, 3 quit
     extern unsigned g_frame;
     uint32_t res_v[13] = {0};
     for (;;) {
@@ -427,7 +464,7 @@ static void pause_loop(const uint32_t *pixels, int width, int height, int pitch_
         case R_LANG: if (step) { g_lang = !g_lang; g_lang_ok = lang_files_ok(); save_cfg(); } break;   // applies on restart
         case R_GAMEMENU: if (cross) action = 2; break;
         case R_QUIT: if (cross) action = 3; break;
-        case R_BACK: if (cross) { if (screen == PM_CONTROLS) { sel = 5; screen = PM_SETTINGS; } else { sel = screen == PM_CHEATS ? 3 : screen == PM_RESULTS ? 5 : 4; screen = PM_MAIN; } } break;
+        case R_BACK: if (cross) { if (g_opt_mode && screen == PM_SETTINGS) action = -1; else if (screen == PM_CONTROLS) { sel = 5; screen = PM_SETTINGS; } else { sel = screen == PM_CHEATS ? 3 : screen == PM_RESULTS ? 5 : 4; screen = PM_MAIN; } } break;
         case R_CONTROLS: if (cross) { screen = PM_CONTROLS; sel = 0; } break;
         case R_RESET: if (cross) { pm_map_defaults(g_map); save_cfg(); } break;
         case R_CHEAT_ON: *(uint32_t *)(g_mem + HK_UNRIVALED) = !st.cheats; break;
@@ -440,7 +477,7 @@ static void pause_loop(const uint32_t *pixels, int width, int height, int pitch_
         case R_MUS: g_mus += step > 0 ? 1 : -1; if (!dx) g_mus = g_mus % 10 + 1; apply_volume(); save_cfg(); break;
         default: if (cross && id >= R_ACT0) capture = id - R_ACT0 + 1; break;
         }
-        if (press & SCE_CTRL_CIRCLE) { if (screen == PM_MAIN) action = -1; else if (screen == PM_CONTROLS) { sel = 5; screen = PM_SETTINGS; } else { sel = screen == PM_CHEATS ? 3 : screen == PM_RESULTS ? 5 : 4; screen = PM_MAIN; } }
+        if (press & SCE_CTRL_CIRCLE) { if (screen == PM_MAIN || (g_opt_mode && screen == PM_SETTINGS)) action = -1; else if (screen == PM_CONTROLS) { sel = 5; screen = PM_SETTINGS; } else { sel = screen == PM_CHEATS ? 3 : screen == PM_RESULTS ? 5 : 4; screen = PM_MAIN; } }
         if (press & SCE_CTRL_SELECT) action = 2;
         if (action) break;
         if (!(b & SCE_CTRL_START)) released = 1;
@@ -461,6 +498,30 @@ static void pause_loop(const uint32_t *pixels, int width, int height, int pitch_
 }
 
 static int g_start_was;
+#if HK_DEVTOOLS
+#define HK_DLOG(...) rt_dlog(__VA_ARGS__)
+#else
+#define HK_DLOG(...) ((void)0)
+#endif
+// The title menu's OPTIONS item (NETWORK in the original; the port has no network mode): the game's DialogBoxParamA
+// for the network dialog 1488 is answered with Cancel and this opens the pause menu's Settings page instead
+// (port/hk/dialog.c). Runs on the game thread while the title frame is still on screen; Back / Circle / Start return.
+void hk_title_options(void) {
+    const uint32_t *hk_dd_snapshot(int *w, int *h, int *pitch_bytes);
+    int w = 0, h = 0, pitch = 0;
+    const uint32_t *px = g_ren ? hk_dd_snapshot(&w, &h, &pitch) : NULL;   // own frame: g_last_px is not kept with present_thread=3
+    HK_DLOG("[opt] reached: present_thread=%d frame=%s ren=%d\n", g_present_thread, px ? "ok" : "none", g_ren != NULL);
+    if (!px) return;
+    g_opt_mode = 1;
+    HK_DLOG("[opt] settings page opened\n");
+    pause_loop(px, w, h, pitch);
+    HK_DLOG("[opt] settings page closed\n");
+    g_opt_mode = 0;
+    SceCtrlData pad;
+    sceCtrlPeekBufferPositive(0, &pad, 1);
+    g_start_was = (pad.buttons & SCE_CTRL_START) != 0;
+}
+static int tips_held(void);
 // Game thread, once per frame when presenting through the present thread: 1 = Start was just pressed, so the
 // caller drains the thread and presents synchronously (plat_present_xrgb opens the pause screen).
 int plat_poll_main(void) {
@@ -468,11 +529,12 @@ int plat_poll_main(void) {
     sceCtrlPeekBufferPositive(0, &pad, 1);
     if ((pad.buttons & SCE_CTRL_START) && !g_start_was) return 1;
     g_start_was = (pad.buttons & SCE_CTRL_START) != 0;
+    if (g_present_thread == 3 && tips_held()) return 1;   // the tips card needs game state: synchronous frame
     keyq_step();
     return 0;
 }
-// Off by default: the first console run with the present thread closed the game when stage A0 started
-// (2026-11-21, cause not yet known). hkport.cfg present_thread=1 turns it on for testing.
+// Default 3 (asynchronous present, see ddraw.c pa_thread). An early run with mode 1 closed the game when stage A0
+// started (2026-11-21); mode 3 has been stable since. hkport.cfg present_thread=0 turns the worker off.
 int plat_present_threaded(void) { return g_present_thread; }
 void plat_present_xrgb(uint32_t *pixels, int width, int height, int pitch_bytes) {
     g_plat_enter = SDL_GetPerformanceCounter();
@@ -483,6 +545,7 @@ void plat_present_xrgb(uint32_t *pixels, int width, int height, int pitch_bytes)
     g_start_was = start;
     keyq_step();
     plat_show_xrgb(pixels, width, height, pitch_bytes);
+    if (hk_gameover_ask_pending()) hk_gameover_answer(msgbox_loop("GAME OVER", hk_tr(S_GO_ASK), 4) == 6);   // Cross = Yes, Circle = No
 }
 static int tips_held(void) {   // the tips button (Select by default) is held in a stage, no dialog or menu bar open
     if (!g_hk_in_stage || hk_dlg_active()) return 0;
@@ -507,7 +570,7 @@ static void tips_load(int page, int npages_out[1], PmTipsArg *a) {
     }
     npages_out[0] = n;
 }
-void plat_show_xrgb(uint32_t *pixels, int width, int height, int pitch_bytes) {
+static void fps_overlay(uint32_t *pixels, int width, int height, int pitch_bytes) {
     // FPS: frames shown in the last full second (the game targets 25).
     static uint64_t t_sec;
     static int count, fps;
@@ -523,11 +586,58 @@ void plat_show_xrgb(uint32_t *pixels, int width, int height, int pitch_bytes) {
             for (int x = 2; x < 74; x++) buf[y * width + x] = (buf[y * width + x] >> 2) & 0x3f3f3fu;
         draw_text(buf, 6, 3, txt, fps >= 24 ? 0x80ff80u : 0xffff60u);
     }
+}
+void plat_show_loading(uint32_t *pixels, int width, int height, int pitch_bytes) {
+    const char *txt = hk_tr(S_LOADING);
+    if (g_loading_built != txt) { pm_overlay_msgbox(g_ovl[0], "", txt, NULL, NULL); ov_upload(0); g_loading_built = txt; }   // text pointer: a language change rebuilds
+    show_frame_ov(pixels, width, height, pitch_bytes, 0, 160);
+}
+// present_thread=3: runs on the present worker; no game state (no tips, no dialogs, no g_last_* for the pause screen).
+void plat_present_async(uint32_t *pixels, int width, int height, int pitch_bytes) {
+    fps_overlay(pixels, width, height, pitch_bytes);
+    show_frame(pixels, width, height, pitch_bytes);
+}
+void plat_show_xrgb(uint32_t *pixels, int width, int height, int pitch_bytes) {
+    static int first_frame;
+    if (!first_frame) { first_frame = 1; BOOT("[boot] title loop: first frame %dx%d\n", width, height); }
+    fps_overlay(pixels, width, height, pitch_bytes);
     g_last_px = pixels; g_last_w = width; g_last_h = height; g_last_pitch = pitch_bytes;
     // Tips & controls card while its button (Select by default) is held in a stage: D-pad Left/Right page through the tips (movement is suppressed meanwhile, see plat_vk_down).
     static unsigned tips_prev = 0xffffffffu;
     static int tips_page = 0, tips_shown = 0;
     static PmTipsArg tips_key;
+    // The game's dialogs and menu bar: the pause menu's style at 960x544 (dlg_menu.h), rebuilt only when the view changes.
+    // Dialogs run on the game thread (present_thread=3 presents synchronously while one is up, see present_primary).
+    static HkDlgView dv;
+    static uint64_t dv_hash;
+    static int dv_valid;
+    uint64_t pt0 = SDL_GetPerformanceCounter();
+    if (width <= HK_WS_MAX && height <= 480 && hk_dlg_view(&dv)) {
+        { static int once; if (!once) { once = 1; BOOT("[boot] first dialog view kind %d\n", (int)dv.kind); } }
+        const uint64_t hh = hk_dlgview_hash(&dv);
+        const uint64_t pt1 = SDL_GetPerformanceCounter();
+        int rebuilt = 0;
+        if (!dv_valid || hh != dv_hash) { pm_overlay_dlg(g_ovl[1], &dv); ov_upload(1); dv_hash = hh; dv_valid = 1; rebuilt = 1; }
+        const uint64_t pt2 = SDL_GetPerformanceCounter();
+        show_frame_ov(pixels, width, height, pitch_bytes, 1, dv.kind == DV_MENU ? 96 : 128);
+#if HK_DEVTOOLS
+        {   // dev: one line per second with the per-frame cost of the dialog view (hklog.txt)
+            static uint64_t t_win, a_view, a_build, a_show; static unsigned n, nb;
+            const uint64_t t3 = SDL_GetPerformanceCounter(), hz = SDL_GetPerformanceFrequency();
+            a_view += pt1 - pt0; a_build += pt2 - pt1; a_show += t3 - pt2; n++; nb += (unsigned)rebuilt;
+            if (!t_win) t_win = t3;
+            if (t3 - t_win >= hz) {
+                const double ms = 1e3 / (double)hz;
+                HK_DLOG("[dlgperf] %u shows, %u rebuilds in %.2f s: view %.2f ms, rebuild+upload %.2f ms (per rebuild), show_frame_ov %.2f ms (per show)\n",
+                        n, nb, (double)(t3 - t_win) / (double)hz, (double)a_view * ms / n, nb ? (double)a_build * ms / nb : 0.0, (double)a_show * ms / n);
+                t_win = t3; a_view = a_build = a_show = 0; n = nb = 0;
+            }
+        }
+#endif
+        tips_shown = 0; tips_prev = 0xffffffffu;
+        return;
+    }
+    dv_valid = 0;
     if (width <= HK_WS_MAX && height <= 480 && tips_held()) {
         SceCtrlData pad;
         sceCtrlPeekBufferPositive(0, &pad, 1);
@@ -594,6 +704,7 @@ int plat_vk_down(int vk) {
         } else if (other || hk_dlg_active()) tap_at = 0xffffffffu;
         d_prev = d_now;
     }
+    if (hk_gameover_hiding()) return hk_gameover_key(vk);   // hidden load chain after GAME OVER: only its injected keys, never the player's
     const int dlg = hk_dlg_active();
     int tap = !dlg && tap_at != 0xffffffffu && g_frame >= tap_at && g_frame < tap_at + 2;   // never in dialogs
     uint32_t b = pad.buttons;
@@ -609,11 +720,12 @@ int plat_vk_down(int vk) {
     case 0x25: return (b & SCE_CTRL_LEFT) || pad.lx < 64;
     case 0x26: return (b & SCE_CTRL_UP) || pad.ly < 64;
     case 0x27: return (b & SCE_CTRL_RIGHT) || pad.lx > 192;
-    case 0x28: return down;
+    case 0x28: return down || hk_gameover_key(0x28);
+    case 0x0D: return hk_gameover_key(0x0D);   // injected Enter: OK of "Stop this game ?" after GAME OVER (port/hk/gameover.c)
     case 'S': return down;
     // Rapid fire (held): the game's shoot key pressed 2 frames and released 2 (about 6 shots per second at 25 fps).
     case 'X': return !menu && ((b & m[ACT_SHOOT]) || ((b & m[ACT_RAPID]) && (g_frame & 3u) < 2u));
-    case 0x20: return menu && (b & SCE_CTRL_CROSS);
+    case 0x20: return (menu && (b & SCE_CTRL_CROSS)) || hk_gameover_key(0x20);
     case 'U': case 'M': case 0x71: return keyq_down(vk);   // cheats, Save (F2) from the pause menu
     case 'A': return !menu && (b & m[ACT_JUMP]);
     // In dialogs Circle is Esc, not Z: the GAME DATA loop (1500, 0x4328CD) reads the game's own input object, where
@@ -640,6 +752,9 @@ int main(int argc, char **argv) {
     (void)argc; (void)argv;
     sceIoMkdir("ux0:data", 0777);
     sceIoMkdir(HK_DATA_DIR, 0777);
+    sceIoMkdir(HK_DATA_DIR "/USER", 0777);   // saves live here; the builder does not ship it, so an update never overwrites them
+    hk_dlg_set_pretty(1);
+    BOOT("[boot] main\n");
     scePowerSetArmClockFrequency(444);
     scePowerSetBusClockFrequency(222);
     scePowerSetGpuClockFrequency(222);
@@ -656,11 +771,14 @@ int main(int argc, char **argv) {
     g_win = SDL_CreateWindow("Handkerchief", 0, 0, 960, 544, 0);
     g_ren = g_win ? SDL_CreateRenderer(g_win, -1, SDL_RENDERER_PRESENTVSYNC) : NULL;
     load_cfg();
+    hk_last_slot_cb = save_cfg;
     apply_volume();
     hk_wide_set(g_wide_native ? 848 : 640);
     apply_aspect();
+    BOOT("[boot] cfg loaded\n");
     rt_log("[vita] window %p renderer %p\n", (void *)g_win, (void *)g_ren);
     if (rt_init(HK_GUEST_MB << 20)) rt_fatal("guest memory: allocation of %u MB failed", HK_GUEST_MB);
+    BOOT("[boot] guest memory ok\n");
     g_lang_ok = lang_files_ok();
     g_started_lang = g_lang;
     const char *exe = HK_DATA_DIR "/HDKWIN.EXE";
@@ -670,10 +788,12 @@ int main(int argc, char **argv) {
     rt_fill_iat();
     { void hk_patch_data(void); hk_patch_data(); }
     rt_log("game loaded from %s\n", g_game_dir);
+    BOOT("[boot] overlay init ok, entering the game\n");
 #if HK_DEVTOOLS
     hk_stress_init(g_stress_spec);
 #endif
     rt_run_entry();
+    BOOT("[boot] rt_run_entry returned\n");
     SDL_Quit();
     return 0;
 }

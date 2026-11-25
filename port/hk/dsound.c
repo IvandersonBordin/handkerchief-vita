@@ -102,6 +102,9 @@ static void obj_unwrap(DSBuf *b) {
 static int n_ghost;
 // Live DirectSound state for the memory log (HK_MEMLOG). Sample bytes count each shared sample once.
 typedef struct { int buffers, notifies, playing, dups, ghosts, top_slot; uint64_t sample_bytes; unsigned dead_guest_objs; } HkDsStats;
+void hk_ds_shutdown(void) {
+    if (audio_dev) { SDL_CloseAudioDevice(audio_dev); audio_dev = 0; }
+}
 void hk_ds_stats(HkDsStats *o) {
     memset(o, 0, sizeof *o);
     if (!mx) return;

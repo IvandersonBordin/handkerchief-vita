@@ -61,6 +61,15 @@ DirectDraw layer. Sections 1-8 are the study; the status below tracks the implem
 - Former milestone 2 notes: top bar (rows 0..31) and the HUD strip (rows 352..479) stay 640 wide and
   left-aligned, columns 640..847 black there; the sky looked continuous in the A0 shot but the 640-period
   sky draw (`0x447929`) is still unpatched, so a gap is expected at other scroll positions.
+- **Title scene wide (2026-11-24)**: the title (class `0x472500`, ctor `0x455548`, attract demo in the t0 world)
+  is drawn 848 wide instead of pillarboxed. Hooks: `0x456606` in `0x4565AA` (view rect right after `0x4565F8`
+  = screen width; the follow rect already copied to `[esp+0x10..0x1C]` shifted by the centring offset), `0x455E16`
+  in the title frame `0x455D87` (logo centring width `eax` = screen width; marks the frame wide for `hk_ws_flip`),
+  `0x4556B0` (menu panel x `0xDC` + offset, `hk_ws_panel_x`). The copyright lines (`0x455E89`/`0x455EE1`) centre on
+  the camera view rect `0x4AA348` and follow by themselves; the sky tiles through the existing sky hooks. Check:
+  default 640 md5 identical to the previous build at frames 800/1000/1304 (Enter at 1300); `HK_WIDE=848` switches
+  to wide at frame 657 (title fade-in), menu, demo, load dialog (CONTINUE) and fade into the territory card show no
+  gaps or garbage. Intro logos stay pillarboxed.
 
 Reproduce the disassembly with `objdump -d -Mintel original-data/HDKWIN.EXE` (or `build/hdkwin.asm`).
 Function starts come from `build/hk-recomp/re/functions.json` (Ghidra).

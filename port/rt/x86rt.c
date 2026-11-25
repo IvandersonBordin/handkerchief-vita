@@ -54,13 +54,21 @@ void rt_log_flush(void) {
     if (n) { __atomic_fetch_add(&g_log_flush_b, n, __ATOMIC_RELAXED); if (d > g_log_flush_t) g_log_flush_t = d; }
 #endif
 }
+static SDL_Thread *g_log_thr;
+static volatile int g_log_quit;
+// Shutdown: the log thread leaves its loop and is joined, then the queue is flushed once more (no thread is mid-fwrite at exit()).
+void rt_log_stop(void) {
+    g_log_quit = 1;
+    if (g_log_thr) { SDL_WaitThread(g_log_thr, NULL); g_log_thr = NULL; }
+    rt_log_flush();
+}
 #ifdef __vita__
 #include <psp2/kernel/threadmgr.h>
 static int log_thread(void *arg) {
     (void)arg;
     int cpu_registered=rt_cpu_profile_thread("log");
     sceKernelChangeThreadCpuAffinityMask(sceKernelGetThreadId(), SCE_KERNEL_CPU_MASK_USER_2);
-    for (;;) { if (!cpu_registered) cpu_registered=rt_cpu_profile_thread("log"); SDL_Delay(100); rt_log_flush(); }
+    while (!g_log_quit) { if (!cpu_registered) cpu_registered=rt_cpu_profile_thread("log"); SDL_Delay(100); rt_log_flush(); }
     return 0;
 }
 #endif
@@ -77,7 +85,7 @@ void rt_log(const char *fmt, ...) {
         g_logf = fopen(SH3_LOG_PATH, rotated ? "w" : "a");
         if (g_logf) atexit(rt_log_flush);
 #ifdef __vita__
-        if (g_logf) SDL_CreateThread(log_thread, "sh3log", NULL);
+        if (g_logf) g_log_thr = SDL_CreateThread(log_thread, "sh3log", NULL);
 #endif
     }
     char tmp[512], *msg = tmp, *big = NULL;

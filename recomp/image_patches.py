@@ -65,8 +65,11 @@ ADDR_WRAPS = {}
 # 0x4220DC after 0x4220CD (c7 45 f0 80 02 00 00): back-buffer clear rect right in 0x422098.
 # 0x45219E after 0x452190 (c7 45 f8 80 02 00 00), screen size 0 path of 0x452093 only (sizes 2/1 jump from 0x45210D /
 #   0x45215C to 0x4521A4): view rect right; the follow rect L/R (0x452169 / 0x452177) already copied to [esp]/[esp+8].
-# (0x455E16, overlay centring in 0x455D87, and the panel call 0x4556B0 in the ctor 0x455548 are no longer hooked: both
-#   belong to the title scene class, vtable 0x472500, drawn 640 wide and pillarboxed by port/hk/wide.c hk_ws_frame_ox.)
+# Title scene class (vtable 0x472500, ctor 0x455548), drawn wide since 2026-11-24 (it was pillarboxed before):
+# 0x456606 after 0x4565F8 (c7 45 e8 80 02 00 00) in 0x4565AA: view rect right = screen width; the follow rect copied to
+#   [esp+0x10..0x1C] at 0x4565EF..0x4565F2 is shifted by the centring offset.
+# 0x455E16 after 0x455E11 (b8 80 02 00 00) in the title frame 0x455D87: logo centring width; marks the frame as wide.
+# 0x4556B0: the menu panel's constructor call (x pushed by 68 dc 00 00 00 at 0x4556A9), same hook as 0x4567F9 below.
 # 0x42208E after 0x422088/0x42208B: logs the area size (edx, esi) stored in the camera context by 0x42206D.
 # Milestone 2 (sky tiling, panel centring; same rule: nothing changes at width 640):
 # 0x447994 sky 0x447929: after the two blits (0x44796F at ebx+640, 0x44798C at ebx after 81 eb 80 02 00 00 at
@@ -88,12 +91,14 @@ ADDR_WRAPS = {}
 #   rect (box+0x44/0x4C, child clip built by 0x411BED) widened.
 # 0x454AD4 same function, list [scene+0x48] (territory title card; eax from 33 c0 at 0x454AD1): += centring offset.
 # 0x454AFE after that list draw (ff 53 04 at 0x454AFB): side margins of the top bar and HUD from HDKCON00 (bank 10).
-HOOKS = {0x414D0B: "hk_config_loaded", 0x4542C0: "hk_stage_scene_hook",
+# 0x43DB82 in 0x43DB3A: `push 0x485E70` ("GAME OVER"), reached only while the game-over text is drawn (port/hk/gameover.c).
+HOOKS = {0x43DB82: "hk_gameover_draw", 0x414D0B: "hk_config_loaded", 0x4542C0: "hk_stage_scene_hook",
          0x40D1DD: "hk_ws_global_rect", 0x4220DC: "hk_ws_clear_rect", 0x45219E: "hk_ws_view_rect",
          0x42208E: "hk_ws_area_size",
          0x447994: "hk_ws_sky", 0x447AA4: "hk_ws_sky2_x", 0x447B08: "hk_ws_sky2_fill_l",
          0x447B2C: "hk_ws_sky2_fill_r", 0x447BD1: "hk_ws_sky2_layers",
-         0x4567F9: "hk_ws_panel_x", 0x4570E5: "hk_ws_panel_x",
+         0x4567F9: "hk_ws_panel_x", 0x4570E5: "hk_ws_panel_x", 0x4556B0: "hk_ws_panel_x",
+         0x456606: "hk_ws_title_view", 0x455E16: "hk_ws_title_logo",
          0x454AF7: "hk_ws_hud_list", 0x4135C8: "hk_ws_list_child",
          0x4349A3: "hk_ws_hud_box", 0x454AD4: "hk_ws_bar_x", 0x454AFE: "hk_ws_bars"}
 ABI_NATIVES = set()

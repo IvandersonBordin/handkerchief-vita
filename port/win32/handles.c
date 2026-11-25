@@ -342,10 +342,14 @@ void w32_host_path(const char *g, char *out, size_t n) {
     tmp[k] = 0;
     const char *p = tmp;
     if (!SDL_strncasecmp(p, "C:/SH3/", 7)) p += 7;
-    while (p[0] == '.' && p[1] == '/') p += 2;
     // The Brazilian Portuguese fan translation's executable (same code, different data) looks for its files under
     // "../Hdkwin/" and "<current dir>/Hdkwin/" (another release's folder layout): map them to the game folder.
-    while (*p == '/') p++;
+    // Strip leading "/", "./" (repeatedly, any order), then one "../Hdkwin/" or "Hdkwin/" prefix.
+    for (;;) {
+        if (*p == '/') p++;
+        else if (p[0] == '.' && p[1] == '/') p += 2;
+        else break;
+    }
     if (!SDL_strncasecmp(p, "../Hdkwin/", 10)) p += 10;
     else if (!SDL_strncasecmp(p, "Hdkwin/", 7)) p += 7;
     if (p[0] && p[1] == ':') { SDL_snprintf(out, n, "%s", p); return; }

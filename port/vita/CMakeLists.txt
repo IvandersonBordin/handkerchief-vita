@@ -53,6 +53,10 @@ else()
 endif()
 target_compile_definitions(handkerchief PRIVATE SH3_LOG_PATH="ux0:data/handkerchief/hklog.txt")
 find_package(SDL2 REQUIRED)
+# Fixed data segment base with headroom: the linker otherwise starts the RW segment at the next page after the code, and
+# vita-elf-create needs ~3 KB of SCE data after the code segment; when the code ended just below a page boundary the
+# link failed ("segment 1 overlaps"), depending on code size alone.
+target_link_options(handkerchief PRIVATE -Wl,--section-start=.init_array=0x812c0000)
 target_link_libraries(handkerchief SDL2::SDL2 SceDisplay_stub SceCtrl_stub SceTouch_stub SceMotion_stub
   SceAudio_stub SceGxm_stub ScePower_stub SceAppUtil_stub SceCommonDialog_stub SceAppMgr_stub
   SceSysmodule_stub SceHid_stub SceIofilemgr_stub SceProcessmgr_stub m -pthread)

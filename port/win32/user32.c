@@ -89,9 +89,15 @@ static void post_key_changes(CPU *c) {
                                    'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'};
     static uint8_t down[256];
     uint8_t pressed[sizeof keys];
-    int npressed = 0, dlg = hk_dlg_active();
+    static int was_dlg;
+    int npressed = 0, dlg = hk_dlg_active(), entering = dlg && !was_dlg;
+    was_dlg = dlg;
     for (unsigned i = 0; i < sizeof keys; i++) {
         int vk = keys[i], d = plat_vk_down(vk) != 0;
+        // A dialog that appears while a key is still held (About chosen from the menu bar with Cross: the bar closes
+        // before the dialog exists, and in a stage Cross is not a menu key in that gap) must not take that key as a
+        // fresh press, or its OK would close it at once. The key needs a release first.
+        if (entering && vk != 0x79 && d) { down[vk] = 1; continue; }
         if (d == down[vk]) continue;
         down[vk] = (uint8_t)d;
         if (vk == 0x79) { if (d) hk_menu_key(); continue; }   // F10: the game's menu (port/hk/dialog.c)

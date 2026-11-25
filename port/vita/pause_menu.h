@@ -121,12 +121,16 @@ static void pm_rect(uint32_t *buf, int bw, int x0, int y0, int x1, int y1, uint3
             if (x >= 0 && x < bw && y >= 0 && y < HK_CANVAS_H(bw)) buf[y * bw + x] = col;
 }
 static void pm_blend(uint32_t *buf, int bw, int x0, int y0, int x1, int y1, uint32_t col, int a) {   // a/16 of col
-    for (int y = y0 < 0 ? 0 : y0; y < y1 && y < HK_CANVAS_H(bw); y++)
+    uint8_t lut[3][256];   // per channel: (p * (16 - a) + c * a) / 16
+    for (int k = 0; k < 3; k++)
+        for (int p = 0; p < 256; p++) lut[k][p] = (uint8_t)((p * (16 - a) + (int)((col >> (8 * k)) & 255u) * a) / 16);
+    for (int y = y0 < 0 ? 0 : y0; y < y1 && y < HK_CANVAS_H(bw); y++) {
+        uint32_t *row = buf + (size_t)y * bw;
         for (int x = x0 < 0 ? 0 : x0; x < x1 && x < bw; x++) {
-            uint32_t p = buf[y * bw + x], r = 0;
-            for (int sh = 0; sh < 24; sh += 8) r |= ((((p >> sh) & 255u) * (16 - a) + ((col >> sh) & 255u) * a) / 16u) << sh;
-            buf[y * bw + x] = r;
+            const uint32_t p = row[x];
+            row[x] = (uint32_t)lut[0][p & 255u] | (uint32_t)lut[1][(p >> 8) & 255u] << 8 | (uint32_t)lut[2][(p >> 16) & 255u] << 16;
         }
+    }
 }
 
 // Darkens the game frame (src: XRGB, pitch in pixels) into dst (bw x 480).
@@ -152,8 +156,22 @@ static void pm_panel(uint32_t *buf, int bw, int x0, int y0, int x1, int y1) {
 static int g_pm_ui = 4;   // the owner's choice (config menu_scale: 2, 3, 4)
 static int pm_h = 2;      // scale of the screen being drawn (even)
 static int pm_hs = 2;     // scale of the hint line and the note (even)
+// Upper-case text in the title-word glyphs (hk_tw_*); a string they cannot build falls back to the plain game font.
+static int pm_bigw(const char *s, int h) {
+    char u[200];
+    hk_gf_upper(u, s, sizeof u);
+    int w = hk_art_ok() ? hk_tw_width_h(u, h) : -1;
+    return w >= 0 ? w : hk_gf_width_h(u, h);
+}
+static int pm_big(uint32_t *buf, int bw, int x, int y, const char *s, int style, int h) {
+    char u[200];
+    hk_gf_upper(u, s, sizeof u);
+    int w = hk_art_ok() ? hk_tw_text_h(buf, bw, x, y, u, style, h) : -1;
+    return w >= 0 ? w : hk_gf_text_h(buf, bw, x, y, u, style, h);
+}
 static int pm_rich(uint32_t *buf, int bw, int x, int y, const char *s, int style, int upper) {
-    const int h = upper ? pm_h : pm_hs, sc = h / 2;   // pad symbols are replicated sc times
+    const int h = upper == 1 ? pm_h : pm_hs, sc = h / 2;   // pad symbols are replicated sc times
+    const int th = upper == 2 ? (h >= 4 ? 3 : 2) : h;       // upper 2: small title-word glyphs (hints, notes)
     static const char *const words[5] = {"", "Cross", "Circle", "Triangle", "Square"};
     char run[160];
     int n = 0, x0 = x;
@@ -167,10 +185,8 @@ static int pm_rich(uint32_t *buf, int bw, int x, int y, const char *s, int style
         if (sym || !*p || n >= (int)sizeof run - 1) {
             run[n] = 0;
             if (n) {
-                char u[160];
-                if (upper) hk_gf_upper(u, run, sizeof u); else strcpy(u, run);
-                if (buf) hk_gf_text_h(buf, bw, x, y, u, style, h);
-                x += hk_gf_width_h(u, h);
+                if (buf) { if (upper) pm_big(buf, bw, x, y + (upper == 2 && th != h ? 1 : 0), run, style, th); else hk_gf_text_h(buf, bw, x, y, run, style, h); }
+                x += upper ? pm_bigw(run, th) : hk_gf_width_h(run, h);
             }
             n = 0;
             if (!*p) break;
@@ -178,7 +194,7 @@ static int pm_rich(uint32_t *buf, int bw, int x, int y, const char *s, int style
         if (!sym) { run[n++] = *p++; continue; }
         p += len;
         const int sy = y;
-        if (sym <= 4) { if (buf) hk_th_glyph_s(buf, bw, HK_CANVAS_H(bw), x + sc, sy - sc, sym, sc); x += 19 * sc; }
+        if (sym <= 4) { if (buf) hk_th_glyph_s(buf, bw, HK_CANVAS_H(bw), x + sc, sy - sc, sym, sc); x += 19 * sc + (upper ? 3 * sc : 0); }
         else if (sym == 8) {   // D-pad left/right: a bar with an arrowhead at each end
             if (buf) {
                 pm_rect(buf, bw, x + 6 * sc, sy + 5 * sc, x + 21 * sc, sy + 8 * sc, 0xdcd6c6u);
@@ -194,7 +210,7 @@ static int pm_rich(uint32_t *buf, int bw, int x, int y, const char *s, int style
     }
     return x - x0;
 }
-static int pm_rich_w(const char *s, int upper) { return pm_rich(NULL, 0, 0, 0, s, 0, upper); }
+static int pm_rich_w(const char *s, int upper) { return pm_rich(NULL, 0, 0, 0, s, 0, upper); }   // upper: 0 plain font, 1 title glyphs at pm_h, 2 small title glyphs (pm_hs)
 // A selected row: the title's red dots, 12 px left of the text and 4 px right of its end (0x408D5C), 2 px lower than
 // the word's top (the font's caps start at cell row 2).
 // Scaled with the text (dot 8 * h / 2, gaps 12 and 4 at 1x), centred on the caps (cell rows 2..12).
@@ -203,18 +219,15 @@ static void pm_dots(uint32_t *buf, int bw, int xl, int xr, int y) {
     hk_art_dot_h(buf, bw, xl - 6 * h, yy, h);
     if (xr >= 0) hk_art_dot_h(buf, bw, xr + 2 * h, yy, h);
 }
-static int pm_utext(uint32_t *buf, int bw, int x, int y, const char *s, int style) {   // upper-case text, scale pm_h
-    char u[160];
-    hk_gf_upper(u, s, sizeof u);
-    return hk_gf_text_h(buf, bw, x, y, u, style, pm_h);
-}
-static int pm_uw(const char *s) { char u[160]; hk_gf_upper(u, s, sizeof u); return hk_gf_width_h(u, pm_h); }
+static int pm_utext(uint32_t *buf, int bw, int x, int y, const char *s, int style) { return pm_big(buf, bw, x, y, s, style, pm_h); }   // upper-case text, scale pm_h
+static int pm_uw(const char *s) { return pm_bigw(s, pm_h); }
+// The tips card's two columns of action names do not fit 960 px in the bold glyphs (PT names are long): the plain font there.
+static int pm_cuw(const char *s) { char u[160]; hk_gf_upper(u, s, sizeof u); return hk_gf_width_h(u, pm_h); }
+static int pm_cu(uint32_t *buf, int bw, int x, int y, const char *s, int style) { char u[160]; hk_gf_upper(u, s, sizeof u); return hk_gf_text_h(buf, bw, x, y, u, style, pm_h); }
 #define PM_CELL (8 * pm_h)            // text cell height at the current scale
 #define PM_HEAD_H (8 * (pm_h + 2))    // heading cell: one step (1x) larger than the rows
 static void pm_heading(uint32_t *buf, int bw, int cx, int y, const char *s) {   // pm_h + 1x, in the PAUSE sign's colours
-    char u[96];
-    hk_gf_upper(u, s, sizeof u);
-    hk_gf_text_h(buf, bw, cx - hk_gf_width_h(u, pm_h + 2) / 2, y, u, GF_HEAD, pm_h + 2);
+    pm_big(buf, bw, cx - pm_bigw(s, pm_h + 2) / 2, y, s, GF_HEAD, pm_h + 2);
 }
 
 // Draws the menu box over buf (already dimmed). sel indexes the selectable rows of the screen. With buf NULL only lays
@@ -231,7 +244,7 @@ static int pm_render_at(uint32_t *buf, int bw, int screen, int sel, const PmStat
     }
     const char *hint = hk_tr(screen == PM_MAIN ? S_H_MAIN : screen == PM_CONTROLS ? (st->capture ? S_H_CAPTURE : S_H_ASSIGN) : S_H_CHANGE);
     pm_hs = pm_h >= 4 ? 4 : 2;   // hint 2x when it fits the width, else 1x
-    if (pm_hs == 4 && pm_rich_w(hint, 0) + 56 > bw - 160) pm_hs = 2;
+    if (pm_hs == 4 && pm_rich_w(hint, 2) + 56 > bw - 160) pm_hs = 2;
     const int hh = pm_hs, hc = 8 * hh;
     const int slot = 6 * pm_h, barw = 10 * slot;   // volume bar: 10 slots of 12 px at 1x
     int body = 0, boxw = 150 * pm_h, cw;
@@ -244,8 +257,8 @@ static int pm_render_at(uint32_t *buf, int bw, int screen, int sel, const PmStat
         body += PITCH;
         if (ids[i] == R_SCREEN || ids[i] == R_VOL) body += SECT;
     }
-    if ((cw = pm_rich_w(hint, 0) + 56) > boxw) boxw = cw;
-    if (note && (cw = hk_gf_width_h(note, hh) + 56) > boxw) boxw = cw;
+    if ((cw = pm_rich_w(hint, 2) + 56) > boxw) boxw = cw;
+    if (note && (cw = pm_rich_w(note, 2) + 56) > boxw) boxw = cw;
     const int extra = note ? hc + 6 : 0;
     const int boxh = 18 + PM_HEAD_H + 12 + body + extra + 8 + 2 + 10 + hc + 14;   // pad, heading, gap, rows, note, gap, rule, gap, hint, pad
     if (!buf) return boxw <= bw - 16 && boxh <= HK_CANVAS_H(bw) - 8;
@@ -295,9 +308,9 @@ static int pm_render_at(uint32_t *buf, int bw, int screen, int sel, const PmStat
         if (on) pm_dots(buf, bw, lx, rx, y);
         y += PITCH;
     }
-    if (note) hk_gf_text_h(buf, bw, (bw - hk_gf_width_h(note, hh)) / 2, y + 4, note, GF_GOLD, hh);
+    if (note) pm_rich(buf, bw, (bw - pm_rich_w(note, 2)) / 2, y + 4, note, GF_GOLD, 2);
     pm_rect(buf, bw, x0 + 20, y1 - 14 - hc - 12, x1 - 20, y1 - 14 - hc - 10, 0x433a89u);
-    pm_rich(buf, bw, (bw - pm_rich_w(hint, 0)) / 2, y1 - 14 - hc, hint, GF_NORMAL, 0);
+    pm_rich(buf, bw, (bw - pm_rich_w(hint, 2)) / 2, y1 - 14 - hc, hint, GF_NORMAL, 2);
     return 1;
 }
 static void pm_render(uint32_t *buf, int bw, int screen, int sel, const PmState *st) {
@@ -336,7 +349,7 @@ static void pm_results_draw(uint32_t *buf, int bw, const uint32_t *v) {
     y += PM_HEAD_H + 18;
     for (int i = 0; i < NR; i++) {
         pm_utext(buf, bw, x0 + 40, y, hk_tr(lab[i]), GF_NORMAL);
-        hk_gf_text_h(buf, bw, x1 - 40 - hk_gf_width_h(val[i], pm_h), y, val[i], GF_SEL, pm_h);
+        pm_big(buf, bw, x1 - 40 - pm_bigw(val[i], pm_h), y, val[i], GF_SEL, pm_h);
         y += PITCH;
     }
 }
@@ -387,7 +400,7 @@ static int pm_tips_at(uint32_t *buf, int bw, const PmTipsArg *a) {
         snprintf(val[0][k], sizeof val[0][k], "-");
         for (int b = 0, o = 0; b < PM_NBTN; b++)   // every button with the action (Turncoat bomb is on Triangle and L by default)
             if (a->map[b] == k) o += snprintf(val[0][k] + o, sizeof val[0][k] - (size_t)o, "%s%s", o ? " " : "", pm_btn_sym(b));
-        int w = pm_uw(pm_act_name(k)) + 24 + pm_rich_w(val[0][k], 1);
+        int w = pm_cuw(pm_act_name(k)) + 24 + pm_rich_w(val[0][k], 1);
         if (w > colw) colw = w;
     }
     char tag[40], hint[64];
@@ -395,7 +408,7 @@ static int pm_tips_at(uint32_t *buf, int bw, const PmTipsArg *a) {
     snprintf(hint, sizeof hint, "%s", hk_tr(S_T_HINT));
     int boxw = 2 * colw + 40 + 96;
     if (tw + 96 > boxw) boxw = tw + 96;
-    if (pm_rich_w(hint, 0) + 56 > boxw) boxw = pm_rich_w(hint, 0) + 56;
+    if (pm_rich_w(hint, 2) + 56 > boxw) boxw = pm_rich_w(hint, 2) + 56;
     const int boxh = 18 + PM_HEAD_H + 12 + cap + rows * PITCH + 10 + 2 + 10 + cap + nl * LH + 10 + 2 + 10 + PM_CELL + 14;
     if (!buf) return boxw <= bw - 16 && boxh <= HK_CANVAS_H(bw) - 8;
     const int x0 = (bw - boxw) / 2, y0 = (HK_CANVAS_H(bw) - boxh) / 2, x1 = x0 + boxw, y1 = y0 + boxh;
@@ -412,7 +425,7 @@ static int pm_tips_at(uint32_t *buf, int bw, const PmTipsArg *a) {
         const int c = vi / rows, r = vi % rows;
         vi++;
         const int lx = x0 + 40 + c * (colw + 40 + (boxw - 96 - 2 * colw - 40) / 2), rx = lx + colw;
-        pm_utext(buf, bw, lx, y + r * PITCH, pm_act_name(k), GF_NORMAL);
+        pm_cu(buf, bw, lx, y + r * PITCH, pm_act_name(k), GF_NORMAL);
         pm_rich(buf, bw, rx - pm_rich_w(val[0][k], 1), y + r * PITCH, val[0][k], GF_SEL, 1);
     }
     y += rows * PITCH + 10;
@@ -423,7 +436,7 @@ static int pm_tips_at(uint32_t *buf, int bw, const PmTipsArg *a) {
     for (int i = 0; i < nl; i++) { pm_rich(buf, bw, (bw - pm_rich_w(lines[i], 0)) / 2, y, lines[i], GF_NORMAL, 0); y += LH; }
     y += 10;
     pm_rect(buf, bw, x0 + 20, y, x1 - 20, y + 2, 0x433a89u);
-    pm_rich(buf, bw, (bw - pm_rich_w(hint, 0)) / 2, y1 - 14 - PM_CELL, hint, GF_NORMAL, 0);
+    pm_rich(buf, bw, (bw - pm_rich_w(hint, 2)) / 2, y1 - 14 - PM_CELL, hint, GF_NORMAL, 2);
     return 1;
 }
 static void pm_tips_draw(uint32_t *buf, int bw, const PmTipsArg *a) {
@@ -442,21 +455,29 @@ static void pm_msgbox_at(uint32_t *buf, int bw, const char *title, const char *t
         while (*p && *p != '\n') { if (*p != '\r' && n < (int)sizeof lines[0] - 1) lines[nl][n++] = *p; p++; }
         if (*p == '\n') p++;
         lines[nl][n] = 0;
-        if (hk_gf_width_h(lines[nl], pm_h) > tw) tw = hk_gf_width_h(lines[nl], pm_h);
         nl++;
     }
+    // Short messages use the title-word glyphs, long ones (sentences) the plain font so they stay readable and narrow.
+    int big = 1;
+    for (int i = 0; i < nl; i++) if (pm_bigw(lines[i], pm_h) > 560 || hk_tw_width_h(lines[i], pm_h) < 0) big = 0;
+    for (int i = 0; i < nl; i++) { int w = big ? pm_bigw(lines[i], pm_h) : hk_gf_width_h(lines[i], pm_h); if (w > tw) tw = w; }
     char ans[96];
-    snprintf(ans, sizeof ans, l2 ? "\001 %s      \002 %s" : "\001 %s", l1, l2 ? l2 : "");
+    if (!l1) ans[0] = 0;   // no answers (the "Loading..." box)
+    else snprintf(ans, sizeof ans, l2 ? "\001 %s      \002 %s" : "\001 %s", l1, l2 ? l2 : "");
     if (pm_rich_w(ans, 1) > tw) tw = pm_rich_w(ans, 1);
     const int title_h = title && *title ? PM_HEAD_H + 14 : 0;
-    if (title_h && hk_gf_width_h(title, pm_h + 2) > tw) tw = hk_gf_width_h(title, pm_h + 2);
+    if (title_h && pm_bigw(title, pm_h + 2) > tw) tw = pm_bigw(title, pm_h + 2);
     if (fit && tw + 96 > bw - 16 && pm_h > 2) { pm_h -= 2; pm_msgbox_at(buf, bw, title, text, l1, l2, fit); return; }
     int boxw = tw + 96 < 320 ? 320 : tw + 96 > bw - 16 ? bw - 16 : tw + 96, boxh = 18 + title_h + nl * lh + 14 + 2 + 12 + PM_CELL + 18;
     int x0 = (bw - boxw) / 2, y0 = (HK_CANVAS_H(bw) - boxh) / 2, x1 = x0 + boxw, y1 = y0 + boxh;
     pm_panel(buf, bw, x0, y0, x1, y1);
     int y = y0 + 18;
     if (title_h) { pm_heading(buf, bw, bw / 2, y, title); y += title_h; }
-    for (int i = 0; i < nl; i++) { hk_gf_text_h(buf, bw, (bw - hk_gf_width_h(lines[i], pm_h)) / 2, y, lines[i], GF_SEL, pm_h); y += lh; }
+    for (int i = 0; i < nl; i++) {
+        if (big) pm_big(buf, bw, (bw - pm_bigw(lines[i], pm_h)) / 2, y, lines[i], GF_SEL, pm_h);
+        else hk_gf_text_h(buf, bw, (bw - hk_gf_width_h(lines[i], pm_h)) / 2, y, lines[i], GF_SEL, pm_h);
+        y += lh;
+    }
     pm_rect(buf, bw, x0 + 20, y1 - 18 - PM_CELL - 12, x1 - 20, y1 - 18 - PM_CELL - 10, 0x433a89u);
     pm_rich(buf, bw, (bw - pm_rich_w(ans, 1)) / 2, y1 - 18 - PM_CELL, ans, GF_SEL, 1);
 }
@@ -477,29 +498,73 @@ static void pm_msgbox(uint32_t *buf, int bw, const char *title, const char *text
 typedef void (*pm_draw_fn)(uint32_t *buf, const void *arg);
 static uint32_t pm_tmp[2][PM_OW * PM_OH];   // black and white passes (shared, 4 MB)
 // Renders fn into ovl (PM_OW x PM_OH, non-premultiplied ARGB: SDL_BLENDMODE_BLEND), only inside the rect (x0, y0, w, h)
-// (the rest stays transparent).
+// (the rest stays transparent). Only ovl pixels that actually change are written, and g_pm_dirty (x0, y0, x1, y1;
+// empty when x1 <= x0) is their bounding box, so the platform can upload just that part of the texture. Every build
+// into an overlay buffer must be followed by its upload (the previous content of ovl == the texture's).
+typedef struct { int x0, y0, x1, y1; } PmRect;
+static PmRect g_pm_dirty;
+static const uint32_t *g_pm_dirty_ovl;   // the buffer g_pm_dirty belongs to
+static int g_pm_partial;   // set around a build of a sub-rect that must not forget the buffer's tracked rect (dlg_menu.h row bands)
 static void pm_overlay_build(uint32_t *ovl, pm_draw_fn fn, const void *arg, int rx, int ry, int rw, int rh) {
-    memset(ovl, 0, sizeof(uint32_t) * PM_OW * PM_OH);
+    static const uint32_t *last_ovl[4]; static PmRect last_r[4];   // the rect each buffer was last built in
+    int slot = -1;
+    for (int i = 0; i < 4; i++) if (last_ovl[i] == ovl) slot = i;
+    PmRect old = {0, 0, PM_OW, PM_OH};   // an unknown buffer: everything may differ
+    if (slot >= 0) old = last_r[slot];
+    if (g_pm_partial) old = (PmRect){0, 0, 0, 0};
+    else { for (slot = 0; slot < 3 && last_ovl[slot]; slot++) {} last_ovl[slot] = ovl; }
     if (rx < 0) { rw += rx; rx = 0; }
     if (ry < 0) { rh += ry; ry = 0; }
     if (rx + rw > PM_OW) rw = PM_OW - rx;
     if (ry + rh > PM_OH) rh = PM_OH - ry;
-    if (rw <= 0 || rh <= 0) return;
-    for (int j = 0; j < 2; j++) {
-        for (int y = ry; y < ry + rh; y++)
-            for (int x = rx; x < rx + rw; x++) pm_tmp[j][y * PM_OW + x] = j ? 0xffffffu : 0;
-        fn(pm_tmp[j], arg);
-    }
-    for (int y = ry; y < ry + rh; y++)
-        for (int x = rx; x < rx + rw; x++) {
-            uint32_t c = pm_tmp[0][y * PM_OW + x], wv = pm_tmp[1][y * PM_OW + x];
-            uint32_t a = 255u - (((wv >> 8) & 255u) - ((c >> 8) & 255u));   // green channel: alpha = 255 - weight of the background
-            if (((wv >> 8) & 255u) < ((c >> 8) & 255u)) a = 255u;
-            if (!a) continue;
-            uint32_t r = (c >> 16) & 255u, g = (c >> 8) & 255u, b = c & 255u;
-            if (a < 255u) { r = r * 255u / a; g = g * 255u / a; b = b * 255u / a; if (r > 255u) r = 255u; if (g > 255u) g = 255u; if (b > 255u) b = 255u; }
-            ovl[y * PM_OW + x] = a << 24 | r << 16 | g << 8 | b;
+    if (rw <= 0 || rh <= 0) { rx = ry = 0; rw = rh = 0; }
+    const PmRect nr = {rx, ry, rx + rw, ry + rh};
+    if (!g_pm_partial) last_r[slot] = nr;
+    if (rw > 0) {
+        for (int j = 0; j < 2; j++) {
+            for (int y = ry; y < ry + rh; y++) {
+                uint32_t *row = pm_tmp[j] + (size_t)y * PM_OW;
+                if (j) for (int x = rx; x < rx + rw; x++) row[x] = 0xffffffu;
+                else memset(row + rx, 0, sizeof(uint32_t) * (size_t)rw);
+            }
+            fn(pm_tmp[j], arg);
         }
+    }
+    PmRect u = {old.x0 < nr.x0 || rw <= 0 ? old.x0 : nr.x0, old.y0 < nr.y0 || rw <= 0 ? old.y0 : nr.y0,
+                old.x1 > nr.x1 ? old.x1 : nr.x1, old.y1 > nr.y1 ? old.y1 : nr.y1};
+    if (old.x1 <= old.x0 || old.y1 <= old.y0) u = nr;   // an empty old rect adds nothing
+    PmRect d = {PM_OW, PM_OH, 0, 0};
+    uint32_t lc = 0, lw = 0xffffffffu, lo = 0;   // last (black pass, white pass) pair and its result (lw can't match a real value)
+    for (int y = u.y0; y < u.y1; y++) {
+        const int in_y = y >= nr.y0 && y < nr.y1;
+        for (int x = u.x0; x < u.x1; x++) {
+            uint32_t o = 0;
+            if (in_y && x >= nr.x0 && x < nr.x1) {
+                const uint32_t c = pm_tmp[0][y * PM_OW + x], wv = pm_tmp[1][y * PM_OW + x];
+                if (c == lc && wv == lw) o = lo;   // runs of equal pixels (panel fill, blank) skip the division
+                else {
+                    uint32_t a = 255u - (((wv >> 8) & 255u) - ((c >> 8) & 255u));   // green channel: alpha = 255 - weight of the background
+                    if (((wv >> 8) & 255u) < ((c >> 8) & 255u)) a = 255u;
+                    if (a) {
+                        uint32_t r = (c >> 16) & 255u, g = (c >> 8) & 255u, b = c & 255u;
+                        if (a < 255u) { r = r * 255u / a; g = g * 255u / a; b = b * 255u / a; if (r > 255u) r = 255u; if (g > 255u) g = 255u; if (b > 255u) b = 255u; }
+                        o = a << 24 | r << 16 | g << 8 | b;
+                    }
+                    lc = c; lw = wv; lo = o;
+                }
+            }
+            uint32_t *q = &ovl[y * PM_OW + x];
+            if (*q != o) {
+                *q = o;
+                if (x < d.x0) d.x0 = x;
+                if (x >= d.x1) d.x1 = x + 1;
+                if (y < d.y0) d.y0 = y;
+                d.y1 = y + 1;
+            }
+        }
+    }
+    if (d.x1 <= d.x0) d = (PmRect){0, 0, 0, 0};
+    g_pm_dirty = d; g_pm_dirty_ovl = ovl;
 }
 // CPU reference of what the platform layer does on the GPU: the frame (w x h, pitch in pixels) nearest-scaled to the
 // largest centred size that keeps its aspect (or stretched), darkened by dim/255 toward black, with the overlay blended
@@ -512,7 +577,7 @@ static void pm_composite(uint32_t *out, const uint32_t *frame, int w, int h, int
         for (int x = 0; x < PM_OW; x++) {
             uint32_t p = 0;
             if (frame && x >= ox && x < ox + dw && y >= oy && y < oy + dh) p = frame[((y - oy) * h / dh) * pitch + (x - ox) * w / dw] & 0xffffffu;
-            if (dim) p = ((((p & 0xff00ffu) * (uint32_t)(255 - dim)) / 255u) & 0xff00ffu) | ((((p >> 8) & 255u) * (uint32_t)(255 - dim) / 255u) << 8);
+            if (dim) p = (((p >> 16 & 255u) * (uint32_t)(255 - dim) / 255u) << 16) | (((p >> 8 & 255u) * (uint32_t)(255 - dim) / 255u) << 8) | ((p & 255u) * (uint32_t)(255 - dim) / 255u);   // per channel
             uint32_t o = ovl ? ovl[y * PM_OW + x] : 0, a = o >> 24;
             if (a) {
                 uint32_t r = ((p >> 16 & 255u) * (255 - a) + (o >> 16 & 255u) * a) / 255u, g = ((p >> 8 & 255u) * (255 - a) + (o >> 8 & 255u) * a) / 255u, b = ((p & 255u) * (255 - a) + (o & 255u) * a) / 255u;

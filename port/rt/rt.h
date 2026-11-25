@@ -85,6 +85,7 @@ void rt_log(const char *fmt, ...);
 // True the first time it sees this key (small table; when full, reports false so nothing floods).
 int rt_first_time(uint64_t key);
 void rt_log_flush(void);
+void rt_log_stop(void);   // joins the log thread and flushes (shutdown, before exit())
 void rt_cpu_profile_init(void);
 void rt_dump_hang(void);   // watchdog: where the main thread is when frames stop
 int rt_cpu_profile_thread(const char *label);

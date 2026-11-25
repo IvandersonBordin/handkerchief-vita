@@ -286,6 +286,7 @@ double g_hk_pf_ws; unsigned g_hk_pf_ws_n;   // port/hk/wide.c: extra blits of th
 static double g_pf_blit, g_pf_conv, g_pf_plat, g_pf_px, g_pf_px_opaque;
 static unsigned g_pf_bn;
 
+int hk_gameover_ask_pending(void), hk_gameover_hiding(void);   // port/hk/gameover.c
 // ---------- present thread (Vita: core 2; PC: HK_PRESENT_THREAD=1 or 2 to compare) ----------
 extern int hk_dlg_active(void);
 static inline void convert_row(uint32_t *out, const uint8_t *in, int n, const uint32_t *lut) {
@@ -306,6 +307,8 @@ static inline void convert_row(uint32_t *out, const uint8_t *in, int n, const ui
 }
 static int g_pt_mode = -1;
 static SDL_sem *g_pt_sem;
+static volatile int g_pw_quit;   // hk_host_shutdown: the present worker leaves its loop
+static SDL_Thread *g_pw_thr;
 static SDL_atomic_t g_pt_busy;
 static uint8_t g_pt_pix[480 * HK_WS_MAX];
 static uint32_t g_pt_lut[256], g_pt_out[2][480 * HK_WS_MAX];   // double buffer: worker fills one, the main thread shows the other
@@ -317,6 +320,117 @@ static int pt_enabled(void) {
     if (g_pt_mode < 0) g_pt_mode = plat_present_threaded();
     return g_pt_mode > 0;
 }
+// ---- present_thread=3: asynchronous present. The game thread only copies the 8-bit frame + palette into a free slot of a
+// small ring and goes on; the worker converts (8-bit to XRGB, pillarbox), draws the FPS text, uploads and presents, so
+// the renderer and its vsync wait live on the worker (core 2). The game thread never waits for the worker: when no slot
+// is free the oldest frame that is still waiting is replaced (dropped). Frames are shown in order. Anything that needs the
+// game thread (pause, dialogs, tips, game-over question) drains the ring first and presents synchronously.
+#define PA_N 3
+enum { PA_FREE, PA_FILL, PA_PEND, PA_BUSY };
+static struct pa_slot { int st; unsigned seq; int w, h, ox; uint32_t lut[256]; uint8_t pix[480 * HK_WS_MAX]; } *g_pa;
+static uint32_t g_pa_out[480 * HK_WS_MAX];   // worker-owned XRGB frame (the game thread only copies 8-bit data: 3 x 0.4 MB + this 1.6 MB)
+static SDL_mutex *g_pa_mx;
+static unsigned g_pa_seq;
+#if HK_DEVTOOLS
+// 5 s window stats (dev build): main = game-thread hand-off, wrk = worker
+static struct { unsigned frames, dropped, shown; double main_busy, main_wait, main_worst, wrk_conv, wrk_upd, wrk_pres, wrk_idle, wrk_worst; } g_pas;
+#define PA_STAT(x) x
+#else
+#define PA_STAT(x)
+#endif
+static int pa_thread(void *arg) {
+    (void)arg;
+#ifdef __vita__
+    sceKernelChangeThreadCpuAffinityMask(sceKernelGetThreadId(), SCE_KERNEL_CPU_MASK_USER_2);
+#endif
+    double tw = g_pf_on ? prof_now() : 0, twin = tw;
+    for (;;) {
+        SDL_SemWait(g_pt_sem);
+        if (g_pw_quit) break;
+        double t0 = g_pf_on ? prof_now() : 0;
+        PA_STAT(g_pas.wrk_idle += t0 - tw);
+        struct pa_slot *s = NULL;
+        SDL_LockMutex(g_pa_mx);
+        for (int i = 0; i < PA_N; i++)
+            if (g_pa[i].st == PA_PEND && (!s || (int)(g_pa[i].seq - s->seq) < 0)) s = &g_pa[i];
+        if (s) s->st = PA_BUSY;
+        SDL_UnlockMutex(g_pa_mx);
+        if (!s) { tw = g_pf_on ? prof_now() : 0; continue; }   // its frame was replaced by a newer one
+        for (int y = 0; y < s->h; y++) convert_row(g_pa_out + y * s->w, s->pix + y * s->w, s->w, s->lut);
+        hk_ws_pillarbox(g_pa_out, s->w, s->h, s->ox);
+        double t1 = g_pf_on ? prof_now() : 0;
+        plat_present_async(g_pa_out, s->w, 480, s->w * 4);
+        double t2 = g_pf_on ? prof_now() : 0;
+        SDL_LockMutex(g_pa_mx);
+        s->st = PA_FREE;
+        SDL_UnlockMutex(g_pa_mx);
+#if HK_DEVTOOLS
+        if (g_pf_on) {
+            extern uint64_t g_hk_plat_upd_t, g_hk_plat_pres_t;
+            const double f = 1e3 / (double)SDL_GetPerformanceFrequency();
+            g_pas.shown++; g_pas.wrk_conv += t1 - t0; g_pas.wrk_upd += (double)g_hk_plat_upd_t * f; g_pas.wrk_pres += (double)g_hk_plat_pres_t * f;
+            if (t2 - t0 > g_pas.wrk_worst) g_pas.wrk_worst = t2 - t0;
+            tw = prof_now();
+            if (tw - twin >= 5000) {
+                const double n = g_pas.shown ? g_pas.shown : 1, m = g_pas.frames ? g_pas.frames : 1;
+                rt_dlog("[prof] pa worker: %u shown, %u dropped; per shown frame convert %.2f upload %.2f present %.2f worst-total %.2f idle %.2f ms; "
+                        "game-thread hand-off: busy %.3f wait %.3f worst %.3f ms\n",
+                        g_pas.shown, g_pas.dropped, g_pas.wrk_conv / n, g_pas.wrk_upd / n, g_pas.wrk_pres / n, g_pas.wrk_worst, g_pas.wrk_idle / n,
+                        g_pas.main_busy / m, g_pas.main_wait / m, g_pas.main_worst);
+                memset(&g_pas, 0, sizeof g_pas); twin = tw;
+            }
+        }
+#endif
+    }
+    return 0;
+}
+// Game thread: hands the 8-bit primary surface to the ring. Never waits for the worker.
+static void pa_submit(const uint8_t *src, int pitch, int fw, int fh, const uint32_t *lut, int ox) {
+    double t0 = g_pf_on ? prof_now() : 0;
+    struct pa_slot *s = NULL;
+    SDL_LockMutex(g_pa_mx);
+    double t1 = g_pf_on ? prof_now() : 0;
+    for (int i = 0; i < PA_N && !s; i++) if (g_pa[i].st == PA_FREE) s = &g_pa[i];
+    if (!s) {   // ring full: replace the oldest waiting frame (at most one slot is busy, so one is always pending)
+        for (int i = 0; i < PA_N; i++)
+            if (g_pa[i].st == PA_PEND && (!s || (int)(g_pa[i].seq - s->seq) < 0)) s = &g_pa[i];
+        PA_STAT(g_pas.dropped++);
+    }
+    s->st = PA_FILL;
+    SDL_UnlockMutex(g_pa_mx);
+    for (int y = 0; y < fh; y++) memcpy(s->pix + y * fw, src + (uint32_t)(y * pitch), (size_t)fw);
+    memcpy(s->lut, lut, sizeof s->lut);
+    s->w = fw; s->h = fh; s->ox = ox;
+    SDL_LockMutex(g_pa_mx);
+    s->seq = ++g_pa_seq; s->st = PA_PEND;
+    SDL_UnlockMutex(g_pa_mx);
+    SDL_SemPost(g_pt_sem);
+#if HK_DEVTOOLS
+    if (g_pf_on) {
+        double t3 = prof_now();
+        g_pas.frames++; g_pas.main_wait += t1 - t0; g_pas.main_busy += t3 - t1;
+        if (t3 - t0 > g_pas.main_worst) g_pas.main_worst = t3 - t0;
+    }
+#endif
+}
+static void pa_start(void) {
+    if (g_pa) return;
+    g_pa = calloc(PA_N, sizeof *g_pa);
+    g_pa_mx = SDL_CreateMutex();
+    g_pt_sem = SDL_CreateSemaphore(0);
+    g_pw_thr = SDL_CreateThread(pa_thread, "hkpresent", NULL);
+}
+static void pa_drain(void) {
+    if (!g_pa) return;
+    for (;;) {
+        int busy = 0;
+        SDL_LockMutex(g_pa_mx);
+        for (int i = 0; i < PA_N; i++) busy |= g_pa[i].st == PA_PEND || g_pa[i].st == PA_BUSY;
+        SDL_UnlockMutex(g_pa_mx);
+        if (!busy) return;
+        SDL_Delay(1);
+    }
+}
 static int pt_thread(void *arg) {
     (void)arg;
 #ifdef __vita__
@@ -324,6 +438,7 @@ static int pt_thread(void *arg) {
 #endif
     for (;;) {
         SDL_SemWait(g_pt_sem);
+        if (g_pw_quit) break;
         double t0 = g_pf_on ? prof_now() : 0;
         uint32_t *o = g_pt_out[g_pt_wi];
         for (int y = 0; y < g_pt_h; y++) convert_row(o + y * g_pt_w, g_pt_pix + y * g_pt_w, g_pt_w, g_pt_lut);
@@ -340,20 +455,61 @@ static int pt_thread(void *arg) {
 static void pt_start(void) {
     if (g_pt_sem) return;
     g_pt_sem = SDL_CreateSemaphore(0);
-    SDL_CreateThread(pt_thread, "hkpresent", NULL);
+    g_pw_thr = SDL_CreateThread(pt_thread, "hkpresent", NULL);
+}
+// ExitProcess/TerminateProcess: stops the present worker (it may be inside the GPU present call) and the audio
+// device, then lets the platform destroy its renderer/window. Exiting with those threads alive crashed the Vita
+// (2026-11-24: present thread inside SceGxm while the process was torn down).
+void hk_ds_shutdown(void);
+void plat_shutdown(void);
+void hk_host_shutdown(void) {
+    static int done;
+    if (done) return;
+    done = 1;
+    if (g_pw_thr) {
+        g_pw_quit = 1;
+        SDL_SemPost(g_pt_sem);
+        SDL_WaitThread(g_pw_thr, NULL);
+        g_pw_thr = NULL;
+    }
+    hk_ds_shutdown();
+    plat_shutdown();
 }
 // Waits until the worker is idle and drops the frame it finished (before the main thread presents on its own or pauses).
 static void pt_drain(void) {
-    if (g_pt_sem) while (SDL_AtomicGet(&g_pt_busy)) SDL_Delay(0);
+    if (g_pa) pa_drain();
+    else if (g_pt_sem) while (SDL_AtomicGet(&g_pt_busy)) SDL_Delay(0);
     g_pt_pending = 0;
 }
 
+// Drains the present worker and converts the primary surface into a private XRGB frame (640 centred columns plus the
+// pillarbox, as present_primary does). The title's OPTIONS page needs a frame of its own: with present_thread=3 the
+// worker owns presenting and plat_show_xrgb (g_last_px) never runs. Game thread only. Returns NULL without a primary.
+const uint32_t *hk_dd_snapshot(int *w, int *h, int *pitch_bytes) {
+    HOSTFN;
+    static uint32_t snap[480 * HK_WS_MAX];
+    if (!g_primary) return NULL;
+    pt_drain();
+    Obj *p = &g_obj[g_primary];
+    Obj *pal = p->palette ? &g_obj[p->palette] : NULL;
+    const int fw = p->w < HK_WS_MAX ? p->w : HK_WS_MAX, fh = p->h < 480 ? p->h : 480;
+    uint32_t lut[256];
+    for (int i = 0; i < 256; i++)
+        lut[i] = pal ? ((uint32_t)pal->rgb[i][0] << 16) | ((uint32_t)pal->rgb[i][1] << 8) | pal->rgb[i][2] : (uint32_t)i * 0x010101u;
+    for (int y = 0; y < fh; y++) convert_row(snap + y * fw, mb + p->pixels + (uint32_t)(y * p->pitch), fw, lut);
+    hk_ws_pillarbox(snap, fw, fh, hk_ws_frame_ox());
+    *w = fw; *h = 480; *pitch_bytes = fw * 4;
+    return snap;
+}
+
 uint32_t g_dd_present_end_ms;   // SDL_GetTicks() when the last present finished (port/hk/dialog.c refresh)
+uint32_t g_dd_present_ms;       // how long that present took (refresh spaces the next one by it)
 static void present_primary(void) {
     HOSTFN;
 #if HK_DEVTOOLS
     if (g_pf_on < 0) g_hk_prof_on = g_pf_on = getenv("HK_PROF") != NULL || g_hk_prof;
 #endif
+    const uint32_t pres_t0 = SDL_GetTicks();
     const int tm = g_pf_on || g_hitch;   // timing needed: [prof] windows or the hitch log
     double pf0 = tm ? prof_now() : 0;
     {   // HK_TRACE_DD: presents per second (Flip, Blt/BltFast/Unlock to the primary, palette changes)
@@ -373,7 +529,18 @@ static void present_primary(void) {
                      : (uint32_t)i * 0x010101u;
     double pf2 = 0;
     int dlg = hk_dlg_active();
-    if (pt_enabled() && !dlg && !plat_poll_main()) {
+    static uint32_t frozen[480 * HK_WS_MAX];   // the frame when the load chain after GAME OVER > Yes started (port/hk/gameover.c)
+    static int frozen_ok;
+    const int hide = hk_gameover_hiding();
+    const int piped = pt_enabled() && !hide && !dlg && !hk_gameover_ask_pending() && !plat_poll_main();   // else: sync path on this thread
+    if (piped && g_pt_mode == 3) {
+        pa_start();   // asynchronous present, see pa_thread
+        pa_submit(mb + p->pixels, (int)p->pitch, fw, fh, lut, hk_ws_frame_ox());
+#if HK_DEVTOOLS
+        if (HK_ENV("HK_PA_SYNC")) pa_drain();   // test aid: wait for the worker so scripted shots are deterministic
+#endif
+        pf2 = tm ? prof_now() : 0;
+    } else if (piped) {
         // Pipelined one frame behind. Every SDL renderer call stays on this (the game) thread; the worker only does
         // the CPU work (8-bit to XRGB, pillarbox) into a buffer. When the worker is idle: take the buffer it
         // finished for the previous frame, hand it the new 8-bit frame to convert into the other buffer, then
@@ -397,12 +564,19 @@ static void present_primary(void) {
         pt_drain();
         for (int y = 0; y < fh; y++) convert_row(frame + y * fw, mb + p->pixels + (uint32_t)(y * p->pitch), fw, lut);
         hk_ws_pillarbox(frame, fw, fh, hk_ws_frame_ox());
+        if (hide) {   // the chain's dialogs and title stay invisible: the frozen frame with a "Loading..." box
+            if (!frozen_ok) { memcpy(frozen, frame, (size_t)fw * (size_t)fh * 4); frozen_ok = 1; }
+            pf2 = tm ? prof_now() : 0;
+            plat_show_loading(frozen, fw, 480, fw * 4);
+        } else {
+        frozen_ok = 0;
         if (dlg) {
             void hk_dlg_overlay(uint32_t *fb, int stride);   // port/hk/dialog.c: cached dialog layer over the 640 centred columns
             hk_dlg_overlay(frame + (fw - 640) / 2, fw);
         }
         pf2 = tm ? prof_now() : 0;
         plat_present_xrgb(frame, fw, 480, fw * 4);
+        }
     }
     double pf3 = 0, pause_ms = 0;
     if (tm) {   // time spent in the port's pause screen / message boxes (inside plat_present_xrgb) is not a stall
@@ -436,10 +610,13 @@ static void present_primary(void) {
     extern unsigned g_frame;
     g_frame++;
     g_dd_present_end_ms = SDL_GetTicks();
+    g_dd_present_ms = g_dd_present_end_ms - pres_t0;
     void hk_load_trace_frame(void);
     hk_load_trace_frame();
     void hk_load_game_tick(void);   // port/hk/dialog.c
     hk_load_game_tick();
+    void hk_gameover_tick(void);   // port/hk/gameover.c (runs on every present, also while a modal dialog is up)
+    hk_gameover_tick();
 #if HK_DEVTOOLS
     void hk_stress_tick(void);   // port/hk/memlog.c (HK_STRESS, HK_MEMLOG)
     hk_stress_tick();

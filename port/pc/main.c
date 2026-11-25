@@ -5,9 +5,12 @@ void w32_set_lang_overlay(const char *dir);
 #include "plat.h"
 #include "cp1252.h"
 #include <stdlib.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include <string.h>
 #include "hk/font_data.h"
 #include "vita/pause_menu.h"
+#include "vita/dlg_menu.h"
 
 static SDL_Window *g_win;
 static SDL_Renderer *g_ren;
@@ -18,6 +21,7 @@ int plat_width(void) { return 640; }
 int plat_height(void) { return 480; }
 void plat_show_window(void) { SDL_ShowWindow(g_win); }
 
+void plat_shutdown(void) {}
 int plat_message_box(const char *title, const char *text, unsigned type) {
     if ((type & 15u) || getenv("HK_HEADLESS")) return 0;   // only MB_OK is answered; no fabricated confirmation
     unsigned icon = (type & 0xf0u) == 0x10u ? SDL_MESSAGEBOX_ERROR : SDL_MESSAGEBOX_INFORMATION;
@@ -123,13 +127,28 @@ static int results_shown(void) {
     const Uint8 *k = getenv("HK_HEADLESS") ? NULL : SDL_GetKeyboardState(NULL);
     return k && k[SDL_SCANCODE_TAB];
 }
+static int g_loading;   // plat_show_loading: the frame is shown darkened under the "Loading..." box
 void plat_show_xrgb(uint32_t *pixels, int width, int height, int pitch_bytes) {
     uint32_t rv[13];
     // RESULTS is a 960x544 overlay at the output resolution (as on the Vita): composited on the CPU into a 960x544
     // frame here (letterboxed 4:3), shown through its own texture with the logical size lifted.
     static uint32_t ovl[PM_OW * PM_OH], comp[PM_OW * PM_OH];
-    int res = results_shown() && width <= HK_WS_MAX && height <= 480 && hk_results_read(rv);
-    if (res) {
+    static HkDlgView dv;
+    static uint64_t dv_hash;
+    static uint32_t dovl[PM_OW * PM_OH];
+    static int dv_valid;
+    int dlgv = !g_loading && width <= HK_WS_MAX && height <= 480 && hk_dlg_view(&dv);
+    int res = dlgv || g_loading || (results_shown() && width <= HK_WS_MAX && height <= 480 && hk_results_read(rv));
+    if (!dlgv) dv_valid = 0;
+    if (dlgv) {   // the game's dialogs / menu bar in the pause menu's style (port/vita/dlg_menu.h), over the dimmed frame
+        const uint64_t hh = hk_dlgview_hash(&dv);
+        if (!dv_valid || hh != dv_hash) { pm_overlay_dlg(dovl, &dv); dv_hash = hh; dv_valid = 1; }
+        pm_composite(comp, pixels, width, height, pitch_bytes / 4, 0, dv.kind == DV_MENU ? 96 : 128, dovl);
+    } else if (g_loading) {
+        pm_overlay_msgbox(ovl, "", hk_tr(S_LOADING), NULL, NULL);
+        pm_composite(comp, pixels, width, height, pitch_bytes / 4, 0, 160, ovl);
+    } else if (res) {
+        dv_valid = 0;
         pm_overlay_results(ovl, rv);
         pm_composite(comp, pixels, width, height, pitch_bytes / 4, 0, 0, ovl);
     }
@@ -152,6 +171,46 @@ void plat_show_xrgb(uint32_t *pixels, int width, int height, int pitch_bytes) {
     SDL_RenderPresent(g_ren);
 }
 
+// "Continue from the last save?" after GAME OVER (port/hk/gameover.c): the Vita's message box look (960x544 overlay over
+// the darkened last frame). Enter / X = Yes, Esc / Z = No. Test aid HK_GAMEOVER_ANSWER=y|n: writes shot_gameover.ppm
+// (the composited question) and answers at once; headless without it answers No.
+int hk_gameover_ask_pending(void);
+void hk_gameover_answer(int yes);
+int hk_gameover_key(int vk);
+int hk_gameover_hiding(void);
+static int gameover_ask(uint32_t *pixels, int width, int height, int pitch_bytes) {
+    static uint32_t ovl[PM_OW * PM_OH], comp[PM_OW * PM_OH];
+    const char *auto_ans = getenv("HK_GAMEOVER_ANSWER");
+    pm_overlay_msgbox(ovl, "GAME OVER", hk_tr(S_GO_ASK), hk_tr(S_YES), hk_tr(S_NO));
+    pm_composite(comp, pixels, width, height, pitch_bytes / 4, 0, 192, ovl);
+    if (auto_ans) {
+        FILE *f = fopen("shot_gameover.ppm", "wb");
+        if (f) {
+            fprintf(f, "P6 %d %d 255\n", PM_OW, PM_OH);
+            for (int i = 0; i < PM_OW * PM_OH; i++) { unsigned char rgb[3] = {(unsigned char)(comp[i] >> 16), (unsigned char)(comp[i] >> 8), (unsigned char)comp[i]}; fwrite(rgb, 1, 3, f); }
+            fclose(f);
+        }
+        return *auto_ans == 'y';
+    }
+    if (getenv("HK_HEADLESS") || !g_ren) return 0;
+    static SDL_Texture *gtex;
+    if (!gtex) gtex = SDL_CreateTexture(g_ren, SDL_PIXELFORMAT_XRGB8888, SDL_TEXTUREACCESS_STREAMING, PM_OW, PM_OH);
+    SDL_UpdateTexture(gtex, NULL, comp, PM_OW * 4);
+    for (int armed = 0;;) {
+        if (plat_pump_events()) return 0;
+        const Uint8 *k = SDL_GetKeyboardState(NULL);
+        const int yes = k[SDL_SCANCODE_RETURN] || k[SDL_SCANCODE_X], no = k[SDL_SCANCODE_ESCAPE] || k[SDL_SCANCODE_Z];
+        if (!armed) armed = !yes && !no;
+        else if (yes || no) return yes;
+        SDL_RenderClear(g_ren);
+        SDL_RenderSetLogicalSize(g_ren, 0, 0);
+        SDL_RenderCopy(g_ren, gtex, NULL, NULL);
+        SDL_RenderSetLogicalSize(g_ren, g_hk_ws_w, 480);
+        SDL_RenderPresent(g_ren);
+        SDL_Delay(16);
+    }
+}
+
 // HK_PRESENT_MS=n: each present takes at least n ms, to reproduce a slow console present on PC (the Vita needs ~45 ms
 // per frame at 848x480 with the dialog overlay).
 void plat_present_xrgb(uint32_t *pixels, int width, int height, int pitch_bytes) {
@@ -164,9 +223,15 @@ void plat_present_xrgb(uint32_t *pixels, int width, int height, int pitch_bytes)
     if (cheat < 0) cheat = getenv("HK_CHEAT") != NULL;
     if (cheat) *(uint32_t *)(g_mem + 0x4AC84Cu) = 1;
     plat_show_xrgb(pixels, width, height, pitch_bytes);
+    if (hk_gameover_ask_pending()) hk_gameover_answer(gameover_ask(pixels, width, height, pitch_bytes));
+}
+void plat_show_loading(uint32_t *pixels, int width, int height, int pitch_bytes) {
+    g_loading = 1; plat_show_xrgb(pixels, width, height, pitch_bytes); g_loading = 0;
 }
 int plat_present_threaded(void) { const char *e = getenv("HK_PRESENT_THREAD"); return e ? atoi(e) : 0; }
 int plat_poll_main(void) { return 0; }
+// present_thread=3 runs this on the worker: needs a renderer usable from any thread (SDL_RENDER_DRIVER=software).
+void plat_present_async(uint32_t *pixels, int width, int height, int pitch_bytes) { plat_show_xrgb(pixels, width, height, pitch_bytes); }
 
 // HK_KEYS=frame:vk:frames[,...] (hex vk): scripted key presses for headless tests, e.g. 1600:0d:10 holds Enter
 // for 10 frames from presented frame 1600.
@@ -192,7 +257,8 @@ int hk_stress_key(int vk);   // port/hk/memlog.c
 #define hk_stress_key(vk) 0
 #endif
 int plat_vk_down(int vk) {
-    if (scripted_key(vk) || hk_stress_key(vk)) return 1;
+    if (scripted_key(vk) || hk_stress_key(vk) || ((vk == 0x28 || vk == 0x20 || vk == 0x0D) && hk_gameover_key(vk))) return 1;
+    if (hk_gameover_hiding()) return 0;   // hidden load chain after GAME OVER: only its injected keys (above), never the player's
     const Uint8 *k = SDL_GetKeyboardState(NULL);
     if (!k) return 0;
     switch (vk) {
@@ -240,12 +306,22 @@ int main(int argc, char **argv) {
         return 1;
     }
     // HK_WIDE=848: native widescreen (port/hk/wide.c, docs/widescreen-plan.md); unset = the original 640x480.
+    hk_dlg_set_pretty(getenv("HK_DLG_CLASSIC") == NULL);   // HK_DLG_CLASSIC=1: the old 640x480 dialogs (before/after shots)
     hk_wide_set(getenv("HK_WIDE") ? atoi(getenv("HK_WIDE")) : 640);
     if (!getenv("HK_HEADLESS")) {
         g_win = SDL_CreateWindow("Handkerchief (recomp)", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
                                  g_hk_ws_w * 3 / 2, 720, SDL_WINDOW_HIDDEN | SDL_WINDOW_RESIZABLE);
         g_ren = g_win ? SDL_CreateRenderer(g_win, -1, SDL_RENDERER_PRESENTVSYNC) : NULL;
         if (g_ren) SDL_RenderSetLogicalSize(g_ren, g_hk_ws_w, 480);
+    }
+    {   // saves live in USER (the builder does not ship it): create it when no spelling of it exists yet
+        struct stat st;
+        char up[620];
+        int have = 0;
+        static const char *const nm[] = {"USER", "User", "user"};
+        if (!stat(g_game_dir, &st))
+            for (int i = 0; i < 3; i++) { snprintf(up, sizeof up, "%s/%s", g_game_dir, nm[i]); have |= !stat(up, &st); }
+        if (!have && !stat(g_game_dir, &st)) { snprintf(up, sizeof up, "%s/USER", g_game_dir); mkdir(up, 0777); }
     }
     if (rt_init(256u << 20)) rt_fatal("guest memory: allocation failed");
     char exe[600];
@@ -278,3 +354,7 @@ int main(int argc, char **argv) {
     SDL_Quit();
     return 0;
 }
+
+// Title menu OPTIONS item (port/hk/dialog.c): the Vita opens its Settings page here; the PC build has no such screen
+// (its settings are in the game's own File menu), so the item just returns to the title.
+void hk_title_options(void) { fprintf(stderr, "[opt] title OPTIONS selected\n"); }

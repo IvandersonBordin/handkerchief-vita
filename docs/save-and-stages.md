@@ -179,3 +179,20 @@ HK_HEADLESS=1 SH3_VTIME=1 HK_STAGE=c0 HK_KEYS=1300:0d:6 HK_SHOT=1400,2200 timeou
 # save into slot 2 after loading: add ,1700:71:4,1780:28:3,1820:0d:4
 # Secret Option in a stage: HK_KEYS=1300:0d:6,1700:48:3,1710:44:3,1720:4b:3
 ```
+
+## Continue after GAME OVER (port feature, 2026-11-24)
+
+- Detection (static + run time): the stage HUD/player draw 0x43DB3A pushes `"GAME OVER"` (0x485E70) at 0x43DB82 only
+  when `[player+0x80] & 2` and `[owner+0x58] & 1`; `recomp/image_patches.py` hooks 0x43DB82 (`hk_gameover_draw`,
+  `port/hk/gameover.c`). `HK_STAGE=e2` (idle player shot from the tower) triggers it; the game returns to the intro
+  about 200 frames later. After 30 consecutive GAME OVER frames, if any `USER/USER01..10.HDK` is non-empty, the
+  platform layer asks "Continue from the last save?" (Vita: the message box overlay, Cross = Yes, Circle = No; PC:
+  Enter / X, Esc / Z, or `HK_GAMEOVER_ANSWER=y|n` for tests, which also writes `shot_gameover.ppm`).
+- Yes: `hk_load_game_request` (Stop This Game: dialog 1497 gets an injected Enter, then Continue = dialog 1500). The slot
+  list texts are the game's own ("Data 2 [11/24/2026 tue 18:47:58]", the date stored inside the save, not the file time;
+  empty slots have no text); the slot last saved to / loaded from wins (fallback: the newest date) and is selected directly (radio
+  button check, verified a few frames later); only the Stop-confirm Enter and the final Space are injected
+  (`hk_gameover_key`, ORed into `plat_vk_down`; the player's own keys are ignored while the chain runs). The chain runs on every
+  present (`port/hk/ddraw.c`), because the modal 1497 dialog stops the game's own frames.
+- PC runs (`SH3_VTIME=1 HK_HEADLESS=1 HK_STAGE=e2 HK_KEYS=1300:0d:6`): slot 1 only (2016) -> User01 copied to User00 and
+  `a0_b` loaded with 670 money; slots 1 (2016) and 2 (2026) -> User02 selected and loaded; no non-empty slot -> no question.

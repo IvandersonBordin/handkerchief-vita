@@ -114,6 +114,7 @@ int hk_save_copy(const char *from, const char *to);
 void hk_save_materialize(const char *hp, int src_writes);
 void hk_save_inval(const char *hp);
 int hk_savefast_on(void);
+void hk_last_slot_note_path(const char *hp);   // port/hk/gameover.c
 static int copy_host(const char *from, const char *to) {
     FILE *a = fopen(from, "rb"), *b = a ? fopen(to, "wb") : NULL;
     char buf[8192];
@@ -134,6 +135,7 @@ HC_K(HC_WRITE, KERNEL32, CopyFileA) {
     if (hk_savefast_on()) { hk_save_materialize(to, 1); hk_save_materialize(from, 0); hk_save_inval(to); }
     if (hk_save_copy(from, to)) ok = 1;   // savefast: the "X -> X.bak" step of the save sequence is only recorded
     else ok = copy_host(from, to);
+    if (ok) hk_last_slot_note_path(strlen(to) >= 10 && !SDL_strcasecmp(to + strlen(to) - 10, "User00.HDK") ? from : to);   // load: UserNN -> User00
     rt_dlog("CopyFileA(\"%s\", \"%s\") -> %d (%s)\n", GSTR(ARG(1)), GSTR(ARG(2)), ok, to);
     if (!ok) w32_set_last_error(c, 2);
     STDRET(3, ok);
@@ -145,6 +147,7 @@ HC_K(HC_WRITE, KERNEL32, MoveFileA) {
     w32_host_path(GSTR(ARG(2)), to, sizeof to);
     if (hk_savefast_on()) { hk_save_materialize(from, 1); hk_save_materialize(to, 1); hk_save_inval(from); hk_save_inval(to); }
     int ok = rename(from, to) == 0;
+    if (ok) hk_last_slot_note_path(to);
     rt_dlog("MoveFileA(\"%s\", \"%s\") -> %d (%s)\n", GSTR(ARG(1)), GSTR(ARG(2)), ok, to);
     if (!ok) w32_set_last_error(c, 2);
     STDRET(2, ok);

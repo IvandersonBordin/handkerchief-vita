@@ -16,6 +16,7 @@
 #include "hk/theme.h"
 #include "hk/gameart.h"
 #include "hk/hitch.h"
+#include "hk/dlgview.h"
 #include "hk/i18n.h"
 #include "safe_write.h"
 #include <SDL.h>
@@ -56,6 +57,7 @@ typedef struct {
 } Dlg;
 
 static Dlg g_dlg[MAX_DLG];
+static int g_pretty;   // the platform draws dialogs itself (hk_dlg_set_pretty)
 #define DLG_HWND(k) (0x00030000u | ((uint32_t)(k) << 8))
 #define TITLE_H 26
 #define DU_X(v) ((v) * 3 / 2)   // dialog units -> pixels: MS P Gothic 9pt has ~6x12 base units
@@ -658,6 +660,7 @@ void hk_dlg_overlay(uint32_t *fb, int stride) {
     static int timing = -1; static double t_comp, t_build; static unsigned n_comp, n_build;
     if (timing < 0) timing = HK_ENV("HK_DLG_TIME") != NULL;
     struct timespec ts0, ts1; if (timing) clock_gettime(CLOCK_MONOTONIC, &ts0);
+    if (g_pretty) return;   // the platform draws the dialogs itself (hk_dlg_view)
     uint64_t h = state_hash();
     int built = 0;
     if (!valid || h != last) {
@@ -709,7 +712,12 @@ static void refresh(void) {
     // Only when the game itself has not presented for 60 ms (a modal loop or a paused game): while the game runs
     // (25 fps, a present every 40 ms) its own presents already show the overlay, and extra presents halved the
     // frame rate on the Vita (14 fps with the menu bar open).
-    if (SDL_GetTicks() - g_dd_present_end_ms < 60) return;
+    // The gap adapts to the cost of the last present: a cheap one (the crisp view on the GPU, ~20 ms) is followed by a
+    // 25 ms gap (about 20 presents/s instead of 7-10 on the Vita), a slow one (>= 35 ms) keeps the 60 ms gap that
+    // leaves the game room for its frame and key poll.
+    extern uint32_t g_dd_present_ms;
+    const uint32_t gap = g_dd_present_ms >= 35 ? 60 : 25;
+    if (SDL_GetTicks() - g_dd_present_end_ms < gap) return;
     void hk_dd_present(void);
     hk_dd_present();
 }
@@ -825,6 +833,7 @@ enum { K_UP = 1, K_DOWN = 2, K_LEFT = 4, K_RIGHT = 8, K_OK = 16, K_CANCEL = 32, 
 // Its Rename (40072, 0x432428) and Delete (40024) buttons are mouse-only on Windows: R / D (pad Square / L) click them.
 #define ID_RENAME 40072
 #define ID_DELETE 40024
+static int form_move(Dlg *d, int dy, int dx);
 static void dlg_input(CPU *c, int keys) {
     Dlg *d = top_dlg();
     if (!d) return;
@@ -843,6 +852,10 @@ static void dlg_input(CPU *c, int keys) {
             f->cursel = n < 0 ? 0 : n >= f->nitems ? f->nitems - 1 : n;
         }
         return;
+    }
+    if ((keys & K_CANCEL) && d->res == 1516) {   // About: its procedure only answers OK; Circle / Esc close it the same way
+        Ctl *ok = ctl_by_id(d, 1);
+        if (ok && ok->enabled && ok->visible) { click(c, d, ok); return; }
     }
     if (keys & K_CANCEL) {
         Ctl *cancel = ctl_by_id(d, 2);
@@ -880,10 +893,284 @@ static void dlg_input(CPU *c, int keys) {
         if (nf == d->focus) change(c, d, f, (keys & K_UP) ? -1 : 1);
         return;
     }
+    if (g_pretty) {   // the crisp view lists the controls as rows: the arrows follow them
+        if (keys & K_UP) form_move(d, -1, 0);
+        else if (keys & K_DOWN) form_move(d, 1, 0);
+        else if (lr) form_move(d, 0, lr);
+        return;
+    }
     if (keys & K_UP) move_focus(d, 0, -1);
     else if (keys & K_DOWN) move_focus(d, 0, 1);
     else if (lr) move_focus(d, lr, 0);
 }
+// ---------- crisp view (port/vita/dlg_menu.h) ----------
+// With hk_dlg_set_pretty(1) the platform draws the top dialog / the menu bar itself at 960x544 from a HkDlgView, and the
+// 640x480 layer above is not composited. The dialog procedures still own the state; the view only reads it. The same
+// view decides the focus moves (form_move), so the arrows follow what is on screen.
+void hk_dlg_set_pretty(int on) { g_pretty = on; }
+
+static void cpy(char *dst, size_t cap, const char *s) { snprintf(dst, cap, "%s", s ? s : ""); }
+static int is_footer(const Ctl *t) { return t->cls == C_BUTTON && btype(t) != 7 && (t->id == 1 || t->id == 2 || t->id == 40073); }
+static int is_group(const Ctl *t) { return t->cls == C_BUTTON && btype(t) == 7; }
+static int is_check(const Ctl *t) { int b = btype(t); return t->cls == C_BUTTON && (b == 2 || b == 3 || b == 4 || b == 9); }
+static int is_radio(const Ctl *t) { int b = btype(t); return t->cls == C_BUTTON && (b == 4 || b == 9); }
+static int inside(const Ctl *a, const Ctl *g) { return a->x >= g->x - 2 && a->y >= g->y - 2 && a->x + a->w <= g->x + g->w + 2 && a->y + a->h <= g->y + g->h + 2; }
+
+// Area label of a save slot ("a0_b"): the `_CGG_0` record of User/UserNN.HDK holds the current area label 17 bytes into its body
+// (docs/save-and-stages.md). Cached by the slot's text (name and time change on every save).
+static void slot_area(int n, const char *text, char *out, size_t cap) {
+    static struct { uint64_t h; char area[12]; } cache[10];
+    uint64_t h = hash_mem(0x9e3779b97f4a7c15ull, text, strlen(text));
+    if (cache[n - 1].h == h) { cpy(out, cap, cache[n - 1].area); return; }
+    cache[n - 1].h = h; cache[n - 1].area[0] = 0;
+    static const char *const dirs[] = {"User", "USER", "user"}, *const names[] = {"User%02d.HDK", "USER%02d.HDK"};
+    FILE *f = NULL;
+    for (int i = 0; i < 6 && !f; i++) {
+        char g[64], nm[24], host[600];
+        snprintf(nm, sizeof nm, names[i & 1], n);
+        snprintf(g, sizeof g, "./%s/%s", dirs[i / 2], nm);
+        w32_host_path(g, host, sizeof host);
+        f = fopen(host, "rb");
+    }
+    if (f) {
+        uint8_t rec[64];
+        for (int guard = 0; guard < 400; guard++) {
+            uint32_t sz;
+            if (fread(&sz, 4, 1, f) != 1 || sz < 8 || sz > (1u << 24)) break;
+            size_t want = sz - 4 < sizeof rec ? sz - 4 : sizeof rec;
+            if (fread(rec, 1, want, f) != want) break;
+            if (!memcmp(rec, "_CGG_0", 7) && want >= 7 + 17 + 4) {
+                const char *a = (const char *)rec + 7 + 17;
+                size_t l = 0;
+                while (7 + 17 + l < want && a[l] && l < sizeof cache[0].area - 1) l++;
+                int ok = l >= 2;
+                for (size_t k = 0; k < l; k++) if (!((a[k] >= 'a' && a[k] <= 'z') || (a[k] >= '0' && a[k] <= '9') || a[k] == '_')) ok = 0;
+                if (ok) { memcpy(cache[n - 1].area, a, l); cache[n - 1].area[l] = 0; }
+                break;
+            }
+            if (fseek(f, (long)(sz - 4 - want), SEEK_CUR)) break;
+        }
+        fclose(f);
+    }
+    cpy(out, cap, cache[n - 1].area);
+}
+
+static void view_hint(const Dlg *d, HkDlgView *v) {
+    const char *hint = d->drop ? HINT_LIST : game_driven(d) ? HINT_GAME : HINT_DLG;
+    if (d->focus >= 0 && editing(&d->ctl[d->focus])) hint = g_ime_ctl ? hk_tr(S_D_KBD) : HINT_EDIT;
+    cpy(v->hint, sizeof v->hint, hint);
+}
+
+static void view_slots(Dlg *d, HkDlgView *v) {
+    v->kind = DV_SLOTS;
+    Ctl *g = ctl_by_id(d, 1430);
+    cpy(v->title, sizeof v->title, g && g->text[0] ? g->text : d->title);
+    Ctl *note = ctl_by_id(d, 1206);
+    if (note) cpy(v->note, sizeof v->note, note->text);
+    for (int i = 0; i < 10; i++) {
+        Ctl *t = ctl_by_id(d, (uint32_t)(1420 + i));
+        DvSlot *s = &v->slot[i];
+        if (!t) continue;
+        v->nslots = i + 1;
+        s->sel = (uint8_t)(t->checked != 0); s->enabled = (uint8_t)(t->enabled != 0);
+        const char *br = strrchr(t->text, '[');
+        const char *end = br ? strchr(br, ']') : NULL;
+        if (!t->text[0] || !br || !end) {   // an empty slot shows no text, or a text without the "[date]" part
+            s->empty = !t->text[0];
+            cpy(s->name, sizeof s->name, t->text);
+            continue;
+        }
+        char nm[64];
+        size_t nl = (size_t)(br - t->text);
+        while (nl && t->text[nl - 1] == ' ') nl--;
+        snprintf(nm, sizeof nm, "%.*s", (int)(nl < sizeof nm - 1 ? nl : sizeof nm - 1), t->text);
+        cpy(s->name, sizeof s->name, nm);
+        snprintf(s->date, sizeof s->date, "%.*s", (int)(end - br - 1 < (int)sizeof s->date - 1 ? end - br - 1 : (int)sizeof s->date - 1), br + 1);
+        slot_area(i + 1, t->text, s->area, sizeof s->area);
+    }
+    static const uint16_t ids[4] = {1, 2, ID_RENAME, ID_DELETE};
+    for (int i = 0; i < 4; i++) {
+        Ctl *b = ctl_by_id(d, ids[i]);
+        if (!b || !b->visible) continue;
+        DvBtn *o = &v->btn[v->nbtn++];
+        cpy(o->label, sizeof o->label, b->text); o->id = ids[i]; o->enabled = (uint8_t)(b->enabled != 0);
+    }
+    // Pad hint: the game's own button words (Load / Save, Cancel, Rename, Delete) next to the symbols, only the usable ones.
+    if (pad_hints()) {
+        char h[200];
+        int n = snprintf(h, sizeof h, "\007 %s", hk_tr(S_D_SLOT));
+        static const char *const sym[4] = {"\001", "\002", "\004", "\005"};
+        for (int i = 0; i < v->nbtn; i++) {
+            int k = v->btn[i].id == 1 ? 0 : v->btn[i].id == 2 ? 1 : v->btn[i].id == ID_RENAME ? 2 : 3;
+            if (v->btn[i].enabled && n < (int)sizeof h - 40) n += snprintf(h + n, sizeof h - (size_t)n, "    %s %s", sym[k], v->btn[i].label);
+        }
+        cpy(v->hint, sizeof v->hint, h);
+    } else view_hint(d, v);
+}
+
+// One screen row of a form, built from the controls that share a template row.
+typedef struct { int idx, sec, y, x; } FItem;
+static int fitem_cmp(const void *a, const void *b) {
+    const FItem *p = a, *q = b;
+    if (p->sec != q->sec) return p->sec - q->sec;
+    if (p->y != q->y) return p->y - q->y;
+    return p->x - q->x;
+}
+static void view_form(Dlg *d, HkDlgView *v) {
+    v->kind = DV_FORM;
+    // Heading: the largest group box (its text is set by the game or the template: "KEY CONFIGURATION"), else the caption.
+    int outer = -1;
+    for (int i = 0; i < d->n; i++) if (is_group(&d->ctl[i]) && d->ctl[i].visible && (outer < 0 || d->ctl[i].w * d->ctl[i].h > d->ctl[outer].w * d->ctl[outer].h)) outer = i;
+    cpy(v->title, sizeof v->title, outer >= 0 && d->ctl[outer].text[0] ? d->ctl[outer].text : d->title);
+    // Sub-groups (a titled group box inside the outer one: SCREEN SIZE) become sections placed after the plain rows.
+    int sub[8], nsub = 0;
+    for (int i = 0; i < d->n && nsub < 8; i++)
+        if (i != outer && is_group(&d->ctl[i]) && d->ctl[i].visible && d->ctl[i].text[0] && outer >= 0 && inside(&d->ctl[i], &d->ctl[outer])) sub[nsub++] = i;
+    for (int a = 1; a < nsub; a++) for (int b = a; b > 0 && d->ctl[sub[b]].y < d->ctl[sub[b - 1]].y; b--) { int t = sub[b]; sub[b] = sub[b - 1]; sub[b - 1] = t; }
+    FItem it[MAX_CTL];
+    int ni = 0;
+    for (int i = 0; i < d->n; i++) {
+        Ctl *t = &d->ctl[i];
+        if (!t->visible || is_group(t) || is_footer(t)) continue;
+        if (t->cls == C_STATIC) {
+            int st = (int)(t->style & 0x1fu);
+            if ((st >= 3 && st <= 9) || st == 0xe || st == 0x12 || !t->text[0]) continue;   // icons, frames, bitmaps, empty
+        } else if (t->cls != C_BUTTON && t->cls != C_EDIT && t->cls != C_COMBO) continue;
+        int sec = 0;
+        for (int s = 0; s < nsub; s++) if (inside(t, &d->ctl[sub[s]])) sec = s + 1;
+        it[ni++] = (FItem){i, sec, t->y, t->x};
+    }
+    qsort(it, (size_t)ni, sizeof *it, fitem_cmp);
+    const int tol = d->big ? 10 : 7;
+    for (int a = 0; a < ni && v->nrows < DV_ROWS - 1;) {
+        int b = a + 1;
+        while (b < ni && it[b].sec == it[a].sec && it[b].y - it[a].y <= tol) b++;
+        if (a == 0 || it[a].sec != it[a - 1].sec) {
+            if (it[a].sec > 0) { DvRow *r = &v->row[v->nrows++]; r->kind = RK_SECTION; r->focus = -1; r->ctl[0] = r->ctl[1] = -1; cpy(r->label, sizeof r->label, d->ctl[sub[it[a].sec - 1]].text); }
+        }
+        DvRow *r = &v->row[v->nrows];
+        r->focus = -1; r->ctl[0] = r->ctl[1] = -1; r->enabled = 1;
+        char lab[128] = "";
+        int nstat = 0, ncell = 0, centered = 0;
+        Ctl *cell[2] = {NULL, NULL};
+        int cidx[2] = {-1, -1};
+        for (int k = a; k < b; k++) {
+            Ctl *t = &d->ctl[it[k].idx];
+            if (t->cls == C_STATIC) {
+                if (nstat < 2 && strlen(lab) + strlen(t->text) + 2 < sizeof lab) { if (lab[0]) strcat(lab, " "); strcat(lab, t->text); }
+                if (nstat == 0) { cpy(r->val[0], sizeof r->val[0], t->text); centered = (t->style & 3u) == 1u; }
+                else if (nstat == 1) { cpy(r->val[1], sizeof r->val[1], t->text); centered &= (t->style & 3u) == 1u; }
+                nstat++;
+            } else if (ncell < 2) { cell[ncell] = t; cidx[ncell] = it[k].idx; ncell++; }
+        }
+        if (!ncell) {   // text only
+            if (nstat == 2 && centered && strlen(r->val[0]) < 16 && strlen(r->val[1]) < 16) { r->kind = RK_COLHEAD; r->ncell = 2; }
+            else if (lab[0] == '-') {   // "----------   OPTION   ----------"
+                char *s = lab; while (*s == '-' || *s == ' ') s++;
+                char *e = s + strlen(s); while (e > s && (e[-1] == '-' || e[-1] == ' ')) e--;
+                *e = 0;
+                r->kind = RK_SECTION; cpy(r->label, sizeof r->label, s); r->val[0][0] = r->val[1][0] = 0;
+            } else { r->kind = RK_TEXT; r->val[0][0] = r->val[1][0] = 0; cpy(r->label, sizeof r->label, lab); }
+        } else if (is_check(cell[0])) {
+            r->kind = is_radio(cell[0]) ? RK_RADIO : RK_CHECK;
+            cpy(r->label, sizeof r->label, cell[0]->text);
+            r->val[0][0] = r->val[1][0] = 0;
+            r->checked = (uint8_t)(cell[0]->checked != 0); r->enabled = (uint8_t)cell[0]->enabled;
+            r->ncell = 1; r->ctl[0] = (int16_t)(focusable(cell[0]) ? cidx[0] : -1);
+            r->focus = r->ctl[0] >= 0 && r->ctl[0] == d->focus ? 0 : -1;
+        } else if (cell[0]->cls == C_BUTTON) {
+            r->kind = RK_BUTTON;
+            cpy(r->label, sizeof r->label, cell[0]->text);
+            r->val[0][0] = r->val[1][0] = 0;
+            r->enabled = (uint8_t)cell[0]->enabled; r->ncell = 1; r->ctl[0] = (int16_t)(focusable(cell[0]) ? cidx[0] : -1);
+            r->focus = r->ctl[0] >= 0 && r->ctl[0] == d->focus ? 0 : -1;
+        } else {   // combo boxes: label + the current choices; an edit: label + its text
+            r->kind = cell[0]->cls == C_EDIT ? RK_EDIT : RK_VALUE;
+            cpy(r->label, sizeof r->label, lab);
+            r->val[0][0] = r->val[1][0] = 0;
+            for (int c = 0; c < ncell; c++) {
+                cpy(r->val[c], sizeof r->val[c], cell[c]->cls == C_EDIT ? cell[c]->text : item_text(cell[c], cell[c]->cursel));
+                r->ctl[c] = (int16_t)(focusable(cell[c]) ? cidx[c] : -1);
+                if (r->ctl[c] >= 0 && r->ctl[c] == d->focus) r->focus = (int8_t)c;
+            }
+            r->ncell = (uint8_t)ncell;
+        }
+        v->nrows++;
+        a = b;
+    }
+    for (int s = 0; s < 3; s++) {   // footer: OK, Cancel, Reset
+        static const uint16_t ids[3] = {1, 2, 40073};
+        Ctl *b = ctl_by_id(d, ids[s]);
+        if (!b || !b->visible) continue;
+        DvBtn *o = &v->btn[v->nbtn++];
+        cpy(o->label, sizeof o->label, b->text); o->id = ids[s]; o->enabled = (uint8_t)(b->enabled != 0);
+        o->focus = (uint8_t)(d->focus >= 0 && &d->ctl[d->focus] == b);
+    }
+    view_hint(d, v);
+    if (d->drop && d->focus >= 0) {   // the open list of the focused combo box
+        Ctl *t = &d->ctl[d->focus];
+        int n = t->nitems < DV_DROP ? t->nitems : DV_DROP, first = t->cursel - n / 2;
+        if (first > t->nitems - n) first = t->nitems - n;
+        if (first < 0) first = 0;
+        v->drop = 1; v->dropn = n; v->dropsel = t->cursel - first;
+        for (int i = 0; i < n; i++) cpy(v->dropitem[i], sizeof v->dropitem[i], t->items[first + i]);
+    }
+}
+
+static void view_menu(HkDlgView *v) {
+    v->kind = DV_MENU;
+    v->ntop = g_menu.ntop; v->topsel = g_menu.top; v->open = g_menu.open;
+    for (int i = 0; i < g_menu.ntop && i < 10; i++) { cpy(v->top[i], sizeof v->top[i], g_menu.t[i].text); v->topgray[i] = (uint8_t)(g_menu.t[i].grayed != 0); }
+    if (g_menu.open && g_menu.top < g_menu.ntop && g_menu.t[g_menu.top].popup) {
+        MTop *t = &g_menu.t[g_menu.top];
+        v->nitems = t->n < 24 ? t->n : 24; v->itemsel = g_menu.item;
+        for (int i = 0; i < v->nitems; i++) {
+            cpy(v->item[i].text, sizeof v->item[i].text, t->it[i].text); cpy(v->item[i].key, sizeof v->item[i].key, t->it[i].key);
+            v->item[i].gray = (uint8_t)(t->it[i].grayed != 0); v->item[i].sep = (uint8_t)(t->it[i].sep != 0);
+        }
+        cpy(v->hint, sizeof v->hint, HINT_DROP);
+    } else cpy(v->hint, sizeof v->hint, HINT_BAR);
+}
+
+int hk_dlg_view(HkDlgView *v) {
+    if (!g_pretty) return 0;
+    Dlg *d = top_dlg();
+    if (!d && !menu_shown()) return 0;
+    memset(v, 0, sizeof *v);
+    if (!d) { view_menu(v); return 1; }
+    if (d->res == 1500) view_slots(d, v); else view_form(d, v);
+    return 1;
+}
+
+// Focus move for a form, following the rows as drawn: Up/Down go to the neighbouring row that has a focusable cell (same
+// column when it exists, the first cell for the buttons row), Left/Right to the neighbouring cell of the row.
+static int form_move(Dlg *d, int dy, int dx) {
+    static HkDlgView v;
+    memset(&v, 0, sizeof v);
+    view_form(d, &v);
+    int rows[DV_ROWS + 1][3], nr = 0, cr = -1, cc = 0;   // per row: control indices of its cells (up to 3 for the buttons)
+    int cnt[DV_ROWS + 1];
+    for (int r = 0; r < v.nrows; r++) {
+        int n = 0;
+        for (int c = 0; c < 2; c++) if (v.row[r].ctl[c] >= 0 && (v.row[r].kind == RK_VALUE || v.row[r].kind == RK_EDIT || c == 0)) rows[nr][n++] = v.row[r].ctl[c];
+        if (n) { cnt[nr] = n; nr++; }
+    }
+    int nb = 0;
+    for (int b = 0; b < v.nbtn; b++) {
+        Ctl *t = ctl_by_id(d, v.btn[b].id);
+        if (t && focusable(t) && nb < 3) rows[nr][nb++] = (int)(t - d->ctl);
+    }
+    if (nb) { cnt[nr] = nb; nr++; }
+    for (int r = 0; r < nr; r++) for (int c = 0; c < cnt[r]; c++) if (rows[r][c] == d->focus) { cr = r; cc = c; }
+    if (cr < 0) { set_focus_default(d); return 1; }
+    if (dx) { int c = cc + dx; if (c >= 0 && c < cnt[cr]) d->focus = rows[cr][c]; return 1; }
+    int r = cr + dy;
+    if (r < 0 || r >= nr) return 1;
+    int c = r == nr - 1 && nb ? (cr == nr - 1 ? cc : 0) : cc < cnt[r] ? cc : cnt[r] - 1;
+    d->focus = rows[r][c];
+    return 1;
+}
+
 #define HWND_MAIN_DLG 0x00010010u   // the game's window (port/win32/user32.c HWND_MAIN)
 static void menu_input(int keys) {
     if (keys & K_DEFAULT) keys |= K_OK;
@@ -1051,8 +1338,22 @@ void hk_config_loaded(CPU *c) {
 }
 
 // DialogBoxParamA(hInstance, template, parent, proc, param): runs its own message loop until EndDialog.
+// GAME DATA (1500) is modeless (CreateDialogParamA) and closes through DestroyWindow whether confirmed or cancelled, so
+// the dialog itself only logs; the last slot is taken from the file operations (CopyFileA UserNN -> User00 on a load,
+// UserNN -> UserNN.bak on a save: port/hk/imports_easy.c).
+static void note_slot_dialog(const Dlg *d, int how, int result) {
+    if (d->res != 1500) return;
+    int ls = 0;
+    for (int i = 0; i < 10; i++) { Ctl *t = ctl_by_id((Dlg *)d, (uint32_t)(1420 + i)); if (t && t->checked) ls = i + 1; }
+    rt_dlog("[dlg] 1500 closed (%s) result %d, selected slot %d\n", how ? "DestroyWindow" : "EndDialog", result, ls);
+}
+// The title menu's NETWORK item (shown as OPTIONS, see hk_art_title_words) opens dialog 1488 "Choose a connection". The
+// port has no DirectPlay: the dialog is not created (nothing network-related runs) and the platform shows its settings
+// instead; the game gets 0, the result of the dialog's own Cancel, and stays on the title.
+void hk_title_options(void);
 U(DialogBoxParamA) {
     HOSTFN;
+    if (ARG(2) == 1488) { rt_dlog("[opt] DialogBoxParamA 1488 reached (title item 3)\n"); hk_title_options(); rt_dlog("[opt] returned to the game\n"); STDRET(5, 0); }
     Dlg *d = dlg_create(c, ARG(2), ARG(4), ARG(5), 1);
     if (!d) STDRET(5, 0xffffffffu);
     while (d->used && !d->ended) {
@@ -1071,6 +1372,7 @@ U(EndDialog) {
     Dlg *d = dlg_of(ARG(1));
     if (d) {
         d->result = ARG(2);
+        note_slot_dialog(d, 0, (int)ARG(2));
         if (d->modal) d->ended = 1;
         else d->visible = 0;   // a modeless dialog stays until DestroyWindow
     }
@@ -1079,6 +1381,7 @@ U(EndDialog) {
 int hk_dlg_destroy(CPU *c, uint32_t hwnd) {
     Dlg *d = dlg_of(hwnd);
     if (!d) return 0;
+    note_slot_dialog(d, 1, -1);
     if (d->modal) { d->ended = 1; return 1; }
     d->visible = 0;
     dlg_send(c, d, 0x2u, 0, 0);   // WM_DESTROY
@@ -1243,6 +1546,32 @@ U(LoadMenuA) { HOSTFN; rt_dlog("[menu] LoadMenuA(%u)\n", ARG(2)); STDRET(2, ARG(
 U(SetMenu) { HOSTFN; menu_set(ARG(2)); refresh(); STDRET(2, 1); }
 U(DestroyMenu) { HOSTFN; if (ARG(1) && (ARG(1) & 0xffffu) == g_menu.res) g_menu.res = 0; STDRET(1, 1); }
 
+// GAME DATA (1500) open: copies the ten slot radio buttons (ids 1420..1429, as the game shows them: "Data 2
+// [11/21/2026 sat 9:32:33]", other text for an empty slot) and returns 1; -1 when it is not the top dialog.
+int hk_dlg_slots(char out[10][160], int enabled[10]) {
+    Dlg *d = top_dlg();
+    if (!d || d->res != 1500) return -1;
+    for (int i = 0; i < 10; i++) {
+        Ctl *t = ctl_by_id(d, (uint32_t)(1420 + i));
+        out[i][0] = 0; enabled[i] = 0;
+        if (t) { snprintf(out[i], 160, "%s", t->text); enabled[i] = t->enabled; }
+    }
+    return 1;
+}
+
+int hk_dlg_select_slot(int n) {
+    Dlg *d = top_dlg();
+    if (!d || d->res != 1500 || n < 1 || n > 10) return 0;
+    for (int i = 0; i < 10; i++) { Ctl *t = ctl_by_id(d, (uint32_t)(1420 + i)); if (t) t->checked = i == n - 1; }
+    return ctl_by_id(d, (uint32_t)(1420 + n - 1)) != NULL;
+}
+int hk_dlg_selected_slot(void) {
+    Dlg *d = top_dlg();
+    if (!d || d->res != 1500) return 0;
+    int r = 0;
+    for (int i = 0; i < 10; i++) { Ctl *t = ctl_by_id(d, (uint32_t)(1420 + i)); if (t && t->checked) { if (r) return 0; r = i + 1; } }
+    return r;
+}
 // ---------- "Load game" from the pause screen ----------
 // The title menu's File > Continue (WM_COMMAND 40053) opens dialog 1500 in load mode, but only exists in the title
 // menu (1505); the in-stage menu (1504) has Stop This Game (40061) instead. So inside a stage the request first

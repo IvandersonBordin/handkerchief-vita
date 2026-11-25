@@ -2,7 +2,7 @@
 
 ![Handkerchief for PlayStation Vita](docs/media/cover.png)
 
-An unofficial, non-commercial port of the Windows game *Handkerchief* (OPUS Corp. / ASK Co., Ltd., 1999-2000) to the PlayStation Vita. The original executable is statically recompiled from x86 to C, so the game's own code runs unchanged; the port supplies the Windows environment it expects. **You need your own copy of the game.**
+An unofficial, non-commercial port of the Windows game *Handkerchief* (OPUS Corp. / ASK Co., Ltd., 1999-2000) to the PlayStation Vita. The original executable is statically recompiled from x86 to C, so the game's own code runs unchanged; the port supplies the Windows environment it expects. **You need your own copy of the game.** Two editions of `HDKWIN.EXE` are supported: the original release (preserved at <https://archive.org/details/Handkerchief>) and the one with the community fix (it only rewrites the file-path strings).
 
 > **Beta.** This is the first public beta: the whole game runs from start to finish on the port, but it has not been played through on every console setup yet. If something goes wrong, please [open an issue](../../issues/new/choose) (English or Portuguese) and attach `ux0:data/handkerchief/hklog.txt` and `hklog.prev.txt`. Every report helps us fix it as soon as possible.
 
@@ -11,6 +11,15 @@ An unofficial, non-commercial port of the Windows game *Handkerchief* (OPUS Corp
 Screenshots are captured from the port running the original game data. The game's artwork belongs to its rights holders.
 
 > **25 FPS is the original game's speed, not a performance limit.** *Handkerchief* was designed to update and draw exactly 25 frames per second, and all of its movement, animation and timing depend on that rate.
+
+## Get the builder (pick the one for your computer)
+
+| Your computer | Download from the [latest release](../../releases/latest) | Then |
+| --- | --- | --- |
+| **Windows** (10 or 11, 64-bit) | **`HandkerchiefVitaBuilder-WINDOWS.zip`** | extract it, double-click `HandkerchiefVitaBuilder.exe` |
+| **Linux** (64-bit) | **`HandkerchiefVitaBuilder-LINUX.tar.gz`** | extract it, double-click (or run) `HandkerchiefVitaBuilder` |
+
+Brazilian Portuguese guide: [GUIA-PT.md](GUIA-PT.md). Details: [Building your own VPK](#building-your-own-vpk-easy-way).
 
 ## Status
 
@@ -29,7 +38,7 @@ Work in progress. Tested on a PS Vita 1000 (firmware 3.65, HENkaku) and on Linux
 ## Installing on the PS Vita
 
 1. Build the VPK (below) and install it with VitaShell.
-2. Copy your game files to `ux0:data/handkerchief/`: `HDKWIN.EXE`, `BITMAP/`, `SYSTEM/`, `USER/` and `WAV/`.
+2. Copy your game files to `ux0:data/handkerchief/`: `HDKWIN.EXE`, `BITMAP/`, `SYSTEM/` and `WAV/` (the builder output has exactly these). `USER/` holds your saves: the port creates it on first run, and the builder never ships it, so copying a newer folder over an old install keeps your saves. If you copy files by hand, include `USER/` only on a first install.
 3. Start *Handkerchief* from the LiveArea. A short log (startup and errors) is written to `ux0:data/handkerchief/hklog.txt`; the previous launch's is kept as `hklog.prev.txt`. Attach both when reporting a bug.
 
 ## Controls (PS Vita)
@@ -44,9 +53,9 @@ Work in progress. Tested on a PS Vita 1000 (firmware 3.65, HENkaku) and on Linux
 | R (hold) | Rapid fire |
 | L | Turncoat bomb (next to Shoot on R) |
 | Select (hold) | Tips & controls card during a stage: your current button map and the game's own hints, one at a time (Left/Right: next tip; the game keeps running). It is a button action, so it can be remapped |
-| Start | Pause screen: save, load, display options, widescreen, FPS counter, volume, cheats, controls, Results, and the game's menu (Game menu: save, load, stop, exit, configuration) |
+| Start | Pause screen (during GAME OVER, the port also offers to continue from your last save: Cross = Yes, Circle = No; the title screen has its own OPTIONS entry with the same settings): save, load, display options, widescreen, FPS counter, volume, cheats, controls, Results, and the game's menu (Game menu: save, load, stop, exit, configuration) |
 
-The gameplay buttons can be remapped in Start > Settings > Controls (choose an action, press Cross, then the new button; the previous owner of that button swaps in). The D-pad, left stick and Start are fixed, and Cross/Circle keep confirm/cancel in menus whatever the map. The map is saved in `hkport.cfg` as `map_<button>=<action>` lines. `hkport.cfg` also holds the options of the pause screen (language, aspect, native widescreen, FPS counter, volume, music); a fresh install starts with the FPS counter off and volume 7. The load-time improvements (`preopen`, `userfast`, `preload_se`, `savefast`) and the heap fix (`heapfix`) are on by default; setting one of them to 0 in `hkport.cfg` (for example `savefast=0`) switches it off if it ever causes trouble. The game's menu bar can also be put on a button there (action "Game menu"); an older `hkport.cfg` that had Select on the game menu is moved to the tips card once. The RESULTS panel (time, shots, bombs, expenditure, kills, destruction, injuries) is an item of the Start menu, right below Settings (greyed outside a stage); Circle or Cross returns to the menu.
+The gameplay buttons can be remapped in Start > OPTIONS (AJUSTES in Portuguese) > Controls (choose an action, press Cross, then the new button; the previous owner of that button swaps in). The D-pad, left stick and Start are fixed, and Cross/Circle keep confirm/cancel in menus whatever the map. The map is saved in `hkport.cfg` as `map_<button>=<action>` lines. `hkport.cfg` also holds the options of the pause screen (language, aspect, native widescreen, FPS counter, volume, music); a fresh install starts with the FPS counter off and volume 7. The load-time improvements (`preopen`, `userfast`, `preload_se`, `savefast`) and the heap fix (`heapfix`) are on by default; setting one of them to 0 in `hkport.cfg` (for example `savefast=0`) switches it off if it ever causes trouble. The game's menu bar can also be put on a button there (action "Game menu"); an older `hkport.cfg` that had Select on the game menu is moved to the tips card once. The RESULTS panel (time, shots, bombs, expenditure, kills, destruction, injuries) is an item of the Start menu, right below Settings (greyed outside a stage); Circle or Cross returns to the menu.
 
 ## Language (Brazilian Portuguese)
 
@@ -57,36 +66,36 @@ The game is in English. A Brazilian Portuguese fan translation exists, made by *
 
 1. Extract it and copy the files to `ux0:data/handkerchief/lang/ptbr/` (so you have `lang/ptbr/HDKWINBR.EXE`,
    `lang/ptbr/BITMAP/HDKCON00.BMP` and `lang/ptbr/BITMAP/HDKSYS00.BMP`). Your original game files stay untouched.
-2. In the pause screen choose Start > Settings > Language > Português (BR) and restart the game. The port's own menus
+2. In the pause screen choose Start > OPTIONS (AJUSTES in Portuguese) > Language > Português (BR) and restart the game. The port's own menus
    switch to Portuguese too. If the files are not found, the game stays in English and the menu says so.
 
 On Linux, run with `HK_LANG=pt` and the same folder layout inside the game folder (`<game>/lang/ptbr/`).
 
 ## Building your own VPK (easy way)
 
-One command builds the VPK on your own computer from your own copy of the game; nothing from the game is distributed. It needs Linux x86-64, about 3 GB of free disk space and an internet connection on the first run (it downloads a pinned [VitaSDK](https://vitasdk.org), about 110 MB, into `~/.cache/handkerchief-builder`). The first build takes a few minutes; re-running is nearly instant. Only the original `HDKWIN.EXE` is supported (its SHA-256 is checked: `3deeb9b18ac2f6ee7b4af4769d1499fdfe0bde8de44482b57ab4bf6196617b76`).
+You make the VPK yourself, on your own computer, from your own copy of the game. Nothing from the game is uploaded or distributed. No terminal, Python, WSL or other software is needed.
 
-**Linux**
+| Windows | Linux |
+| --- | --- |
+| Download **`HandkerchiefVitaBuilder-WINDOWS.zip`**, extract, double-click **`HandkerchiefVitaBuilder.exe`**. (Windows may say it "protected your PC" because the program is not code-signed: click *More info*, then *Run anyway*.) | Download **`HandkerchiefVitaBuilder-LINUX.tar.gz`**, extract, double-click (or run in a terminal) **`HandkerchiefVitaBuilder`**. |
 
-```sh
-git clone <this repository> handkerchief-vita && cd handkerchief-vita
-curl -LsSf https://astral.sh/uv/install.sh | sh        # once; or just use python3, see below
-uv run build.py --game "/path/to/folder/with/HDKWIN.EXE"
-```
+A window opens in your language (Portuguese or English) with three steps:
 
-Without uv: `python3 build.py --game "/path/to/folder"` (it creates a private venv in the cache folder). It also needs `curl`, `tar` and `bzip2`. If you run it from inside the game folder (or leave `--game` out and the game is in a common place) the folder is detected automatically.
+1. **Choose your Handkerchief folder**, the one with `HDKWIN.EXE`. Common places are found automatically. The program checks that the files are complete and that `HDKWIN.EXE` is the supported original release (SHA-256 `3deeb9b18ac2f6ee7b4af4769d1499fdfe0bde8de44482b57ab4bf6196617b76`); if not, it tells you what is wrong.
+2. **(Optional) Choose the Portuguese translation folder**: the fan translation by Patryck (see [Language](#language-brazilian-portuguese)); download and extract it first. Leave empty for the original English game.
+3. **Build my Vita game**. A progress bar shows each stage. The first time takes roughly 5 to 20 minutes and downloads about 250 MB of free tools (a pinned [VitaSDK](https://vitasdk.org) with SDL2, CMake and Ninja, checked by SHA-256) into `%LOCALAPPDATA%\HandkerchiefBuilder` (Windows) or `~/.cache/handkerchief-builder` (Linux); later builds take about a minute. It needs about 3 GB of free disk space and an internet connection the first time.
 
-**Windows**: the build runs inside WSL (Windows Subsystem for Linux); native Windows is not supported.
+When it says **Done**, the result folder opens (default: `Handkerchief-Vita` on your Desktop) with:
 
-1. In PowerShell as administrator: `wsl --install -d Ubuntu`, reboot, open Ubuntu.
-2. In Ubuntu: `sudo apt update && sudo apt install -y git curl bzip2 python3 python3-venv`.
-3. Clone the repository and run it, pointing to the game through `/mnt/c`:
-   `python3 build.py --game "/mnt/c/Games/Handkerchief"` (use the folder where `HDKWIN.EXE` is).
-4. The result is in the `out` folder (`\\wsl$\Ubuntu\home\<you>\handkerchief-vita\out` in Explorer).
+- `handkerchief.vpk` (about 1.9 MB): copy it to the Vita and install it with VitaShell (open the file, press X).
+- `handkerchief/` (your game files laid out for the console): copy the whole folder to `ux0:data/` on the Vita, so you get `ux0:data/handkerchief/HDKWIN.EXE`.
+- Then open the "Handkerchief" bubble on the LiveArea screen. The Vita needs custom firmware (HENkaku/Ensō) to install unsigned VPKs.
 
-**Result and installing**: `out/handkerchief.vpk` (about 1.9 MB) and `out/ux0_data_handkerchief/` (your game files laid out for the console). Install the VPK with VitaShell, then copy the contents of `ux0_data_handkerchief` to `ux0:data/handkerchief/`.
+If something fails, the window shows what to do and keeps a log (button "Open the log folder"); finished downloads are kept, so pressing the build button again resumes.
 
-Optional Portuguese (BR) fan translation (see below): extract it, then add `--ptbr "/path/to/extracted/folder"`; the files are placed in `lang/ptbr/` for you. `--clean` forgets the cached build, `--cache DIR` and `--out DIR` change the folders.
+**Command line (advanced)**: `python3 build.py --game "/path/to/folder/with/HDKWIN.EXE" [--ptbr "/path/to/translation"] [--out DIR] [--cache DIR] [--clean]` does the same without a window, on Linux and native Windows (Python 3.9+; `uv run build.py ...` also works). It writes `out/handkerchief.vpk` and `out/handkerchief/`.
+
+**How the downloads are built**: the two files are produced by the GitHub Actions workflow `.github/workflows/builder.yml` (PyInstaller) when a version tag is pushed. They contain only this repository's code (GPL-3.0), never the game or its derivatives; the program recompiles your `HDKWIN.EXE` locally.
 
 ## Building (developers)
 

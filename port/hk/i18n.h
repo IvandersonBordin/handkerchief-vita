@@ -80,18 +80,25 @@ enum {
     S_T_HINT,
     S_T_NONE,
     S_M_CONF,
+    S_GO_ASK,
+    S_LOADING,
+    S_D_SLOT,
+    S_D_NAME,
+    S_D_AREA,
+    S_D_DATE,
+    S_D_EMPTY,
     S_COUNT
 };
 static const char *const hk_str[S_COUNT][2] = {
     {"PAUSE", "PAUSA"},
     {"CHEATS", "TRAPA\307AS"},
-    {"SETTINGS", "CONFIGURA\307\325ES"},
+    {"OPTIONS", "AJUSTES"},
     {"CONTROLS", "CONTROLES"},
     {"Continue", "Continuar"},
     {"Save game", "Salvar jogo"},
     {"Load game", "Carregar jogo"},
     {"Cheats", "Trapa\347as"},
-    {"Settings", "Configura\347\365es"},
+    {"Options", "Ajustes"},
     {"Game menu", "Menu do jogo"},
     {"Quit game", "Sair do jogo"},
     {"Invincible", "Invenc\355vel"},
@@ -162,6 +169,14 @@ static const char *const hk_str[S_COUNT][2] = {
     {"\010 more tips", "\010 mais dicas"},   // \010: D-pad left/right symbol
     {"(no tips found)", "(nenhuma dica encontrada)"},
     {"Add money x%d?", "Adicionar dinheiro x%d?"},   // Cheats > Add money confirmation
+    {"Continue from the last save?", "Continuar do \372ltimo save?"},   // after GAME OVER (port/hk/gameover.c)
+    {"Loading...", "Carregando..."},   // the hidden load chain after GAME OVER > Yes
+    // GAME DATA table (dialog 1500, port/vita/dlg_menu.h): pad hint word and column headers
+    {"slot", "slot"},
+    {"Name", "Nome"},
+    {"Area", "\301rea"},
+    {"Saved", "Salvo em"},
+    {"- empty -", "- vazio -"},
 };
 static inline const char *hk_tr(int id) { return hk_str[id][g_hk_lang ? 1 : 0]; }
 #endif

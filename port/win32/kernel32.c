@@ -30,8 +30,9 @@ static uint32_t g_cmdline, g_env, g_envw;
 // ---------- processus / modules ----------
 K(GetCurrentProcess) { STDRET(0, 0xffffffffu); }
 K(SetPriorityClass) { STDRET(2, 1); }
-K(TerminateProcess) { HOSTFN; rt_log("TerminateProcess(%u)\n", ARG(2)); exit((int)ARG(2)); }
-K(ExitProcess) { HOSTFN; rt_log("ExitProcess(%u)\n", ARG(1)); exit((int)ARG(1)); }
+void hk_host_shutdown(void);
+K(TerminateProcess) { HOSTFN; rt_log("TerminateProcess(%u)\n", ARG(2)); rt_log_flush(); hk_host_shutdown(); rt_log_stop(); exit((int)ARG(2)); }
+K(ExitProcess) { HOSTFN; rt_log("ExitProcess(%u)\n", ARG(1)); rt_log_flush(); hk_host_shutdown(); rt_log("[boot] shutdown done\n"); rt_log_stop(); exit((int)ARG(1)); }
 K(GetVersion) { STDRET(0, 0x0a280105u); } // Windows XP 5.1.2600
 K(GetVersionExA) {
     HOSTFN;

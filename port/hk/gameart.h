@@ -39,4 +39,11 @@ int hk_gf_text_h(uint32_t *buf, int bw, int x, int y, const char *s, int style, 
 int hk_gf_width_h(const char *s, int h);
 void hk_art_dot_h(uint32_t *buf, int bw, int x, int y, int h);   // the red dot scaled by h / 2
 void hk_gf_upper(char *dst, const char *src, int cap);   // Latin-1 upper case
+void hk_art_title_words(uint8_t *bits, int stride, int h, int lang);   // see gameart.c: HDKSYS00 title words (lang 1: PT-BR, 0: OPTIONS only)
+int hk_art_title_word_render(const char *s, int cw, int sel, uint8_t *out);   // one word as 12 x cw palette indices (top-down), 0 if impossible
+// Any string (A-Z, 0-9, . , : ; ! ? - + = ( ) ' " / $ and the Latin-1 accented capitals, lower case is folded) in the title-word
+// glyphs, bold with the title's outline and shadow (see gameart.c). Both return -1 (nothing drawn) when a character
+// cannot be built; the caller then uses hk_gf_text_h.
+int hk_tw_width_h(const char *s, int h);
+int hk_tw_text_h(uint32_t *buf, int bw, int x, int y, const char *s, int style, int h);
 #endif

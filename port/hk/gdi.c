@@ -7,6 +7,8 @@
 #include "win32.h"
 #include "hk_ddraw.h"
 #include "font_data.h"
+#include "hk/gameart.h"
+#include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -132,6 +134,15 @@ static int name_has(const char *s, const char *w) {   // case-insensitive substr
     for (; *s; s++) { size_t i = 0; while (w[i] && s[i] && (s[i] | 0x20) == (w[i] | 0x20)) i++; if (!w[i]) return 1; }
     return 0;
 }
+// The title menu words in HDKSYS00.BMP: NETWORK becomes OPTIONS (the port has no network mode), and the PT-BR
+// translation's redrawn words are replaced by words in the original style (port/hk/gameart.c).
+static uint32_t title_words(uint32_t h, const char *guest_name, const char *hostpath) {
+    HOSTFN;
+    Bitmap *b = bmp_of(h);
+    if (h && b && b->w == 640 && b->h == 448 && name_has(guest_name, "hdksys00"))
+        hk_art_title_words(mb + b->bits, b->stride, b->h, strstr(hostpath, "/lang/") != NULL);
+    return h;
+}
 U(LoadImageA) {
     HOSTFN;
     uint32_t name = ARG(2), type = ARG(3), flags = ARG(6);
@@ -153,7 +164,7 @@ U(LoadImageA) {
             uint64_t t1 = SDL_GetPerformanceCounter();
             uint32_t h = bmp_from_dib(pd + 14, (uint32_t)pn - 14, GSTR(name));
             if (g_trace_load) { uint64_t t2 = SDL_GetPerformanceCounter(); g_lt_read_n++; g_lt_read_b += (uint64_t)pn; g_lt_open_n++; g_lt_dec_t += t2 - t1; (void)t0; }
-            STDRET(6, h);
+            STDRET(6, title_words(h, GSTR(name), hp));
         }
         FILE *f = fopen(hp, "rb");
         if (!f) { rt_log("[gdi] LoadImageA: cannot open %s\n", hp); STDRET(6, 0); }
@@ -172,7 +183,7 @@ U(LoadImageA) {
             uint64_t t2 = SDL_GetPerformanceCounter();
             g_lt_read_t += t1 - t0; g_lt_read_n++; g_lt_read_b += (uint64_t)n; g_lt_open_n++; g_lt_dec_t += t2 - t1;
         }
-        STDRET(6, h);
+        STDRET(6, title_words(h, GSTR(name), hp));
     }
     uint32_t size = 0, data = w32_resource(name, 2, &size);   // RT_BITMAP
     if (!data) { rt_dlog("[gdi] LoadImageA: no bitmap resource %s\n", name < 0x10000 ? "(id)" : GSTR(name)); STDRET(6, 0); }

@@ -21,12 +21,17 @@ int plat_vk_down(int vk);
 // Shows one g_hk_ws_w x 480 frame of 32-bit XRGB pixels (DirectDraw primary surface after palette conversion).
 void plat_present_xrgb(uint32_t *pixels, int width, int height, int pitch_bytes);
 // Present-thread pipeline (port/hk/ddraw.c): plat_present_threaded() is 0 (off), 1 (drop frames when the present
-// thread is busy) or 2 (wait). plat_poll_main() runs on the game thread once per frame (input polling, key queue)
+// thread is busy), 2 (wait) or 3 (asynchronous: the worker also uploads and presents, the game thread never waits). plat_poll_main() runs on the game thread once per frame (input polling, key queue)
 // and returns 1 when the frame must go through plat_present_xrgb on the game thread instead (Vita: Start pressed,
 // opens the pause screen). plat_show_xrgb() shows a frame (FPS overlay drawn into it, upload); game thread only.
 int plat_present_threaded(void);
 int plat_poll_main(void);
 void plat_show_xrgb(uint32_t *pixels, int width, int height, int pitch_bytes);
+// present_thread=3: called on the present worker (not the game thread) with a finished frame: draws the FPS text and shows it.
+// No game state may be touched here (pause, tips and dialogs take the synchronous path).
+// Shows a frame with a centred "Loading..." box over it (the load chain after GAME OVER > Yes); game thread only.
+void plat_show_loading(uint32_t *pixels, int width, int height, int pitch_bytes);
+void plat_present_async(uint32_t *pixels, int width, int height, int pitch_bytes);
 
 // Text entry for the game's EDIT controls (port/hk/dialog.c), two models:
 // - a keyboard (PC): while plat_text_enable(1) is on, plat_text_typed hands out what was typed since the last call

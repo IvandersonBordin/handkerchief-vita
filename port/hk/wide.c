@@ -43,11 +43,24 @@ void hk_ws_view_rect(CPU *c) {
     W32(c->esp + 0x8u, R32(c->esp + 0x8u) + off);
 }
 
+// ---- Title scene (vtable 0x472500, ctor 0x455548): drawn wide like the stages ----
+// Before 0x456606 in 0x4565AA (called once by the ctor at 0x4555DA): the view rect (0,0,640,480) is in
+// [ebp-0x20..-0x14] (right written at 0x4565F8, c7 45 e8 80 02 00 00) and is copied to [esp] by the movs after this
+// point; the follow rect (300,246)-(400,338) was already copied to [esp+0x10..0x1C] at 0x4565EF..0x4565F2, so its
+// copy's L/R ([esp+0x10]/[esp+0x18]) is shifted. 0x4032DD makes this the camera context [scene+0x2C] = 0x4AA330,
+// whose view rect 0x4AA340 is the clip rect used by the title's logo and copyright text.
+void hk_ws_title_view(CPU *c) {
+    uint8_t *const mb = g_mem;
+    uint32_t off = (uint32_t)(g_hk_ws_w - 640) / 2;
+    W32(c->ebp - 0x18u, (uint32_t)g_hk_ws_w);
+    W32(c->esp + 0x10u, R32(c->esp + 0x10u) + off);
+    W32(c->esp + 0x18u, R32(c->esp + 0x18u) + off);
+}
+
 // ---- Pillarbox for the scenes that stay 640 wide ----
 // The stage scene (vtable 0x4724B8, ctor near 0x45427E, derived from the scene base 0x451C30; stages and the
-// territory title card) is widened. Everything else draws its 640 columns at the left of the wider primary: intro
-// logos, the title screen (vtable 0x472500, ctor 0x455548 -> view (0,0,640,480) at 0x4565AA; its logo 0x455D87 and
-// menu panel 0x4556B0 are drawn at 640-centred positions), menus, game over. Those frames are shown centred with
+// territory title card) and the title scene (vtable 0x472500, hooks above) are widened. Everything else draws its
+// 640 columns at the left of the wider primary: intro logos, menus, game over. Those frames are shown centred with
 // black side pillars. Evidence: the scene draw 0x454908 (esi = this, `mov esi,ecx` at 0x454920) runs hk_ws_bar_x
 // every stage frame; HK_WIDE=848 run to A0 saw only vtable 0x4724B8 there (frame 1314 on), none during intro/title.
 // The title class is excluded explicitly in case it reaches that draw. The decision is taken at each Flip (the
@@ -55,20 +68,28 @@ void hk_ws_view_rect(CPU *c) {
 // primary), so a modal dialog over a stage does not switch the layout.
 #define WS_TITLE_SCENE_VT 0x472500u
 static int g_ws_stage_drawn;   // main scene drawn since the last Flip
+static int g_ws_title_drawn;   // title scene drawn since the last Flip (wide too, but not a stage)
 static int g_ws_pillar = 1;    // current frames are 640-only: centre them
 static uint32_t g_ws_hud_list, g_ws_hud_box;   // HUD list and box being drawn (see hk_ws_hud_list)
 int g_hk_in_stage;   // a stage was drawn in the last game frame (any width): used by the Vita crouch tap
 void hk_ws_flip(void) {
     g_hk_in_stage = g_ws_stage_drawn;
     { void hk_results_tick(void); hk_results_tick(); }
-    if (g_hk_ws_w == 640) { g_ws_stage_drawn = 0; return; }
-    const int p = !g_ws_stage_drawn;
-    g_ws_stage_drawn = 0;
+    if (g_hk_ws_w == 640) { g_ws_stage_drawn = g_ws_title_drawn = 0; return; }
+    const int p = !g_ws_stage_drawn && !g_ws_title_drawn;
+    g_ws_stage_drawn = g_ws_title_drawn = 0;
     if (p != g_ws_pillar && HK_ENV("HK_TRACE_WS")) { extern unsigned g_frame; rt_dlog("[ws] frame %u: %s\n", g_frame, p ? "pillarbox 640" : "wide"); }
     g_ws_pillar = p;
 }
 // Offset of the game's 640 columns in the presented frame: 0 (wide or default 640) or (g_hk_ws_w - 640) / 2.
 int hk_ws_frame_ox(void) { return g_hk_ws_w != 640 && g_ws_pillar ? (g_hk_ws_w - 640) / 2 : 0; }
+// Before 0x455E16 in the title frame 0x455D87 (called at 0x4561A5): the logo sprite [0x4ABE3C] is centred at
+// x = (eax - w) / 2 with eax = 640 (b8 80 02 00 00 at 0x455E11). Runs on every title frame (the scene's world, logo,
+// copyright and menu panel are drawn wide), so it also marks the frame as wide.
+void hk_ws_title_logo(CPU *c) {
+    g_ws_title_drawn = 1;
+    c->eax = (uint32_t)g_hk_ws_w;
+}
 // Moves columns [0,640) of a w-wide XRGB frame to [ox,ox+640) and blacks the rest.
 void hk_ws_pillarbox(uint32_t *frame, int w, int h, int ox) {
     if (ox <= 0 || 640 + ox > w) return;

@@ -29,7 +29,7 @@ jobs:
         with: {name: HandkerchiefVitaBuilder-WINDOWS, path: HandkerchiefVitaBuilder-WINDOWS.zip}
       - uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
-        with: {files: HandkerchiefVitaBuilder-WINDOWS.zip, prerelease: true}
+        with: {files: HandkerchiefVitaBuilder-WINDOWS.zip, prerelease: false, make_latest: true}
   linux:
     runs-on: ubuntu-22.04   # old glibc so the binary runs on most distributions
     steps:
@@ -49,4 +49,4 @@ jobs:
         with: {name: HandkerchiefVitaBuilder-LINUX, path: HandkerchiefVitaBuilder-LINUX.tar.gz}
       - uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
-        with: {files: HandkerchiefVitaBuilder-LINUX.tar.gz, prerelease: true}
+        with: {files: HandkerchiefVitaBuilder-LINUX.tar.gz, prerelease: false, make_latest: true}

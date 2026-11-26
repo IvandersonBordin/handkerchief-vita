@@ -1,103 +1,159 @@
-# Handkerchief for PlayStation Vita
+<h1 align="center">Handkerchief for PlayStation Vita</h1>
 
-![Handkerchief for PlayStation Vita](docs/media/cover.png)
+<p align="center">
+  <img src="docs/media/cover.png" alt="Handkerchief for PlayStation Vita" width="720">
+</p>
 
-An unofficial, non-commercial port of the Windows game *Handkerchief* (OPUS Corp. / ASK Co., Ltd., 1999-2000) to the PlayStation Vita. The original executable is statically recompiled from x86 to C, so the game's own code runs unchanged; the port supplies the Windows environment it expects. **You need your own copy of the game.** Two editions of `HDKWIN.EXE` are supported: the original release and the one with the community fix (it only rewrites the file-path strings). Where to get the game: 1. My Abandonware <https://www.myabandonware.com/game/handkerchief-h0j>, 2. archive.org <https://archive.org/details/Handkerchief>.
+<p align="center">
+  <a href="../../releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/IvandersonBordin/handkerchief-vita?include_prereleases&label=download&color=6a5acd"></a>
+  <img alt="Platform" src="https://img.shields.io/badge/platform-PS%20Vita-003791">
+  <img alt="Status" src="https://img.shields.io/badge/status-beta-orange">
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-GPL--3.0-blue"></a>
+</p>
 
-> **Beta.** This is the first public beta: the whole game runs from start to finish on the port, but it has not been played through on every console setup yet. If something goes wrong, please [open an issue](../../issues/new/choose) (English or Portuguese) and attach `ux0:data/handkerchief/hklog.txt` and `hklog.prev.txt`. Every report helps us fix it as soon as possible.
+<p align="center">
+  <b>The 1999 Japanese PC run-and-gun <i>Handkerchief</i>, running natively on the PS Vita.</b><br>
+  The game's own code, recompiled from x86 to ARM: no emulator, the original gameplay unchanged.<br>
+  <a href="GUIA-PT.md">🇧🇷 Guia em português</a>
+</p>
 
-<p align="center"><img src="docs/media/gameplay.gif" alt="Title screen and the first stage running in the port" width="480"></p>
+> [!NOTE]
+> **Public beta.** The whole game runs from start to finish, but it has not been played on every console setup yet. If something goes wrong, please [report it](#-reporting-bugs) (English or Portuguese). Every report helps.
 
-Screenshots are captured from the port running the original game data. The game's artwork belongs to its rights holders.
+<p align="center"><img src="docs/media/gameplay.gif" alt="Title screen and the first stage running on the port" width="480"></p>
 
-> **25 FPS is the original game's speed, not a performance limit.** *Handkerchief* was designed to update and draw exactly 25 frames per second, and all of its movement, animation and timing depend on that rate.
+## ✨ Features
 
-## Get the builder (pick the one for your computer)
+- **The complete game**: intro, all 10 territories, the bosses, RESULTS screens, ending and credits.
+- **Native widescreen** (848x480, more of the world visible), plus the original 4:3 or stretched 16:9.
+- **Full sound**: music and effects through a mixer that follows the original DirectSound behaviour.
+- **The original look everywhere**: the port's pause and settings menus, dialogs and save screens are drawn with the game's own art and lettering.
+- **Pause menu**: save and load anywhere, RESULTS, cheats, display and volume options, button remapping, language.
+- **Continue after GAME OVER** from your last save.
+- **Tips & controls card** on Select, with the game's own hints.
+- **Brazilian Portuguese** with the fan translation (optional, see [Language](#-language-brazilian-portuguese)).
+- **Fast loading** and multi-core presentation on the console.
 
-| Your computer | Download from the [latest release](../../releases/latest) | Then |
+> **25 FPS is the game's real speed.** *Handkerchief* was designed to run at exactly 25 frames per second; all of its movement and timing depend on that rate.
+
+## 🚀 Quick start
+
+You need **your own copy of the PC game** and a PS Vita with **HENkaku/Ensō** (custom firmware) and VitaShell. Nothing from the game is distributed here: you build the Vita version yourself, on your computer, with one click.
+
+### 1. Get the game
+
+Download it from one of these pages (the builder also has a button for each):
+
+1. **[My Abandonware](https://www.myabandonware.com/game/handkerchief-h0j)**
+2. **[archive.org](https://archive.org/details/Handkerchief)**
+
+Both the original release and the one with the community fix are supported.
+
+### 2. Build the Vita version
+
+Download the builder for your computer from the **[latest release](../../releases/latest)**:
+
+| Your computer | Download | Then |
 | --- | --- | --- |
-| **Windows** (10 or 11, 64-bit) | **`HandkerchiefVitaBuilder-WINDOWS.zip`** | extract it, double-click `HandkerchiefVitaBuilder.exe` |
-| **Linux** (64-bit) | **`HandkerchiefVitaBuilder-LINUX.tar.gz`** | extract it, double-click (or run) `HandkerchiefVitaBuilder` |
+| 🪟 **Windows** 10/11 (64-bit) | `HandkerchiefVitaBuilder-WINDOWS.zip` | extract it and double-click `HandkerchiefVitaBuilder.exe` |
+| 🐧 **Linux** (64-bit) | `HandkerchiefVitaBuilder-LINUX.tar.gz` | extract it and double-click (or run) `HandkerchiefVitaBuilder` |
 
-Brazilian Portuguese guide: [GUIA-PT.md](GUIA-PT.md). Details: [Building your own VPK](#building-your-own-vpk-easy-way).
+A window opens in Portuguese or English with three steps: **choose the game folder**, optionally choose the Portuguese translation, and click **Build my Vita game**.
 
-## Status
+> [!TIP]
+> Windows may say it "protected your PC" because the program is not code-signed: click **More info**, then **Run anyway**.
+> The first build takes 5 to 20 minutes and downloads about 250 MB of free tools; later builds take about a minute.
 
-Work in progress. Tested on a PS Vita 1000 (firmware 3.65, HENkaku) and on Linux.
+### 3. Install on the Vita
+
+When the builder says **Done**, it opens a folder with two things:
+
+1. **`handkerchief.vpk`**: copy it to the Vita and install it with VitaShell (open the file, press ✕).
+2. **`handkerchief/`**: copy the whole folder to `ux0:data/`, so you get `ux0:data/handkerchief/HDKWIN.EXE`.
+
+Open the **Handkerchief** bubble on the LiveArea and play. Updating later? Copy the new folder over the old one: your saves (`USER/`) are kept.
+
+## 🎮 Controls
+
+| Button | Action |
+| :-: | --- |
+| D-pad / left stick | Move (Down: lie down) |
+| ✕ | Jump · confirm in menus |
+| □ | Shoot |
+| ○ | Switch / rotate, board or leave vehicles · cancel in menus |
+| △ or L | Turncoat bomb |
+| R (hold) | Rapid fire |
+| Select (hold) | Tips & controls card (Left/Right: next tip) |
+| Start | Pause menu |
+
+Gameplay buttons can be remapped in **Start → OPTIONS → Controls** (*AJUSTES* in Portuguese): choose an action, press ✕, then the new button.
+
+<details>
+<summary><b>More about the pause menu and settings</b></summary>
+
+- **Start** opens the pause menu: save, load, RESULTS, cheats, OPTIONS and the game's own menu (save, load, stop, exit, configuration). The title screen has its own OPTIONS entry with the same settings.
+- **RESULTS** (time, shots, bombs, expenditure, kills, destruction, injuries) sits right below OPTIONS and is greyed out outside a stage.
+- During **GAME OVER** the port offers to continue from your last save (✕ = Yes, ○ = No).
+- The D-pad, left stick and Start are fixed, and ✕/○ always confirm/cancel in menus whatever the map.
+- Settings are saved in `ux0:data/handkerchief/hkport.cfg` (language, aspect, widescreen, FPS counter, volume, music, button map as `map_<button>=<action>`). A fresh install starts with the FPS counter off and volume 7.
+- The loading and memory improvements (`preopen`, `userfast`, `preload_se`, `savefast`, `heapfix`) are on by default; setting one to `0` in `hkport.cfg` switches it off if it ever causes trouble.
+
+</details>
+
+## 🇧🇷 Language (Brazilian Portuguese)
+
+The game is in English. A Brazilian Portuguese fan translation was made by **Patryck Padilha de Oliveira** ([patryckpo.com](https://patryckpo.com)). It is not part of this repository and is not redistributed here.
+
+- **Easy way:** download it from <https://patryckpo.com/traducoes/windows/handkerchief/downloads/>, extract it, and pick the extracted folder in step 2 of the builder.
+- **By hand:** copy `HDKWINBR.EXE` and its `BITMAP/` folder (`HDKCON00.BMP`, `HDKSYS00.BMP`) to `ux0:data/handkerchief/lang/ptbr/`.
+
+Then choose **Start → OPTIONS → Language → Português (BR)** and restart the game. The port's own menus switch to Portuguese too.
+
+## 📊 Status
+
+Tested on a PS Vita 1000 (firmware 3.65, HENkaku) and on Linux.
 
 | Area | State |
 | --- | --- |
-| Intro, title, stages | Running at the native 25 FPS in 4:3 and native widescreen on the console. All 10 territories, their bosses' RESULTS screens and the ending/credits run through on the port (verified on PC by triggering each boss's own death path); play-testing on the Vita is ongoing |
-| Graphics | DirectDraw 8-bit emulated in software; **native widescreen** by default (848x480, more of the world visible), or 4:3 and stretched 16:9 |
-| Sound | Music and effects through a software mixer following DirectSound semantics, fixed volumes, separate music and effects levels. A 32-bit allocation wrap that turned missing WAVs into full-scale noise on the Vita is fixed |
-| Menus | The game's own menus and dialogs (save/load slots, game and key configuration, exit) drawn over the game and driven by the pad; on-screen keyboard for save names |
-| Save / continue | Works |
-| Extras | Pause menu in the style of the game's title screen: save, load (also inside a stage), RESULTS, cheats, settings, button remapping, language. Select shows a tips & controls card |
-| Memory and loading | Guest memory stays flat over 20 stage restarts on the console (a 32-bit allocator bug that leaked memory is fixed); stage files load from RAM, so area changes and saves no longer stall |
+| Stages | ✅ All 10 territories, bosses, RESULTS, ending and credits, at the native 25 FPS in 4:3 and widescreen |
+| Graphics | ✅ 8-bit DirectDraw emulated in software; native widescreen, 4:3 or stretched 16:9 |
+| Sound | ✅ Music and effects, separate volume levels |
+| Menus and dialogs | ✅ The game's own menus, driven by the pad, with an on-screen keyboard for save names |
+| Save / load / continue | ✅ |
+| Memory | ✅ Flat over long sessions (tested with 20 stage, save and menu cycles) |
+| Network mode | ❌ Not supported (replaced by OPTIONS on the title screen); online play is a goal for a future version |
 
-## Installing on the PS Vita
+## 🐞 Reporting bugs
 
-1. Build the VPK (below) and install it with VitaShell.
-2. Copy your game files to `ux0:data/handkerchief/`: `HDKWIN.EXE`, `BITMAP/`, `SYSTEM/` and `WAV/` (the builder output has exactly these). `USER/` holds your saves: the port creates it on first run, and the builder never ships it, so copying a newer folder over an old install keeps your saves. If you copy files by hand, include `USER/` only on a first install.
-3. Start *Handkerchief* from the LiveArea. A short log (startup and errors) is written to `ux0:data/handkerchief/hklog.txt`; the previous launch's is kept as `hklog.prev.txt`. Attach both when reporting a bug.
+If the game crashes, freezes, sounds wrong, or something does not behave like the original:
 
-## Controls (PS Vita)
+1. Open a new issue with the **[Bug report](../../issues/new/choose)** template. English or Portuguese are both fine.
+2. Say what happened, where in the game, and how to make it happen again.
+3. Attach `ux0:data/handkerchief/hklog.txt` and `hklog.prev.txt` (copy them with VitaShell) and, if you can, a screenshot (PS + Start).
 
-| Button | Action |
-| --- | --- |
-| D-pad / left stick | Move. Down: lie down (press again or another direction to get up) |
-| Cross | Jump; always confirms in menus, dialogs and the title screen |
-| Square | Shoot |
-| Circle | Switch and rotation (board or leave vehicles); always cancels in menus and dialogs |
-| Triangle | Turncoat bomb |
-| R (hold) | Rapid fire |
-| L | Turncoat bomb (next to Shoot on R) |
-| Select (hold) | Tips & controls card during a stage: your current button map and the game's own hints, one at a time (Left/Right: next tip; the game keeps running). It is a button action, so it can be remapped |
-| Start | Pause screen (during GAME OVER, the port also offers to continue from your last save: Cross = Yes, Circle = No; the title screen has its own OPTIONS entry with the same settings): save, load, display options, widescreen, FPS counter, volume, cheats, controls, Results, and the game's menu (Game menu: save, load, stop, exit, configuration) |
+We read every report and fix what we can as soon as possible.
 
-The gameplay buttons can be remapped in Start > OPTIONS (AJUSTES in Portuguese) > Controls (choose an action, press Cross, then the new button; the previous owner of that button swaps in). The D-pad, left stick and Start are fixed, and Cross/Circle keep confirm/cancel in menus whatever the map. The map is saved in `hkport.cfg` as `map_<button>=<action>` lines. `hkport.cfg` also holds the options of the pause screen (language, aspect, native widescreen, FPS counter, volume, music); a fresh install starts with the FPS counter off and volume 7. The load-time improvements (`preopen`, `userfast`, `preload_se`, `savefast`) and the heap fix (`heapfix`) are on by default; setting one of them to 0 in `hkport.cfg` (for example `savefast=0`) switches it off if it ever causes trouble. The game's menu bar can also be put on a button there (action "Game menu"); an older `hkport.cfg` that had Select on the game menu is moved to the tips card once. The RESULTS panel (time, shots, bombs, expenditure, kills, destruction, injuries) is an item of the Start menu, right below Settings (greyed outside a stage); Circle or Cross returns to the menu.
+## 🛠️ For developers
 
-## Language (Brazilian Portuguese)
+<details>
+<summary><b>Builder details and command line</b></summary>
 
-The game is in English. A Brazilian Portuguese fan translation exists, made by **Patryck Padilha de Oliveira**
-([patryckpo.com](https://patryckpo.com)); it is not part of this repository and is not redistributed here. Download it from
-<https://patryckpo.com/traducoes/windows/handkerchief/downloads/> (a WinRAR self-extracting archive; its contents are
-`HDKWINBR.EXE` and a `BITMAP/` folder with `HDKCON00.BMP` and `HDKSYS00.BMP`).
+The builder checks that your files are complete and that `HDKWIN.EXE` is one of the two supported editions (SHA-256 `3deeb9b18ac2f6ee7b4af4769d1499fdfe0bde8de44482b57ab4bf6196617b76` with the community fix, or the original archive.org release). It downloads a pinned [VitaSDK](https://vitasdk.org) with SDL2, CMake and Ninja, checked by SHA-256, into `%LOCALAPPDATA%\HandkerchiefBuilder` (Windows) or `~/.cache/handkerchief-builder` (Linux). It needs about 3 GB of free disk space. If something fails, the window shows what to do and keeps a log; finished downloads are kept, so pressing the build button again resumes.
 
-1. Extract it and copy the files to `ux0:data/handkerchief/lang/ptbr/` (so you have `lang/ptbr/HDKWINBR.EXE`,
-   `lang/ptbr/BITMAP/HDKCON00.BMP` and `lang/ptbr/BITMAP/HDKSYS00.BMP`). Your original game files stay untouched.
-2. In the pause screen choose Start > OPTIONS (AJUSTES in Portuguese) > Language > Português (BR) and restart the game. The port's own menus
-   switch to Portuguese too. If the files are not found, the game stays in English and the menu says so.
+Command line, without the window, on Linux and native Windows (Python 3.9+; `uv run build.py ...` also works):
 
-On Linux, run with `HK_LANG=pt` and the same folder layout inside the game folder (`<game>/lang/ptbr/`).
+```sh
+python3 build.py --game "/path/to/folder/with/HDKWIN.EXE" [--ptbr "/path/to/translation"] [--out DIR] [--cache DIR] [--clean]
+```
 
-## Building your own VPK (easy way)
+It writes `out/handkerchief.vpk` and `out/handkerchief/`.
 
-You make the VPK yourself, on your own computer, from your own copy of the game. Nothing from the game is uploaded or distributed. No terminal, Python, WSL or other software is needed.
+The two downloads are produced by the GitHub Actions workflow [`builder.yml`](.github/workflows/builder.yml) (PyInstaller) when a version tag is pushed. They contain only this repository's code (GPL-3.0), never the game or anything derived from it.
 
-| Windows | Linux |
-| --- | --- |
-| Download **`HandkerchiefVitaBuilder-WINDOWS.zip`**, extract, double-click **`HandkerchiefVitaBuilder.exe`**. (Windows may say it "protected your PC" because the program is not code-signed: click *More info*, then *Run anyway*.) | Download **`HandkerchiefVitaBuilder-LINUX.tar.gz`**, extract, double-click (or run in a terminal) **`HandkerchiefVitaBuilder`**. |
+</details>
 
-A window opens in your language (Portuguese or English) with three steps:
-
-1. **Choose your Handkerchief folder**, the one with `HDKWIN.EXE`. Common places are found automatically. The program checks that the files are complete and that `HDKWIN.EXE` is the supported original release (SHA-256 `3deeb9b18ac2f6ee7b4af4769d1499fdfe0bde8de44482b57ab4bf6196617b76`); if not, it tells you what is wrong.
-2. **(Optional) Choose the Portuguese translation folder**: the fan translation by Patryck (see [Language](#language-brazilian-portuguese)); download and extract it first. Leave empty for the original English game.
-3. **Build my Vita game**. A progress bar shows each stage. The first time takes roughly 5 to 20 minutes and downloads about 250 MB of free tools (a pinned [VitaSDK](https://vitasdk.org) with SDL2, CMake and Ninja, checked by SHA-256) into `%LOCALAPPDATA%\HandkerchiefBuilder` (Windows) or `~/.cache/handkerchief-builder` (Linux); later builds take about a minute. It needs about 3 GB of free disk space and an internet connection the first time.
-
-When it says **Done**, the result folder opens (default: `Handkerchief-Vita` on your Desktop) with:
-
-- `handkerchief.vpk` (about 1.9 MB): copy it to the Vita and install it with VitaShell (open the file, press X).
-- `handkerchief/` (your game files laid out for the console): copy the whole folder to `ux0:data/` on the Vita, so you get `ux0:data/handkerchief/HDKWIN.EXE`.
-- Then open the "Handkerchief" bubble on the LiveArea screen. The Vita needs custom firmware (HENkaku/Ensō) to install unsigned VPKs.
-
-If something fails, the window shows what to do and keeps a log (button "Open the log folder"); finished downloads are kept, so pressing the build button again resumes.
-
-**Command line (advanced)**: `python3 build.py --game "/path/to/folder/with/HDKWIN.EXE" [--ptbr "/path/to/translation"] [--out DIR] [--cache DIR] [--clean]` does the same without a window, on Linux and native Windows (Python 3.9+; `uv run build.py ...` also works). It writes `out/handkerchief.vpk` and `out/handkerchief/`.
-
-**How the downloads are built**: the two files are produced by the GitHub Actions workflow `.github/workflows/builder.yml` (PyInstaller) when a version tag is pushed. They contain only this repository's code (GPL-3.0), never the game or its derivatives; the program recompiles your `HDKWIN.EXE` locally.
-
-## Building (developers)
+<details>
+<summary><b>Building from source</b></summary>
 
 Requirements: Python 3 with `capstone`, a C compiler and SDL2 for the Linux build, [VitaSDK](https://vitasdk.org) with SDL2 for the Vita build. The function list (addresses and symbol names only) is committed in `recomp/data/`, so Ghidra is not needed. The generated C and every binary built from it are derived from the commercial executable: keep them local and never redistribute them.
 
@@ -112,9 +168,14 @@ cmake -S port/vita -B build/hk-vita -DCMAKE_BUILD_TYPE=Release -DHK_DEVTOOLS=OFF
 # (prof, hitch log, memlog, stress driver, heap trace, audio recorder, HK_TRACE_*).
 ```
 
-See [docs/static-recomp.md](docs/static-recomp.md) for the recompiler and the runtime design.
+On Linux, `HK_LANG=pt` with `<game>/lang/ptbr/` selects the Portuguese translation.
 
-## How it works
+</details>
+
+<details>
+<summary><b>How it works</b></summary>
+
+The original executable is statically recompiled from x86 to C, so the game's own code runs unchanged; the port supplies the Windows environment it expects.
 
 - `recomp/`: the x86 to C static recompiler (derived from [sh3vita](https://github.com/matfsouza/sh3vita)) and the data patches and hooks the port needs.
 - `port/rt`: guest memory, CPU state and the native runtime.
@@ -124,21 +185,21 @@ See [docs/static-recomp.md](docs/static-recomp.md) for the recompiler and the ru
 
 Technical documentation: [static recompilation](docs/static-recomp.md), [engine map](docs/engine-map.md), [HDK data format](docs/hdk-format.md), [save and stages](docs/save-and-stages.md), [widescreen](docs/widescreen-plan.md).
 
-## How this port was made
+</details>
+
+## 🤖 How this port was made
 
 This project was built with the help of AI. The recompiler, the runtime and the Windows/DirectX emulation were written with an AI coding assistant ([Claude Code](https://claude.com/claude-code) by Anthropic). The project owner directed the work, decided what to build and tested every build on a real PS Vita. AI-written changes were checked against the original game's behaviour with logs, screenshots and measurements on PC and on the console before being kept.
 
-## License
+## 🙏 Credits
 
-GPL-3.0 (see [LICENSE](LICENSE)). Third-party components and their licences are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). *Handkerchief* is a trademark of its respective owners; this project is not affiliated with them and distributes no game data.
+- **OPUS Corp. / ASK Co., Ltd.** for *Handkerchief* (1999-2000).
+- **Patryck Padilha de Oliveira** for the Brazilian Portuguese fan translation.
+- **[sh3vita](https://github.com/matfsouza/sh3vita)**, the recompiler this project's recompiler is derived from.
+- **[VitaSDK](https://vitasdk.org)** and the PS Vita homebrew community.
 
-## Reporting bugs
+## 📜 License
 
-The port is in **beta**. If the game crashes, freezes, sounds wrong, or something does not behave like the original:
+GPL-3.0 (see [LICENSE](LICENSE)). Third-party components and their licences are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-1. Open a new issue with the **Bug report** template: <https://github.com/IvandersonBordin/handkerchief-vita/issues/new/choose>. English or Portuguese are both fine.
-2. Say what happened, where in the game, and how to make it happen again.
-3. Attach `ux0:data/handkerchief/hklog.txt` and `hklog.prev.txt` (copy them with VitaShell) and, if you can, a screenshot (PS + Start).
-
-We read every report and fix what we can as soon as possible.
-
+*Handkerchief* is a trademark of its respective owners. This project is unofficial and non-commercial, is not affiliated with them, and distributes no game data. Screenshots are captured from the port running the original game data; the game's artwork belongs to its rights holders.
